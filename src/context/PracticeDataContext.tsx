@@ -8,6 +8,7 @@ import {
   DEFAULT_4H_PRACTICE_METRICS 
 } from '@/types/practice';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, getPracticeConfigKey, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { useAuth } from '@/context/AuthContext';
@@ -393,7 +394,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         club_id?: string;
         session_date?: string;
         notes?: string;
-        metrics?: any;
+        metrics?: Database['public']['Tables']['practice_sessions']['Update']['metrics'];
       } = {};
       if (updates.clubId) updateData.club_id = updates.clubId;
       if (updates.date) updateData.session_date = updates.date.toISOString().split('T')[0];

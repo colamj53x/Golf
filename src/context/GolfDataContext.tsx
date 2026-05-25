@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
 import { parseDate } from '@/lib/golfCalculations';
+
+type ShotRow = Database['public']['Tables']['shots']['Row'];
 
 interface GolfDataContextType {
   clubs: ClubConfig[];
@@ -68,10 +71,9 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       // Fetch in pages because the backend enforces a per-request row cap (commonly 1000)
       const pageSize = 1000;
       let from = 0;
-      let allRows: any[] = [];
+      let allRows: ShotRow[] = [];
 
       // Keep ordering stable across pages
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { data, error } = await supabase
           .from('shots')

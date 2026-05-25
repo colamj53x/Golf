@@ -322,7 +322,7 @@ export function parseDate(dateStr: string): DateParseResult {
   }
   
   // Try DD/MM/YYYY, D/M/YYYY, DD-MM-YYYY, or D-M-YYYY format
-  const dmy = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  const dmy = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (dmy) {
     let year = Number(dmy[3]);
     if (year < 100) year += 2000;

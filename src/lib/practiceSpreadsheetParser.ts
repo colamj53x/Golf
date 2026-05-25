@@ -193,7 +193,7 @@ export async function parseSpreadsheet(file: File): Promise<PracticeShot[]> {
     const toNum = (v: unknown): number => {
       if (v === '' || v == null) return 0;
       if (typeof v === 'number') return v;
-      const n = parseFloat(String(v).replace(/[^\d.\-]/g, ''));
+      const n = parseFloat(String(v).replace(/[^\d.-]/g, ''));
       return Number.isNaN(n) ? 0 : n;
     };
 
