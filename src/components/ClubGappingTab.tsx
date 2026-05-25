@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react';
-import { CircleHelp, Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
+import { Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
+import { usePracticeShotsBySessions, ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
+import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
-import { PracticeSession } from '@/types/practice';
+import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs';
 
 interface GappingRow {
@@ -28,8 +29,8 @@ interface GappingRow {
   sideLeft: number | null;
   sideRight: number | null;
   sideBias: number | null;
-  lastThreeTargetPct: number | null;
-  targetHitPct: number | null;
+  targetPct: number | null;
+  safePct: number | null;
   rangeConfidence: number | null;
 }
 
@@ -66,6 +67,11 @@ function matchesTarget(shot: Shot, target: ProfileTarget): boolean {
   const endLie = shot.endLie.toLowerCase();
   if (target === 'green') return endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
   return endLie.includes('fairway');
+}
+
+function isSafeOutcome(shot: Shot): boolean {
+  const endLie = shot.endLie.toLowerCase();
+  return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
 }
 
 function fmt(value: number | null, suffix = 'm', digits = 0): string {
@@ -116,27 +122,53 @@ function getMetricValue(metrics: Array<{ metricId: string; valueMin: number | nu
   return metricAverage(metric.valueMin, metric.valueMax);
 }
 
+function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
+  return session.clubId === profile.id || session.clubId === profile.clubId;
+}
+
+function getRangeTargetPct(
+  sessions: PracticeSession[],
+  config: ClubPracticeConfig | undefined,
+  shotsBySession: ShotsBySession,
+): number | null {
+  if (!config) return null;
+
+  const sessionScores = sessions.slice(0, 3)
+    .map((session) => {
+      const sessionShots = shotsBySession[session.id] ?? [];
+      const metricScores = config.metrics
+        .map((metric) => pctWithinTarget(metric.id, sessionShots, metric.targetMin, metric.targetMax))
+        .filter((score): score is number => score !== null);
+      return mean(metricScores);
+    })
+    .filter((score): score is number => score !== null);
+
+  return mean(sessionScores);
+}
+
 function buildRow(
   profile: ShotProfile,
   target: ProfileTarget,
   courseShots: Shot[],
   practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
 ): GappingRow {
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId);
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
-  const allTargetHits = clubShots.filter((shot) => matchesTarget(shot, target));
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
   const top = topQuartile(cleanedTargetHits);
   const totals = top.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
 
-  const sessions = practiceSessions.filter((session) => session.clubId === profile.id);
+  const sessions = practiceSessions
+    .filter((session) => matchesPracticeProfile(session, profile))
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
   const carryValues = sessions
     .map((session) => getMetricValue(session.metrics, 'carry'))
     .filter((value): value is number => value !== null);
-  const rangeScores = sessions
-    .map((session) => session.consistency?.overallScore)
-    .filter((value): value is number => typeof value === 'number');
+  const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
+    ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
 
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
@@ -156,16 +188,18 @@ function buildRow(
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     sideBias: mean(sides),
-    lastThreeTargetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
-    targetHitPct: clubShots.length ? (allTargetHits.length / clubShots.length) * 100 : null,
-    rangeConfidence: mean(rangeScores),
+    targetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
+    safePct: lastThreeClubShots.length ? (lastThreeClubShots.filter(isSafeOutcome).length / lastThreeClubShots.length) * 100 : null,
+    rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
   };
 }
 
 export function ClubGappingTab() {
   const { shots } = useGolfData();
-  const { practiceSessions } = usePracticeData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
   const [draft, setDraft] = useState({
     targetTotal: '',
@@ -177,9 +211,9 @@ export function ClubGappingTab() {
   const rows = useMemo(() => {
     return Object.values(profiles)
       .filter((profile) => profile.enabled && profile.showOnCourse)
-      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, shots, practiceSessions)))
+      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, shots, practiceSessions, practiceConfigs, shotsBySession)))
       .filter((row) => row.sample.length > 0 || row.liveCarry !== null);
-  }, [profiles, shots, practiceSessions]);
+  }, [profiles, shots, practiceSessions, practiceConfigs, shotsBySession]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
@@ -264,9 +298,9 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Side Range</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Mean Side</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Last 3</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Target Hit</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Range Conf.</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Target %</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Safe %</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -275,30 +309,15 @@ export function ClubGappingTab() {
                   clubRows.map((row, index) => (
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
-                        {index === 0 ? (
-                          <div className="flex items-center gap-1.5">
-                            {clubName}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button type="button" className="text-muted-foreground hover:text-foreground">
-                                  <CircleHelp className="h-3.5 w-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="space-y-1 text-xs">
-                                  {clubRows.map((clubRow) => (
-                                    <div key={`${clubRow.profile.id}-${clubRow.target}`}>
-                                      {getShotLabel(clubRow.profile, clubRow.target)}: {clubRow.topQuartile.length} top-Q / {clubRow.sample.length} target hits / {clubRow.clubSample.length} total
-                                    </div>
-                                  ))}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        ) : ''}
+                        {index === 0 ? clubName : ''}
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{getShotLabel(row.profile, row.target)}</div>
+                        <div className="flex items-center gap-2 font-medium">
+                          <span>{getShotLabel(row.profile, row.target)}</span>
+                          <Badge variant="outline" className="px-1.5 py-0 text-xs text-muted-foreground">
+                            {row.sample.length}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
@@ -309,13 +328,13 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmtSigned(row.sideBias)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.liveCarry)}</TableCell>
                       <TableCell className="text-right">
-                        <Badge variant={row.lastThreeTargetPct !== null && row.lastThreeTargetPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.lastThreeTargetPct)}>
-                          {fmt(row.lastThreeTargetPct, '%')}
+                        <Badge variant={row.targetPct !== null && row.targetPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.targetPct)}>
+                          {fmt(row.targetPct, '%')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Badge variant={row.targetHitPct !== null && row.targetHitPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.targetHitPct)}>
-                          {fmt(row.targetHitPct, '%')}
+                        <Badge variant={row.safePct !== null && row.safePct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.safePct)}>
+                          {fmt(row.safePct, '%')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
