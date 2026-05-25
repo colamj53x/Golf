@@ -292,12 +292,7 @@ export function ClubGappingTab() {
                         {index === 0 ? clubName : ''}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2 font-medium">
-                          <span>{getShotLabel(row.profile, row.target)}</span>
-                          <Badge variant="outline" className="px-1.5 py-0 text-xs text-muted-foreground">
-                            {row.sample.length}
-                          </Badge>
-                        </div>
+                        <div className="font-medium">{getShotLabel(row.profile, row.target)}</div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
