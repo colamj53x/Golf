@@ -31,10 +31,16 @@ interface GappingRow {
   topQuartile: Shot[];
   liveTotal: number | null;
   liveCarry: number | null;
+  displayTotal: number | null;
+  displayCarry: number | null;
+  displayCarryMin: number | null;
+  displayCarryMax: number | null;
   totalMin: number | null;
   totalMax: number | null;
   sideLeft: number | null;
   sideRight: number | null;
+  displaySideLeft: number | null;
+  displaySideRight: number | null;
   sideBias: number | null;
   targetPct: number | null;
   safePct: number | null;
@@ -137,12 +143,35 @@ function getMetricTargetValue(config: ClubPracticeConfig | undefined, id: string
   return metricAverage(metric.targetMin, metric.targetMax);
 }
 
+function getMetricTargetRange(config: ClubPracticeConfig | undefined, id: string): { min: number | null; max: number | null } {
+  const metric = config?.metrics.find((item) => item.id === id);
+  if (!metric) return { min: null, max: null };
+  const min = metric.targetMin !== null && Number.isFinite(metric.targetMin) ? metric.targetMin : null;
+  const max = metric.targetMax !== null && Number.isFinite(metric.targetMax) ? metric.targetMax : null;
+  return { min: min ?? max, max: max ?? min };
+}
+
 function getRangeCarryEstimate(total: number | null, config: ClubPracticeConfig | undefined): number | null {
   if (total === null || !Number.isFinite(total)) return null;
   const targetCarry = getMetricTargetValue(config, 'carry');
   const targetTotal = getMetricTargetValue(config, 'total_distance');
   if (targetCarry === null || targetTotal === null || targetTotal <= 0) return null;
   return total * (targetCarry / targetTotal);
+}
+
+function getRangeCarryWindow(total: number | null, config: ClubPracticeConfig | undefined): { min: number | null; max: number | null } {
+  if (total === null || !Number.isFinite(total)) return { min: null, max: null };
+  const targetTotal = getMetricTargetValue(config, 'total_distance');
+  const carryTarget = getMetricTargetRange(config, 'carry');
+  if (targetTotal === null || targetTotal <= 0 || carryTarget.min === null || carryTarget.max === null) {
+    return { min: null, max: null };
+  }
+
+  const scale = total / targetTotal;
+  return {
+    min: carryTarget.min * scale,
+    max: carryTarget.max * scale,
+  };
 }
 
 function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
@@ -191,6 +220,9 @@ function buildRow(
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
   const liveTotal = mean(totals);
+  const displayTotal = profile.targetTotal ?? liveTotal;
+  const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
+  const displayCarryWindow = getRangeCarryWindow(displayTotal, practiceConfig);
 
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
@@ -203,11 +235,17 @@ function buildRow(
     sample: referenceShots,
     topQuartile: top,
     liveTotal,
-    liveCarry: getRangeCarryEstimate(liveTotal, practiceConfig),
+    liveCarry,
+    displayTotal,
+    displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry,
+    displayCarryMin: displayCarryWindow.min,
+    displayCarryMax: displayCarryWindow.max,
     totalMin: totals.length ? Math.min(...totals) : null,
     totalMax: totals.length ? Math.max(...totals) : null,
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
+    displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
+    displaySideRight: profile.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null),
     sideBias: mean(sides),
     targetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
     safePct: lastThreeClubShots.length ? (lastThreeClubShots.filter(isSafeOutcome).length / lastThreeClubShots.length) * 100 : null,
@@ -317,6 +355,7 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Side Range</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Mean Side</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Carry Range</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Target %</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Safe %</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
@@ -334,11 +373,12 @@ export function ClubGappingTab() {
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold whitespace-nowrap">{fmt(row.liveTotal)}</TableCell>
+                      <TableCell className="text-right font-semibold whitespace-nowrap">{fmt(row.displayTotal)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.totalMin)} - {fmt(row.totalMax)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap font-medium">{fmtSideRange(row.sideLeft, row.sideRight)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">{fmtSideRange(row.displaySideLeft, row.displaySideRight)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmtSigned(row.sideBias)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.liveCarry)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
                       <TableCell className="text-right">
                         <Badge variant={row.targetPct !== null && row.targetPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.targetPct)}>
                           {fmt(row.targetPct, '%')}
@@ -367,7 +407,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
@@ -383,7 +423,7 @@ export function ClubGappingTab() {
           <DialogHeader>
             <DialogTitle>Edit Gapping Targets</DialogTitle>
             <DialogDescription>
-              Saved targets are your reference numbers. Live columns still update from shot data.
+              Saved targets are shown in the table. Refresh latest pulls current live values into the form.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
@@ -396,12 +436,11 @@ export function ClubGappingTab() {
                     Refresh latest
                   </Button>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-5">
+                <div className="grid gap-2 sm:grid-cols-4">
                   <div>Total {fmt(editingRow.liveTotal)}</div>
                   <div>Carry {fmt(editingRow.liveCarry)}</div>
                   <div>Side {fmtSideRange(editingRow.sideLeft, editingRow.sideRight)}</div>
                   <div>Mean {fmtSigned(editingRow.sideBias)}</div>
-                  <div>Range {fmt(editingRow.rangeConfidence, '%')}</div>
                 </div>
               </div>
             )}
