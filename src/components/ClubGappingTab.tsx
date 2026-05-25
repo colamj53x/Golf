@@ -114,18 +114,26 @@ function shotHandicap(shot: Shot): number {
   return SHOT_QUALITY_HANDICAP[shot.shotQuality] ?? Number.POSITIVE_INFINITY;
 }
 
-function isGappingQualityShot(shot: Shot, cutoff: number): boolean {
-  return shotHandicap(shot) <= cutoff;
-}
-
-function topQualityQuartile(shots: Shot[]): Shot[] {
-  if (shots.length === 0) return [];
-  const sorted = [...shots].sort((a, b) => {
+function sortByQuality(shots: Shot[]): Shot[] {
+  return [...shots].sort((a, b) => {
     const qualityDelta = qualityRank(a) - qualityRank(b);
     if (qualityDelta !== 0) return qualityDelta;
     return b.total - a.total;
   });
-  return sorted.slice(0, Math.max(1, Math.ceil(sorted.length * 0.25)));
+}
+
+function selectGappingQualityShots(shots: Shot[], cutoff: number): Shot[] {
+  if (shots.length === 0) return [];
+
+  const sorted = sortByQuality(shots);
+  const quartileCount = Math.max(1, Math.ceil(sorted.length * 0.25));
+  const cutoffShots = sorted.filter((shot) => shotHandicap(shot) <= cutoff);
+
+  if (cutoffShots.length > quartileCount) {
+    return sorted.slice(0, quartileCount).filter((shot) => shotHandicap(shot) <= cutoff);
+  }
+
+  return cutoffShots;
 }
 
 function sortShots(shots: Shot[], sortKey: ShotSortKey): Shot[] {
@@ -370,8 +378,8 @@ function buildRow(
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
   const targetReferenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
-  const referenceShots = targetReferenceShots.filter((shot) => isGappingQualityShot(shot, qualityCutoff));
-  const top = topQualityQuartile(referenceShots);
+  const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
+  const top = referenceShots;
   const totals = top.map((shot) => shot.total);
   const variationTotals = referenceShots.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
@@ -717,7 +725,7 @@ export function ClubGappingTab() {
               {shotsRow ? `${getClubName(shotsRow.profile)} ${getShotLabel(shotsRow.profile)} to ${shotsRow.target}` : 'Shots'}
             </DialogTitle>
             <DialogDescription>
-              Shots are filtered to {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better and sorted by the selected column.
+              Shots use the stricter of top quartile by quality and {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better, sorted by the selected column.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2">
