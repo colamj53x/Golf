@@ -16,6 +16,15 @@ import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs';
 
+type ShotContext = 'tee' | 'fairway' | 'rough' | 'recovery';
+
+const SHOT_CONTEXT_OPTIONS: Array<{ id: ShotContext; label: string }> = [
+  { id: 'tee', label: 'Tee' },
+  { id: 'fairway', label: 'Fairway' },
+  { id: 'rough', label: 'Rough' },
+  { id: 'recovery', label: 'Recovery' },
+];
+
 interface GappingRow {
   profile: ShotProfile;
   target: ProfileTarget;
@@ -71,6 +80,14 @@ function matchesTarget(shot: Shot, target: ProfileTarget): boolean {
 function isSafeOutcome(shot: Shot): boolean {
   const endLie = shot.endLie.toLowerCase();
   return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
+}
+
+function matchesShotContext(shot: Shot, context: ShotContext): boolean {
+  const lie = shot.startLie.toLowerCase();
+  if (context === 'tee') return lie.includes('tee');
+  if (context === 'fairway') return lie.includes('fairway');
+  if (context === 'rough') return lie.includes('rough');
+  return lie.includes('recovery') || lie.includes('tree') || lie.includes('punch') || lie.includes('trouble');
 }
 
 function fmt(value: number | null, suffix = 'm', digits = 0): string {
@@ -198,6 +215,7 @@ export function ClubGappingTab() {
   const profiles = useShotProfiles();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const [shotContext, setShotContext] = useState<ShotContext>('tee');
   const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
   const [draft, setDraft] = useState({
     targetTotal: '',
@@ -207,11 +225,12 @@ export function ClubGappingTab() {
   });
 
   const rows = useMemo(() => {
+    const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
     return Object.values(profiles)
       .filter((profile) => profile.enabled && profile.showOnCourse)
-      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, shots, practiceSessions, practiceConfigs, shotsBySession)))
+      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession)))
       .filter((row) => row.sample.length > 0 || row.liveCarry !== null);
-  }, [profiles, shots, practiceSessions, practiceConfigs, shotsBySession]);
+  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
@@ -266,6 +285,19 @@ export function ClubGappingTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {SHOT_CONTEXT_OPTIONS.map((option) => (
+              <Button
+                key={option.id}
+                type="button"
+                size="sm"
+                variant={shotContext === option.id ? 'default' : 'outline'}
+                onClick={() => setShotContext(option.id)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
@@ -328,7 +360,7 @@ export function ClubGappingTab() {
                 {rows.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
-                      No target-hit gapping data yet.
+                      No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
                 )}
