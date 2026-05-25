@@ -132,7 +132,9 @@ function selectGappingQualityShots(shots: Shot[], cutoff: number): Shot[] {
   const cutoffShots = sorted.filter((shot) => shotHandicap(shot) <= cutoff);
 
   if (cutoffShots.length > quartileCount) {
-    return sorted.slice(0, quartileCount).filter((shot) => shotHandicap(shot) <= cutoff);
+    const quartileBoundary = sorted[quartileCount - 1];
+    const boundaryRank = qualityRank(quartileBoundary);
+    return sorted.filter((shot) => shotHandicap(shot) <= cutoff && qualityRank(shot) <= boundaryRank);
   }
 
   return cutoffShots;
