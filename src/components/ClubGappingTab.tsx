@@ -15,20 +15,10 @@ import { Shot } from '@/types/golf';
 import { PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs';
 
-const QUALITY_VALUES: Record<string, number> = {
-  Pro: -5,
-  'Elite Am': -2,
-  '0 Handicap': 0,
-  '5 Handicap': 5,
-  '10 Handicap': 10,
-  '15 Handicap': 15,
-  '20 Handicap': 20,
-  '25 Handicap': 25,
-};
-
 interface GappingRow {
   profile: ShotProfile;
   target: ProfileTarget;
+  clubSample: Shot[];
   sample: Shot[];
   topQuartile: Shot[];
   liveTotal: number | null;
@@ -38,10 +28,8 @@ interface GappingRow {
   sideLeft: number | null;
   sideRight: number | null;
   sideBias: number | null;
-  handicap: number | null;
-  destinationConfidence: number | null;
-  safeConfidence: number | null;
-  confidenceWindowCount: number;
+  lastThreeTargetPct: number | null;
+  targetHitPct: number | null;
   rangeConfidence: number | null;
 }
 
@@ -80,11 +68,6 @@ function matchesTarget(shot: Shot, target: ProfileTarget): boolean {
   return endLie.includes('fairway');
 }
 
-function isSafeOutcome(shot: Shot): boolean {
-  const endLie = shot.endLie.toLowerCase();
-  return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
-}
-
 function fmt(value: number | null, suffix = 'm', digits = 0): string {
   return value === null ? '-' : `${value.toFixed(digits)}${suffix}`;
 }
@@ -93,13 +76,6 @@ function fmtSigned(value: number | null): string {
   if (value === null) return '-';
   if (Math.abs(value) < 0.5) return 'Neutral';
   return `${Math.abs(value).toFixed(0)}m ${value > 0 ? 'R' : 'L'}`;
-}
-
-function fmtHandicap(value: number | null): string {
-  if (value === null) return '-';
-  if (value <= -4) return 'Pro';
-  if (value <= -1) return 'Elite Am';
-  return `${Math.round(value)} hcp`;
 }
 
 function parseOptionalNumber(value: string): number | null {
@@ -124,7 +100,7 @@ function getShotLabel(profile: ShotProfile, target: ProfileTarget): string {
 
 function fmtSideRange(left: number | null, right: number | null): string {
   if (left === null || right === null) return '-';
-  return `${left.toFixed(0)}L-${right.toFixed(0)}R`;
+  return `${left.toFixed(0)}L - ${right.toFixed(0)}R`;
 }
 
 function confidenceTone(value: number | null): string {
@@ -146,17 +122,13 @@ function buildRow(
   courseShots: Shot[],
   practiceSessions: PracticeSession[],
 ): GappingRow {
-  const profileShots = courseShots.filter((shot) =>
-    getClubConfigId(shot.club) === profile.clubId &&
-    matchesTarget(shot, target)
-  );
-  const cleanedShots = withoutDistanceOutliers(profileShots);
-  const top = topQuartile(cleanedShots);
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId);
+  const cleanedClubShots = withoutDistanceOutliers(clubShots);
+  const allTargetHits = clubShots.filter((shot) => matchesTarget(shot, target));
+  const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
+  const top = topQuartile(cleanedTargetHits);
   const totals = top.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
-  const qualityValues = top
-    .map((shot) => QUALITY_VALUES[shot.shotQuality])
-    .filter((value): value is number => typeof value === 'number');
 
   const sessions = practiceSessions.filter((session) => session.clubId === profile.id);
   const carryValues = sessions
@@ -169,20 +141,13 @@ function buildRow(
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
     .slice(-3);
-  const referenceTotal = profile.targetTotal ?? mean(totals);
-  const targetWindowShots = withoutDistanceOutliers(courseShots.filter((shot) =>
-    getClubConfigId(shot.club) === profile.clubId &&
-    referenceTotal !== null &&
-    Math.abs(shot.total - referenceTotal) <= 10
-  ));
-  const last3WindowShots = targetWindowShots.filter((shot) =>
-    uniqueDates.includes(getShotDateKey(shot.date))
-  );
+  const lastThreeClubShots = clubShots.filter((shot) => uniqueDates.includes(getShotDateKey(shot.date)));
 
   return {
     profile,
     target,
-    sample: cleanedShots,
+    clubSample: clubShots,
+    sample: cleanedTargetHits,
     topQuartile: top,
     liveTotal: mean(totals),
     liveCarry: mean(carryValues),
@@ -191,10 +156,8 @@ function buildRow(
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     sideBias: mean(sides),
-    handicap: mean(qualityValues),
-    destinationConfidence: last3WindowShots.length ? (last3WindowShots.filter((shot) => matchesTarget(shot, target)).length / last3WindowShots.length) * 100 : null,
-    safeConfidence: targetWindowShots.length ? (targetWindowShots.filter(isSafeOutcome).length / targetWindowShots.length) * 100 : null,
-    confidenceWindowCount: targetWindowShots.length,
+    lastThreeTargetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
+    targetHitPct: clubShots.length ? (allTargetHits.length / clubShots.length) * 100 : null,
     rangeConfidence: mean(rangeScores),
   };
 }
@@ -289,21 +252,21 @@ export function ClubGappingTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[120px]">Club</TableHead>
                   <TableHead className="min-w-[150px]">Shot</TableHead>
                   <TableHead>Target</TableHead>
-                  <TableHead className="text-right">Distance</TableHead>
-                  <TableHead className="text-right">Vertical</TableHead>
-                  <TableHead className="text-right">Side Range</TableHead>
-                  <TableHead className="text-right">Mean Side</TableHead>
-                  <TableHead className="text-right">Carry</TableHead>
-                  <TableHead className="text-right">Top Q Rating</TableHead>
-                  <TableHead className="text-right">Confidence</TableHead>
-                  <TableHead className="text-right">Range Conf.</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Vertical</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Side Range</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Mean Side</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Last 3</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Target Hit</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Range Conf.</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -325,7 +288,7 @@ export function ClubGappingTab() {
                                 <div className="space-y-1 text-xs">
                                   {clubRows.map((clubRow) => (
                                     <div key={`${clubRow.profile.id}-${clubRow.target}`}>
-                                      {getShotLabel(clubRow.profile, clubRow.target)}: {clubRow.topQuartile.length} top-Q / {clubRow.sample.length} target hits / {clubRow.confidenceWindowCount} in window
+                                      {getShotLabel(clubRow.profile, clubRow.target)}: {clubRow.topQuartile.length} top-Q / {clubRow.sample.length} target hits / {clubRow.clubSample.length} total
                                     </div>
                                   ))}
                                 </div>
@@ -340,21 +303,20 @@ export function ClubGappingTab() {
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold">{fmt(row.liveTotal)}</TableCell>
-                      <TableCell className="text-right">{fmt(row.totalMin)}-{fmt(row.totalMax)}</TableCell>
-                      <TableCell className="text-right">{fmtSideRange(row.sideLeft, row.sideRight)}</TableCell>
-                      <TableCell className="text-right">{fmtSigned(row.sideBias)}</TableCell>
-                      <TableCell className="text-right">{fmt(row.liveCarry)}</TableCell>
-                      <TableCell className="text-right">{fmtHandicap(row.handicap)}</TableCell>
+                      <TableCell className="text-right font-semibold whitespace-nowrap">{fmt(row.liveTotal)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.totalMin)} - {fmt(row.totalMax)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">{fmtSideRange(row.sideLeft, row.sideRight)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmtSigned(row.sideBias)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.liveCarry)}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Badge variant={row.destinationConfidence !== null && row.destinationConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.destinationConfidence)}>
-                            T {fmt(row.destinationConfidence, '%')}
-                          </Badge>
-                          <Badge variant={row.safeConfidence !== null && row.safeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.safeConfidence)}>
-                            S {fmt(row.safeConfidence, '%')}
-                          </Badge>
-                        </div>
+                        <Badge variant={row.lastThreeTargetPct !== null && row.lastThreeTargetPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.lastThreeTargetPct)}>
+                          {fmt(row.lastThreeTargetPct, '%')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={row.targetHitPct !== null && row.targetHitPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.targetHitPct)}>
+                          {fmt(row.targetHitPct, '%')}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant={row.rangeConfidence !== null && row.rangeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.rangeConfidence)}>
@@ -379,7 +341,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                       No target-hit gapping data yet.
                     </TableCell>
                   </TableRow>
