@@ -182,18 +182,20 @@ export function ReportsByTime() {
       let periodKey: string;
 
       switch (grouping) {
-        case 'weekly':
+        case 'weekly': {
           const weekStart = startOfWeek(date, { weekStartsOn: 1 });
           periodKey = format(weekStart, 'yyyy-MM-dd');
           break;
+        }
         case 'round':
           periodKey = format(date, 'yyyy-MM-dd');
           break;
         case 'monthly':
-        default:
+        default: {
           const monthStart = startOfMonth(date);
           periodKey = format(monthStart, 'yyyy-MM');
           break;
+        }
       }
 
       const existing = groups.get(periodKey) || [];
