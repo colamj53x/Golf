@@ -129,12 +129,15 @@ function selectGappingQualityShots(shots: Shot[], cutoff: number): Shot[] {
 
   const sorted = sortByQuality(shots);
   const quartileCount = Math.max(1, Math.ceil(sorted.length * 0.25));
+  const quartileBoundary = sorted[quartileCount - 1];
+  const boundaryRank = qualityRank(quartileBoundary);
+  const quartileShots = sorted.filter((shot) => qualityRank(shot) <= boundaryRank);
   const cutoffShots = sorted.filter((shot) => shotHandicap(shot) <= cutoff);
 
+  if (cutoffShots.length === 0) return quartileShots;
+
   if (cutoffShots.length > quartileCount) {
-    const quartileBoundary = sorted[quartileCount - 1];
-    const boundaryRank = qualityRank(quartileBoundary);
-    return sorted.filter((shot) => shotHandicap(shot) <= cutoff && qualityRank(shot) <= boundaryRank);
+    return quartileShots.filter((shot) => shotHandicap(shot) <= cutoff);
   }
 
   return cutoffShots;
@@ -383,6 +386,40 @@ function getRangeShotCount(sessions: PracticeSession[], shotsBySession: ShotsByS
   return sessions.slice(0, 3).reduce((sum, session) => sum + (shotsBySession[session.id]?.length ?? 0), 0);
 }
 
+function getPracticeMetricNumber(metrics: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/[^\d.-]/g, ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function getRangeSideStats(
+  sessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+): { left: number | null; right: number | null; mean: number | null } {
+  const sides = sessions.slice(0, 3)
+    .flatMap((session) => shotsBySession[session.id] ?? [])
+    .map((shot) => getPracticeMetricNumber(shot.metrics, ['carrySide', 'carry_side', 'side', 'offline']))
+    .filter((value): value is number => value !== null);
+
+  if (sides.length === 0) return { left: null, right: null, mean: null };
+
+  return {
+    left: Math.abs(Math.min(0, ...sides)),
+    right: Math.max(0, ...sides),
+    mean: mean(sides),
+  };
+}
+
+function hasRangePracticeForProfile(profile: ShotProfile, practiceSessions: PracticeSession[]): boolean {
+  return practiceSessions.some((session) => matchesPracticeProfile(session, profile));
+}
+
 function getFullShotTargetMax(
   clubId: string,
   profiles: ShotProfileMap,
@@ -447,6 +484,7 @@ function buildRow(
   const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
   const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
   const rangeTargetVariationPct = rangeVariationPct(rangeTargetTotalWindow);
+  const rangeSideStats = getRangeSideStats(sessions, shotsBySession);
   const intentWindow = getIntentDistanceWindow(savedTarget, rangeTargetTotalWindow, rangeTargetTotal, rangeTargetVariationPct);
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
@@ -499,9 +537,9 @@ function buildRow(
     totalMax: variationWindow?.max ?? (rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
-    displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
-    displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null),
-    sideBias: mean(sides),
+    displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
+    displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
+    sideBias: mean(sides) ?? rangeSideStats.mean,
     targetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
     safePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
@@ -535,7 +573,7 @@ export function ClubGappingTab() {
   const rows = useMemo(() => {
     const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
     return Object.values(profiles)
-      .filter((profile) => profile.enabled && profile.showOnCourse)
+      .filter((profile) => profile.enabled && (profile.showOnCourse || (shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions))))
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
       .filter((profile) => profile.power === 'full')
       .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
