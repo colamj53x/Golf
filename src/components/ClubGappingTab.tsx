@@ -292,7 +292,7 @@ export function ClubGappingTab() {
       .filter((profile) => profile.enabled && profile.showOnCourse)
       .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession)))
-      .filter((row) => row.sample.length > 0 || row.liveCarry !== null);
+      .filter((row) => row.shotCount > 0);
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
 
   const groupedRows = useMemo(() => {

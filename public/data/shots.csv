@@ -331,7 +331,7 @@
  8I, Short,29.43021741,46.05508581,0, 15 Handicap, 2025-08-16 10:42:53 +0000, Fairway, Green, Low, #pull#low#intended
  Pu, Putting,18.53230157,18.88940361,5, Pro, 2025-08-16 10:42:53 +0000, Green, Green, left,
  Pu, Putting,0.437064982,0.437066301,3, Pro, 2025-08-16 10:42:53 +0000, Green, Green, holed,
- Dr, Approach,468.8347667,181.3987108,33, 5 Handicap, 2025-08-16 10:42:53 +0000, Fairway, Fairway, Heel, #slice#high#doubleCross
+ Dr, Approach,468.8347667,181.3987108,33, 5 Handicap, 2025-08-16 10:42:53 +0000, Tee, Fairway, Heel, #slice#high#doubleCross
  4H, Approach,287.6856861,148.2944517,-3, 5 Handicap, 2025-08-16 10:42:53 +0000, Fairway, Fairway, Center, #fade#straight#low#intended
  5H, Approach,140.0913499,125.2534545,6, 10 Handicap, 2025-08-16 10:42:53 +0000, Fairway, Fairway, Center,
  Pu, Short,14.91434915,14.74585067,7, Pro, 2025-08-16 10:42:53 +0000, Fairway, Green, left,
@@ -971,7 +971,7 @@
  Pu, Putting,0.332515884,0.332515884,-4, Pro, 2025-10-30 20:39:07 +0000, Green, Green, holed,
  Dr, Driving,289.7054319,82.10788701,-5, 25 Handicap, 2025-10-30 20:39:07 +0000, Tee, Rough, ,
  5W, Approach,216.3403864,62.03228742,-7, 10 Handicap, 2025-10-30 20:39:07 +0000, Rough, Fairway, ,
- Dr, Approach,157.4165102,84.93204309,-3, 25 Handicap, 2025-10-30 20:39:07 +0000, Fairway, Rough, ,
+ Dr, Approach,157.4165102,84.93204309,-3, 25 Handicap, 2025-10-30 20:39:07 +0000, Tee, Rough, ,
  7I, Approach,99.40857735,60.01392554,-4, 20 Handicap, 2025-10-30 20:39:07 +0000, Rough, Rough, ,
  , Short,43.91083402,21.95541701,-3, 15 Handicap, 2025-10-30 20:39:07 +0000, Rough, Rough, ,
  , Short,21.95541701,21.95541701,-3, Pro, 2025-10-30 20:39:07 +0000, Rough, Green, ,
@@ -1086,7 +1086,7 @@
  Pu, Putting,8.872560023,9.471257613,-7, 25 Handicap, 2025-11-09 00:58:42 +0000, Green, Green, short,
  Pu, Putting,4.370135896,3.893308487,-3, 25 Handicap, 2025-11-09 00:58:42 +0000, Green, Green, right,
  Pu, Putting,0.499722397,0.499722397,7, Pro, 2025-11-09 00:58:42 +0000, Green, Green, holed,
- Dr, Approach,337.4227192,119.8582396,-7, 10 Handicap, 2025-11-15 19:52:08 +0000, Fairway, Fairway, High, #straight#high
+ Dr, Approach,337.4227192,119.8582396,-7, 10 Handicap, 2025-11-15 19:52:08 +0000, Tee, Fairway, High, #straight#high
  4H, Approach,220.6929019,124.1455131,-7, 15 Handicap, 2025-11-15 19:52:08 +0000, Fairway, Rough, Center, #straight#normal#intended
  9I, Approach,97.73053165,92.98069375,0, 15 Handicap, 2025-11-15 19:52:08 +0000, Rough, Rough, Center, #pull#normal
  PW, Short,22.01979629,21.7732415,13, 10 Handicap, 2025-11-15 19:52:08 +0000, Rough, Green, Center, #push#normal
@@ -1601,7 +1601,7 @@
  Pu, Putting,3.064978819,3.064978819,4, 25 Handicap, 2025-12-29 04:46:52 +0000, Green, Green, left,
  Pu, Putting,0.7,0,4, 25 Handicap, 2025-12-29 04:46:52 +0000, Green, Green, short,
  Pu, Putting,0.6096,0,-6, Pro, 2025-12-29 04:46:52 +0000, Green, Green, holed,
- Dr, Approach,357.1374196,199.9372017,6, 5 Handicap, 2025-12-29 04:46:52 +0000, Fairway, Rough, Center, #straight#normal#intended
+ Dr, Approach,357.1374196,199.9372017,6, 5 Handicap, 2025-12-29 04:46:52 +0000, Tee, Rough, Center, #straight#normal#intended
  4H, Approach,161.2839987,66.87095603,-7, 10 Handicap, 2025-12-29 04:46:52 +0000, Rough, Fairway, High, #straight#high
  8I, Approach,94.53132961,82.3831722,-6, 15 Handicap, 2025-12-29 04:46:52 +0000, Fairway, Sand, Low, #straight#low
  SW, Short,14.79182113,15.09318453,-4, 10 Handicap, 2025-12-29 04:46:52 +0000, Sand, Green, Center, #straight#low#intended
@@ -1885,7 +1885,7 @@
  Pu, Putting,1.851821945,1.851821945,6, 25 Handicap, 2026-01-03 19:12:53 +0000, Green, Green, left,
  Pu, Putting,0.6096,0,-7, Pro, 2026-01-03 19:12:53 +0000, Green, Green, holed,
  Dr, Driving,451.7835722,191.0818722,6, 10 Handicap, 2026-01-03 19:12:53 +0000, Tee, Fairway, Center, #straight#normal#intended
- Dr, Approach,264.7230052,78.51911783,-14, 15 Handicap, 2026-01-03 19:12:53 +0000, Fairway, Rough, Center, #draw#straight#normal
+ Dr, Approach,264.7230052,78.51911783,-14, 15 Handicap, 2026-01-03 19:12:53 +0000, Tee, Rough, Center, #draw#straight#normal
  4H, Approach,186.2080388,119.0754228,3, 5 Handicap, 2026-01-03 19:12:53 +0000, Rough, Fairway, Center, #fade#straight#low
  PW, Approach,67.83030133,71.94838493,3, 20 Handicap, 2026-01-03 19:12:53 +0000, Fairway, Rough, Low, #straight#low
  PW, Short,13.63781097,23.07731529,-5, 10 Handicap, 2026-01-03 19:12:53 +0000, Rough, Green, Center, #straight#low#intended
