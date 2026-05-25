@@ -1,16 +1,18 @@
-import { useMemo } from 'react';
-import { Gauge, RotateCcw, RefreshCw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
-import { getProfileDisplayName, ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { PracticeSession } from '@/types/practice';
+import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs';
 
 const QUALITY_VALUES: Record<string, number> = {
   Pro: -5,
@@ -55,6 +57,20 @@ function topQuartile(shots: Shot[]): Shot[] {
   return sorted.slice(0, Math.max(1, Math.ceil(sorted.length * 0.25)));
 }
 
+function withoutDistanceOutliers(shots: Shot[]): Shot[] {
+  if (shots.length < 5) return shots;
+
+  const totals = [...shots].map((shot) => shot.total).sort((a, b) => a - b);
+  const q1 = totals[Math.floor((totals.length - 1) * 0.25)];
+  const q3 = totals[Math.floor((totals.length - 1) * 0.75)];
+  const iqr = q3 - q1;
+  if (iqr === 0) return shots;
+
+  const lower = q1 - iqr * 1.5;
+  const upper = q3 + iqr * 1.5;
+  return shots.filter((shot) => shot.total >= lower && shot.total <= upper);
+}
+
 function matchesTarget(shot: Shot, target: ProfileTarget): boolean {
   const endLie = shot.endLie.toLowerCase();
   if (target === 'green') return endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
@@ -85,6 +101,24 @@ function parseOptionalNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getClubName(profile: ShotProfile): string {
+  return PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
+}
+
+function getShotLabel(profile: ShotProfile, target: ProfileTarget): string {
+  const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
+  const powerName = POWER_OPTIONS.find((power) => power.id === profile.power)?.name ?? profile.power;
+
+  if (profile.clubId === 'dr' && profile.shotType === 'full' && profile.power === 'full') return 'Tee shot';
+  if (profile.shotType === 'full' && profile.power === 'full') return target === 'green' ? 'Stock approach' : 'Stock fairway';
+  return `${shotName} · ${powerName}`;
+}
+
+function fmtSideRange(left: number | null, right: number | null): string {
+  if (left === null || right === null) return '-';
+  return `${left.toFixed(0)}L-${right.toFixed(0)}R`;
+}
+
 function getMetricValue(metrics: Array<{ metricId: string; valueMin: number | null; valueMax: number | null }>, id: string): number | null {
   const metric = metrics.find((item) => item.metricId === id);
   if (!metric) return null;
@@ -101,7 +135,8 @@ function buildRow(
     getClubConfigId(shot.club) === profile.clubId &&
     matchesTarget(shot, target)
   );
-  const top = topQuartile(profileShots);
+  const cleanedShots = withoutDistanceOutliers(profileShots);
+  const top = topQuartile(cleanedShots);
   const totals = top.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
   const qualityValues = top
@@ -127,7 +162,7 @@ function buildRow(
   return {
     profile,
     target,
-    sample: profileShots,
+    sample: cleanedShots,
     topQuartile: top,
     liveTotal: mean(totals),
     liveCarry: mean(carryValues),
@@ -146,6 +181,13 @@ export function ClubGappingTab() {
   const { shots } = useGolfData();
   const { practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
+  const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
+  const [draft, setDraft] = useState({
+    targetTotal: '',
+    targetCarry: '',
+    targetSideLeft: '',
+    targetSideRight: '',
+  });
 
   const rows = useMemo(() => {
     return Object.values(profiles)
@@ -153,6 +195,15 @@ export function ClubGappingTab() {
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, shots, practiceSessions)))
       .filter((row) => row.sample.length > 0 || row.liveCarry !== null);
   }, [profiles, shots, practiceSessions]);
+
+  const groupedRows = useMemo(() => {
+    const groups = new Map<string, GappingRow[]>();
+    for (const row of rows) {
+      const clubName = getClubName(row.profile);
+      groups.set(clubName, [...(groups.get(clubName) ?? []), row]);
+    }
+    return [...groups.entries()];
+  }, [rows]);
 
   const updateTargets = (row: GappingRow) => {
     updateShotProfile(row.profile.id, {
@@ -172,6 +223,27 @@ export function ClubGappingTab() {
     });
   };
 
+  const openEdit = (row: GappingRow) => {
+    setEditingRow(row);
+    setDraft({
+      targetTotal: row.profile.targetTotal?.toString() ?? '',
+      targetCarry: row.profile.targetCarry?.toString() ?? '',
+      targetSideLeft: row.profile.targetSideLeft?.toString() ?? '',
+      targetSideRight: row.profile.targetSideRight?.toString() ?? '',
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editingRow) return;
+    updateShotProfile(editingRow.profile.id, {
+      targetTotal: parseOptionalNumber(draft.targetTotal),
+      targetCarry: parseOptionalNumber(draft.targetCarry),
+      targetSideLeft: parseOptionalNumber(draft.targetSideLeft),
+      targetSideRight: parseOptionalNumber(draft.targetSideRight),
+    });
+    setEditingRow(null);
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -185,96 +257,72 @@ export function ClubGappingTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[180px]">Shot</TableHead>
+                  <TableHead className="min-w-[120px]">Club</TableHead>
+                  <TableHead className="min-w-[150px]">Shot</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="text-right">Distance</TableHead>
                   <TableHead className="text-right">Vertical</TableHead>
-                  <TableHead className="text-right">Side</TableHead>
+                  <TableHead className="text-right">Side Range</TableHead>
+                  <TableHead className="text-right">Side Bias</TableHead>
                   <TableHead className="text-right">Carry</TableHead>
                   <TableHead className="text-right">Top Q Rating</TableHead>
                   <TableHead className="text-right">Risk</TableHead>
                   <TableHead className="text-right">Range Conf.</TableHead>
-                  <TableHead className="text-right">Saved Target</TableHead>
+                  <TableHead className="text-right">Targets</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={`${row.profile.id}-${row.target}`}>
-                    <TableCell className="font-medium">
-                      {getProfileDisplayName(row.profile)}
-                      <div className="mt-1 text-xs text-muted-foreground">{row.topQuartile.length} top-Q / {row.sample.length} target hits</div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{row.target}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">{fmt(row.liveTotal)}</TableCell>
-                    <TableCell className="text-right">{fmt(row.totalMin)}-{fmt(row.totalMax)}</TableCell>
-                    <TableCell className="text-right">
-                      {fmt(row.sideLeft, 'L')} / {fmt(row.sideRight, 'R')}
-                      <div className="text-xs text-muted-foreground">{fmtSigned(row.sideBias)}</div>
-                    </TableCell>
-                    <TableCell className="text-right">{fmt(row.liveCarry)}</TableCell>
-                    <TableCell className="text-right">{fmtHandicap(row.handicap)}</TableCell>
-                    <TableCell className="text-right">{fmt(row.last3TargetPct, '%')}</TableCell>
-                    <TableCell className="text-right">{fmt(row.rangeConfidence, '%')}</TableCell>
-                    <TableCell>
-                      <div className="grid min-w-[150px] grid-cols-2 gap-1">
-                        <Input
-                          aria-label="Target total"
-                          type="number"
-                          value={row.profile.targetTotal ?? ''}
-                          onChange={(event) => updateShotProfile(row.profile.id, { targetTotal: parseOptionalNumber(event.target.value) })}
-                          placeholder="Total"
-                          className="h-8 text-xs"
-                        />
-                        <Input
-                          aria-label="Target carry"
-                          type="number"
-                          value={row.profile.targetCarry ?? ''}
-                          onChange={(event) => updateShotProfile(row.profile.id, { targetCarry: parseOptionalNumber(event.target.value) })}
-                          placeholder="Carry"
-                          className="h-8 text-xs"
-                        />
-                        <Input
-                          aria-label="Target left dispersion"
-                          type="number"
-                          value={row.profile.targetSideLeft ?? ''}
-                          onChange={(event) => updateShotProfile(row.profile.id, { targetSideLeft: parseOptionalNumber(event.target.value) })}
-                          placeholder="Left"
-                          className="h-8 text-xs"
-                        />
-                        <Input
-                          aria-label="Target right dispersion"
-                          type="number"
-                          value={row.profile.targetSideRight ?? ''}
-                          onChange={(event) => updateShotProfile(row.profile.id, { targetSideRight: parseOptionalNumber(event.target.value) })}
-                          placeholder="Right"
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => updateTargets(row)}>
-                          <RefreshCw className="mr-1 h-3 w-3" />
-                          Update
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => revertTargets(row.profile)}>
-                          <RotateCcw className="mr-1 h-3 w-3" />
-                          Revert
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                {groupedRows.map(([clubName, clubRows]) => (
+                  clubRows.map((row, index) => (
+                    <TableRow key={`${row.profile.id}-${row.target}`}>
+                      <TableCell className="font-semibold">
+                        {index === 0 ? clubName : ''}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{getShotLabel(row.profile, row.target)}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{row.topQuartile.length} top-Q / {row.sample.length} target hits</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{row.target}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">{fmt(row.liveTotal)}</TableCell>
+                      <TableCell className="text-right">{fmt(row.totalMin)}-{fmt(row.totalMax)}</TableCell>
+                      <TableCell className="text-right">{fmtSideRange(row.sideLeft, row.sideRight)}</TableCell>
+                      <TableCell className="text-right">{fmtSigned(row.sideBias)}</TableCell>
+                      <TableCell className="text-right">{fmt(row.liveCarry)}</TableCell>
+                      <TableCell className="text-right">{fmtHandicap(row.handicap)}</TableCell>
+                      <TableCell className="text-right">{fmt(row.last3TargetPct, '%')}</TableCell>
+                      <TableCell className="text-right">{fmt(row.rangeConfidence, '%')}</TableCell>
+                      <TableCell className="text-right">
+                        <div>{fmt(row.profile.targetTotal)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          C {fmt(row.profile.targetCarry)} · {fmtSideRange(row.profile.targetSideLeft, row.profile.targetSideRight)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" title="Update from latest data" onClick={() => updateTargets(row)}>
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" title="Clear saved targets" onClick={() => revertTargets(row.profile)}>
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
                       No target-hit gapping data yet.
                     </TableCell>
                   </TableRow>
@@ -284,6 +332,39 @@ export function ClubGappingTab() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(editingRow)} onOpenChange={(open) => !open && setEditingRow(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Gapping Targets</DialogTitle>
+            <DialogDescription>
+              Saved targets are your reference numbers. Live columns still update from shot data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="target-total">Total distance</label>
+              <Input id="target-total" type="number" value={draft.targetTotal} onChange={(event) => setDraft(prev => ({ ...prev, targetTotal: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="target-carry">Carry</label>
+              <Input id="target-carry" type="number" value={draft.targetCarry} onChange={(event) => setDraft(prev => ({ ...prev, targetCarry: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="target-left">Left side</label>
+              <Input id="target-left" type="number" value={draft.targetSideLeft} onChange={(event) => setDraft(prev => ({ ...prev, targetSideLeft: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="target-right">Right side</label>
+              <Input id="target-right" type="number" value={draft.targetSideRight} onChange={(event) => setDraft(prev => ({ ...prev, targetSideRight: event.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingRow(null)}>Cancel</Button>
+            <Button onClick={saveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
