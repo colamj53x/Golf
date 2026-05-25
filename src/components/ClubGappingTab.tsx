@@ -319,6 +319,7 @@ function buildRow(
   const referenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
   const top = topQuartile(referenceShots);
   const totals = top.map((shot) => shot.total);
+  const variationTotals = referenceShots.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
 
   const sessions = practiceSessions
@@ -334,9 +335,9 @@ function buildRow(
   const rangeTargetVariationPct = rangeVariationPct(rangeTargetTotalWindow);
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
   const displayTotal = profile.targetTotal ?? liveTotal ?? rangeTargetTotal;
-  const liveVariationPct = variationPct(totals, liveTotal);
+  const liveVariationPct = variationPct(variationTotals, liveTotal);
   const displayVariationPct = profile.targetVariationPct ?? liveVariationPct ?? rangeTargetVariationPct;
-  const fairwayVariationWindow = target === 'fairway' && displayTotal !== null && displayVariationPct !== null
+  const variationWindow = displayTotal !== null && displayVariationPct !== null
     ? {
         min: displayTotal * (1 - displayVariationPct / 100),
         max: displayTotal * (1 + displayVariationPct / 100),
@@ -369,8 +370,8 @@ function buildRow(
     displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
-    totalMin: fairwayVariationWindow?.min ?? (totals.length > 1 ? Math.min(...totals) : rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min),
-    totalMax: fairwayVariationWindow?.max ?? (totals.length > 1 ? Math.max(...totals) : rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
+    totalMin: variationWindow?.min ?? (rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min),
+    totalMax: variationWindow?.max ?? (rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
