@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
+import { CircleHelp, Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
@@ -38,7 +39,9 @@ interface GappingRow {
   sideRight: number | null;
   sideBias: number | null;
   handicap: number | null;
-  last3TargetPct: number | null;
+  destinationConfidence: number | null;
+  safeConfidence: number | null;
+  confidenceWindowCount: number;
   rangeConfidence: number | null;
 }
 
@@ -75,6 +78,11 @@ function matchesTarget(shot: Shot, target: ProfileTarget): boolean {
   const endLie = shot.endLie.toLowerCase();
   if (target === 'green') return endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
   return endLie.includes('fairway');
+}
+
+function isSafeOutcome(shot: Shot): boolean {
+  const endLie = shot.endLie.toLowerCase();
+  return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
 }
 
 function fmt(value: number | null, suffix = 'm', digits = 0): string {
@@ -119,6 +127,13 @@ function fmtSideRange(left: number | null, right: number | null): string {
   return `${left.toFixed(0)}L-${right.toFixed(0)}R`;
 }
 
+function confidenceTone(value: number | null): string {
+  if (value === null) return 'border-muted text-muted-foreground';
+  if (value >= 70) return 'bg-green-600 text-white';
+  if (value >= 50) return 'bg-amber-500 text-white';
+  return 'border-red-500 text-red-700';
+}
+
 function getMetricValue(metrics: Array<{ metricId: string; valueMin: number | null; valueMax: number | null }>, id: string): number | null {
   const metric = metrics.find((item) => item.metricId === id);
   if (!metric) return null;
@@ -154,8 +169,13 @@ function buildRow(
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
     .slice(-3);
-  const last3Shots = courseShots.filter((shot) =>
+  const referenceTotal = profile.targetTotal ?? mean(totals);
+  const targetWindowShots = withoutDistanceOutliers(courseShots.filter((shot) =>
     getClubConfigId(shot.club) === profile.clubId &&
+    referenceTotal !== null &&
+    Math.abs(shot.total - referenceTotal) <= 10
+  ));
+  const last3WindowShots = targetWindowShots.filter((shot) =>
     uniqueDates.includes(getShotDateKey(shot.date))
   );
 
@@ -172,7 +192,9 @@ function buildRow(
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     sideBias: mean(sides),
     handicap: mean(qualityValues),
-    last3TargetPct: last3Shots.length ? (last3Shots.filter((shot) => matchesTarget(shot, target)).length / last3Shots.length) * 100 : null,
+    destinationConfidence: last3WindowShots.length ? (last3WindowShots.filter((shot) => matchesTarget(shot, target)).length / last3WindowShots.length) * 100 : null,
+    safeConfidence: targetWindowShots.length ? (targetWindowShots.filter(isSafeOutcome).length / targetWindowShots.length) * 100 : null,
+    confidenceWindowCount: targetWindowShots.length,
     rangeConfidence: mean(rangeScores),
   };
 }
@@ -233,6 +255,16 @@ export function ClubGappingTab() {
     });
   };
 
+  const useLiveInDraft = () => {
+    if (!editingRow) return;
+    setDraft({
+      targetTotal: editingRow.liveTotal?.toFixed(0) ?? '',
+      targetCarry: editingRow.liveCarry?.toFixed(0) ?? '',
+      targetSideLeft: editingRow.sideLeft?.toFixed(0) ?? '',
+      targetSideRight: editingRow.sideRight?.toFixed(0) ?? '',
+    });
+  };
+
   const saveEdit = () => {
     if (!editingRow) return;
     updateShotProfile(editingRow.profile.id, {
@@ -267,12 +299,11 @@ export function ClubGappingTab() {
                   <TableHead className="text-right">Distance</TableHead>
                   <TableHead className="text-right">Vertical</TableHead>
                   <TableHead className="text-right">Side Range</TableHead>
-                  <TableHead className="text-right">Side Bias</TableHead>
+                  <TableHead className="text-right">Mean Side</TableHead>
                   <TableHead className="text-right">Carry</TableHead>
                   <TableHead className="text-right">Top Q Rating</TableHead>
-                  <TableHead className="text-right">Risk</TableHead>
+                  <TableHead className="text-right">Confidence</TableHead>
                   <TableHead className="text-right">Range Conf.</TableHead>
-                  <TableHead className="text-right">Targets</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -281,11 +312,30 @@ export function ClubGappingTab() {
                   clubRows.map((row, index) => (
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
-                        {index === 0 ? clubName : ''}
+                        {index === 0 ? (
+                          <div className="flex items-center gap-1.5">
+                            {clubName}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button type="button" className="text-muted-foreground hover:text-foreground">
+                                  <CircleHelp className="h-3.5 w-3.5" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="space-y-1 text-xs">
+                                  {clubRows.map((clubRow) => (
+                                    <div key={`${clubRow.profile.id}-${clubRow.target}`}>
+                                      {getShotLabel(clubRow.profile, clubRow.target)}: {clubRow.topQuartile.length} top-Q / {clubRow.sample.length} target hits / {clubRow.confidenceWindowCount} in window
+                                    </div>
+                                  ))}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        ) : ''}
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{getShotLabel(row.profile, row.target)}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">{row.topQuartile.length} top-Q / {row.sample.length} target hits</div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
@@ -296,13 +346,20 @@ export function ClubGappingTab() {
                       <TableCell className="text-right">{fmtSigned(row.sideBias)}</TableCell>
                       <TableCell className="text-right">{fmt(row.liveCarry)}</TableCell>
                       <TableCell className="text-right">{fmtHandicap(row.handicap)}</TableCell>
-                      <TableCell className="text-right">{fmt(row.last3TargetPct, '%')}</TableCell>
-                      <TableCell className="text-right">{fmt(row.rangeConfidence, '%')}</TableCell>
                       <TableCell className="text-right">
-                        <div>{fmt(row.profile.targetTotal)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          C {fmt(row.profile.targetCarry)} · {fmtSideRange(row.profile.targetSideLeft, row.profile.targetSideRight)}
+                        <div className="flex justify-end gap-1">
+                          <Badge variant={row.destinationConfidence !== null && row.destinationConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.destinationConfidence)}>
+                            T {fmt(row.destinationConfidence, '%')}
+                          </Badge>
+                          <Badge variant={row.safeConfidence !== null && row.safeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.safeConfidence)}>
+                            S {fmt(row.safeConfidence, '%')}
+                          </Badge>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={row.rangeConfidence !== null && row.rangeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.rangeConfidence)}>
+                          {fmt(row.rangeConfidence, '%')}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -322,7 +379,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
                       No target-hit gapping data yet.
                     </TableCell>
                   </TableRow>
@@ -342,6 +399,22 @@ export function ClubGappingTab() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
+            {editingRow && (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm sm:col-span-2">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="font-medium">Latest live values</div>
+                  <Button type="button" size="sm" variant="outline" onClick={useLiveInDraft}>
+                    Use latest
+                  </Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  <div>Total {fmt(editingRow.liveTotal)}</div>
+                  <div>Carry {fmt(editingRow.liveCarry)}</div>
+                  <div>Side {fmtSideRange(editingRow.sideLeft, editingRow.sideRight)}</div>
+                  <div>Mean {fmtSigned(editingRow.sideBias)}</div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="target-total">Total distance</label>
               <Input id="target-total" type="number" value={draft.targetTotal} onChange={(event) => setDraft(prev => ({ ...prev, targetTotal: event.target.value }))} />
