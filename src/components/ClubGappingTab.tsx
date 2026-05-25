@@ -340,7 +340,6 @@ function getIntentDistanceWindow(
 
 function isGreenIntentShot(shot: Shot, window: { min: number | null; max: number | null }): boolean {
   if (!Number.isFinite(shot.target) || window.max === null) return false;
-  if (window.min !== null) return shot.target >= window.min && shot.target <= window.max;
   return shot.target <= window.max;
 }
 
