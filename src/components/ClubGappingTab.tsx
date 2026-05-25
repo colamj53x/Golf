@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Gauge, Pencil, RefreshCw } from 'lucide-react';
+import { Gauge, Pencil, RefreshCw, Signal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ interface GappingRow {
   targetPct: number | null;
   safePct: number | null;
   rangeConfidence: number | null;
+  shotCount: number;
 }
 
 function mean(values: number[]): number | null {
@@ -124,6 +125,12 @@ function confidenceTone(value: number | null): string {
   return 'border-red-500 text-red-700';
 }
 
+function shotCountTone(count: number): string {
+  if (count >= 50) return 'text-green-600';
+  if (count >= 25) return 'text-amber-500';
+  return 'text-red-600';
+}
+
 function getMetricTargetValue(config: ClubPracticeConfig | undefined, id: string): number | null {
   const metric = config?.metrics.find((item) => item.id === id);
   if (!metric) return null;
@@ -205,6 +212,7 @@ function buildRow(
     targetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
     safePct: lastThreeClubShots.length ? (lastThreeClubShots.filter(isSafeOutcome).length / lastThreeClubShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
+    shotCount: referenceShots.length,
   };
 }
 
@@ -312,6 +320,7 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Target %</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Safe %</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Shots</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -345,6 +354,9 @@ export function ClubGappingTab() {
                           {fmt(row.rangeConfidence, '%')}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Signal className={`mx-auto h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
                           <Pencil className="h-4 w-4" />
@@ -355,7 +367,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
