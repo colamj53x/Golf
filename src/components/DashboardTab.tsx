@@ -12,9 +12,9 @@ import {
   splitIntoThirds, 
   splitByQualityCumulative, 
   getClubConfigId,
+  getShotDateKey,
   formatPercent,
-  formatDistance,
-  getLastNRounds
+  formatDistance
 } from '@/lib/golfCalculations';
 import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
 import { ProcessedShot } from '@/types/golf';
@@ -85,15 +85,21 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const processedData = useMemo(() => {
     if (shots.length === 0) return null;
 
-    let filteredShots = shots;
+    let roundScopeShots = shots;
+    if (selectedStartLie !== 'all') {
+      roundScopeShots = roundScopeShots.filter(s => s.startLie === selectedStartLie);
+    }
+    roundScopeShots = filterShotsByTargetDistance(roundScopeShots, selectedDistanceFilter);
+
+    const latestRoundDateKeys = [...new Set(roundScopeShots.map(s => getShotDateKey(s.date)))]
+      .sort((a, b) => b.localeCompare(a));
+    const lastRoundDateKeys = new Set(latestRoundDateKeys.slice(0, 1));
+    const last5RoundDateKeys = new Set(latestRoundDateKeys.slice(0, 5));
+
+    let filteredShots = roundScopeShots;
     if (selectedClub !== 'all') {
       filteredShots = filteredShots.filter(s => s.club === selectedClub);
     }
-    if (selectedStartLie !== 'all') {
-      filteredShots = filteredShots.filter(s => s.startLie === selectedStartLie);
-    }
-    // Apply distance to hole filter
-    filteredShots = filterShotsByTargetDistance(filteredShots, selectedDistanceFilter);
 
     // Sort by date
     const sortedShots = [...filteredShots].sort((a, b) => 
@@ -113,11 +119,11 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
       : null;
 
     // Last round
-    const lastRoundShots = getLastNRounds(processed, 1);
+    const lastRoundShots = processed.filter(s => lastRoundDateKeys.has(getShotDateKey(s.date)));
     const lastRound = calculateMetrics(lastRoundShots, currentConfig || undefined);
 
     // Last 5 rounds
-    const last5RoundsShots = getLastNRounds(processed, 5);
+    const last5RoundsShots = processed.filter(s => last5RoundDateKeys.has(getShotDateKey(s.date)));
     const last5Rounds = calculateMetrics(last5RoundsShots, currentConfig || undefined);
 
     // Trend analysis (thirds)
