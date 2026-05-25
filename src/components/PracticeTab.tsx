@@ -25,11 +25,19 @@ export function PracticeTab() {
   };
 
   return (
-    <Tabs defaultValue="full-swing" className="w-full">
-      <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
-        <TabsTrigger value="full-swing" className="shrink-0">Full Swing</TabsTrigger>
-        <TabsTrigger value="putting" className="shrink-0">Putting</TabsTrigger>
-      </TabsList>
+    <Tabs defaultValue="full-swing" className="w-full space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-foreground">Practice</h2>
+          <p className="text-sm text-muted-foreground">
+            Review full-swing sessions, practice plans, drills, and putting work.
+          </p>
+        </div>
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="full-swing" className="shrink-0">Full Swing</TabsTrigger>
+          <TabsTrigger value="putting" className="shrink-0">Putting</TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent value="full-swing">
         <Tabs value={fullSwingTab} onValueChange={setFullSwingTab} className="w-full">
