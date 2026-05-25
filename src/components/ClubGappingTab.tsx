@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Gauge, Pencil, RotateCcw, RefreshCw } from 'lucide-react';
+import { Gauge, Pencil, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,6 @@ import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs
 interface GappingRow {
   profile: ShotProfile;
   target: ProfileTarget;
-  clubSample: Shot[];
   sample: Shot[];
   topQuartile: Shot[];
   liveTotal: number | null;
@@ -178,7 +177,6 @@ function buildRow(
   return {
     profile,
     target,
-    clubSample: clubShots,
     sample: cleanedTargetHits,
     topQuartile: top,
     liveTotal: mean(totals),
@@ -223,24 +221,6 @@ export function ClubGappingTab() {
     }
     return [...groups.entries()];
   }, [rows]);
-
-  const updateTargets = (row: GappingRow) => {
-    updateShotProfile(row.profile.id, {
-      targetTotal: row.liveTotal,
-      targetCarry: row.liveCarry,
-      targetSideLeft: row.sideLeft,
-      targetSideRight: row.sideRight,
-    });
-  };
-
-  const revertTargets = (profile: ShotProfile) => {
-    updateShotProfile(profile.id, {
-      targetTotal: null,
-      targetCarry: null,
-      targetSideLeft: null,
-      targetSideRight: null,
-    });
-  };
 
   const openEdit = (row: GappingRow) => {
     setEditingRow(row);
@@ -343,17 +323,9 @@ export function ClubGappingTab() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" title="Update from latest data" onClick={() => updateTargets(row)}>
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" title="Clear saved targets" onClick={() => revertTargets(row.profile)}>
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -385,14 +357,16 @@ export function ClubGappingTab() {
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="font-medium">Latest live values</div>
                   <Button type="button" size="sm" variant="outline" onClick={useLiveInDraft}>
-                    Use latest
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Refresh latest
                   </Button>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-5">
                   <div>Total {fmt(editingRow.liveTotal)}</div>
                   <div>Carry {fmt(editingRow.liveCarry)}</div>
                   <div>Side {fmtSideRange(editingRow.sideLeft, editingRow.sideRight)}</div>
                   <div>Mean {fmtSigned(editingRow.sideBias)}</div>
+                  <div>Range {fmt(editingRow.rangeConfidence, '%')}</div>
                 </div>
               </div>
             )}
