@@ -298,6 +298,19 @@ export function PracticeDashboardTab() {
   const currentSessionShots = currentSession ? (shotsBySession[currentSession.id] ?? []) : [];
   const prev2SessionIds = allSessions.slice(1, 3).map(s => s.id);
 
+  // Inline notes editor state (Practice Report card at the bottom)
+  const [reportNotes, setReportNotes] = useState<string>(currentSession?.notes ?? '');
+  const [reportNotesDirty, setReportNotesDirty] = useState(false);
+  const reportNotesSessionId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = currentSession?.id ?? null;
+    if (id !== reportNotesSessionId.current) {
+      reportNotesSessionId.current = id;
+      setReportNotes(currentSession?.notes ?? '');
+      setReportNotesDirty(false);
+    }
+  }, [currentSession?.id, currentSession?.notes]);
+
   if (!config) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -906,19 +919,6 @@ export function PracticeDashboardTab() {
     shotsBySession,
     currentConfigKey,
   );
-
-  // Inline notes editor state (Practice Report card at the bottom)
-  const [reportNotes, setReportNotes] = useState<string>(currentSession?.notes ?? '');
-  const [reportNotesDirty, setReportNotesDirty] = useState(false);
-  const reportNotesSessionId = useRef<string | null>(null);
-  useEffect(() => {
-    const id = currentSession?.id ?? null;
-    if (id !== reportNotesSessionId.current) {
-      reportNotesSessionId.current = id;
-      setReportNotes(currentSession?.notes ?? '');
-      setReportNotesDirty(false);
-    }
-  }, [currentSession?.id, currentSession?.notes]);
 
   // Practice Report card — rendered at top until notes saved, then moves to bottom
   const hasSavedNotes = !!(currentSession?.notes && currentSession.notes.trim().length > 0) && !reportNotesDirty;
