@@ -17,12 +17,37 @@ import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS } from '@/types/practiceClubs';
 
 type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
+type ShotSortKey = 'quality' | 'distance' | 'alignment';
 
 const SHOT_CONTEXT_OPTIONS: Array<{ id: ShotContext; label: string }> = [
   { id: 'tee', label: 'Tee' },
   { id: 'fairway', label: 'Fairway' },
   { id: 'roughRecovery', label: 'Rough / Recovery' },
 ];
+
+const SHOT_QUALITY_RANK: Record<string, number> = {
+  Pro: 0,
+  'Elite Am': 1,
+  '0 Handicap': 2,
+  '5 Handicap': 3,
+  '10 Handicap': 4,
+  '15 Handicap': 5,
+  '20 Handicap': 6,
+  '25 Handicap': 7,
+};
+
+const SHOT_QUALITY_HANDICAP: Record<string, number> = {
+  Pro: -10,
+  'Elite Am': -5,
+  '0 Handicap': 0,
+  '5 Handicap': 5,
+  '10 Handicap': 10,
+  '15 Handicap': 15,
+  '20 Handicap': 20,
+  '25 Handicap': 25,
+};
+
+const DEFAULT_QUALITY_CUTOFF = 10;
 
 interface GappingRow {
   profile: ShotProfile;
@@ -53,6 +78,7 @@ interface GappingRow {
   rangeConfidence: number | null;
   shotCount: number;
   rangeShotCount: number;
+  qualityCutoff: number;
 }
 
 function mean(values: number[]): number | null {
@@ -80,10 +106,36 @@ function rangeVariationPct(range: { min: number | null; max: number | null }): n
   return variationPct([range.min, range.max], center);
 }
 
-function topQuartile(shots: Shot[]): Shot[] {
+function qualityRank(shot: Shot): number {
+  return SHOT_QUALITY_RANK[shot.shotQuality] ?? Number.POSITIVE_INFINITY;
+}
+
+function shotHandicap(shot: Shot): number {
+  return SHOT_QUALITY_HANDICAP[shot.shotQuality] ?? Number.POSITIVE_INFINITY;
+}
+
+function isGappingQualityShot(shot: Shot, cutoff: number): boolean {
+  return shotHandicap(shot) <= cutoff;
+}
+
+function topQualityQuartile(shots: Shot[]): Shot[] {
   if (shots.length === 0) return [];
-  const sorted = [...shots].sort((a, b) => b.total - a.total);
+  const sorted = [...shots].sort((a, b) => {
+    const qualityDelta = qualityRank(a) - qualityRank(b);
+    if (qualityDelta !== 0) return qualityDelta;
+    return b.total - a.total;
+  });
   return sorted.slice(0, Math.max(1, Math.ceil(sorted.length * 0.25)));
+}
+
+function sortShots(shots: Shot[], sortKey: ShotSortKey): Shot[] {
+  return [...shots].sort((a, b) => {
+    if (sortKey === 'distance') return b.total - a.total;
+    if (sortKey === 'alignment') return Math.abs(a.side) - Math.abs(b.side);
+    const qualityDelta = qualityRank(a) - qualityRank(b);
+    if (qualityDelta !== 0) return qualityDelta;
+    return b.total - a.total;
+  });
 }
 
 function withoutDistanceOutliers(shots: Shot[]): Shot[] {
@@ -313,11 +365,13 @@ function buildRow(
   profiles: ShotProfileMap,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
+  const qualityCutoff = profile.targetQualityCutoff ?? DEFAULT_QUALITY_CUTOFF;
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
-  const referenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
-  const top = topQuartile(referenceShots);
+  const targetReferenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
+  const referenceShots = targetReferenceShots.filter((shot) => isGappingQualityShot(shot, qualityCutoff));
+  const top = topQualityQuartile(referenceShots);
   const totals = top.map((shot) => shot.total);
   const variationTotals = referenceShots.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
@@ -382,6 +436,7 @@ function buildRow(
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: referenceShots.length,
     rangeShotCount,
+    qualityCutoff,
   };
 }
 
@@ -393,10 +448,13 @@ export function ClubGappingTab() {
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [shotContext, setShotContext] = useState<ShotContext>('tee');
   const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
+  const [shotsRow, setShotsRow] = useState<GappingRow | null>(null);
+  const [shotSort, setShotSort] = useState<ShotSortKey>('quality');
   const [draft, setDraft] = useState({
     targetTotal: '',
     targetCarry: '',
     targetVariationPct: '',
+    targetQualityCutoff: '',
     targetSideLeft: '',
     targetSideRight: '',
   });
@@ -427,6 +485,7 @@ export function ClubGappingTab() {
       targetTotal: row.profile.targetTotal?.toString() ?? '',
       targetCarry: row.profile.targetCarry?.toString() ?? '',
       targetVariationPct: row.profile.targetVariationPct?.toString() ?? '',
+      targetQualityCutoff: row.profile.targetQualityCutoff?.toString() ?? '',
       targetSideLeft: row.profile.targetSideLeft?.toString() ?? '',
       targetSideRight: row.profile.targetSideRight?.toString() ?? '',
     });
@@ -438,6 +497,7 @@ export function ClubGappingTab() {
       targetTotal: editingRow.liveTotal?.toFixed(0) ?? '',
       targetCarry: editingRow.liveCarry?.toFixed(0) ?? '',
       targetVariationPct: editingRow.liveVariationPct?.toFixed(0) ?? '',
+      targetQualityCutoff: editingRow.qualityCutoff.toString(),
       targetSideLeft: editingRow.sideLeft?.toFixed(0) ?? '',
       targetSideRight: editingRow.sideRight?.toFixed(0) ?? '',
     });
@@ -449,6 +509,7 @@ export function ClubGappingTab() {
       targetTotal: editingRow.rangeTargetTotal?.toFixed(0) ?? '',
       targetCarry: editingRow.rangeTargetCarry?.toFixed(0) ?? '',
       targetVariationPct: editingRow.rangeTargetVariationPct?.toFixed(0) ?? '',
+      targetQualityCutoff: editingRow.qualityCutoff.toString(),
       targetSideLeft: editingRow.rangeTargetSide?.toFixed(0) ?? '',
       targetSideRight: editingRow.rangeTargetSide?.toFixed(0) ?? '',
     });
@@ -460,11 +521,14 @@ export function ClubGappingTab() {
       targetTotal: parseOptionalNumber(draft.targetTotal),
       targetCarry: parseOptionalNumber(draft.targetCarry),
       targetVariationPct: parseOptionalNumber(draft.targetVariationPct),
+      targetQualityCutoff: parseOptionalNumber(draft.targetQualityCutoff),
       targetSideLeft: parseOptionalNumber(draft.targetSideLeft),
       targetSideRight: parseOptionalNumber(draft.targetSideRight),
     });
     setEditingRow(null);
   };
+
+  const detailShots = useMemo(() => sortShots(shotsRow?.sample ?? [], shotSort), [shotsRow, shotSort]);
 
   return (
     <div className="space-y-6">
@@ -541,7 +605,17 @@ export function ClubGappingTab() {
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <Signal className={`mx-auto h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="mx-auto h-8 w-8"
+                          title={`${row.shotCount} shots`}
+                          onClick={() => setShotsRow(row)}
+                          disabled={row.shotCount === 0}
+                        >
+                          <Signal className={`h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
@@ -617,6 +691,10 @@ export function ClubGappingTab() {
               <Input id="target-variation" type="number" value={draft.targetVariationPct} onChange={(event) => setDraft(prev => ({ ...prev, targetVariationPct: event.target.value }))} />
             </div>
             <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="quality-cutoff">Quality cutoff hcp</label>
+              <Input id="quality-cutoff" type="number" value={draft.targetQualityCutoff} placeholder="10" onChange={(event) => setDraft(prev => ({ ...prev, targetQualityCutoff: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="target-left">Left side</label>
               <Input id="target-left" type="number" value={draft.targetSideLeft} onChange={(event) => setDraft(prev => ({ ...prev, targetSideLeft: event.target.value }))} />
             </div>
@@ -629,6 +707,65 @@ export function ClubGappingTab() {
             <Button variant="outline" onClick={() => setEditingRow(null)}>Cancel</Button>
             <Button onClick={saveEdit}>Save</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(shotsRow)} onOpenChange={(open) => !open && setShotsRow(null)}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              {shotsRow ? `${getClubName(shotsRow.profile)} ${getShotLabel(shotsRow.profile)} to ${shotsRow.target}` : 'Shots'}
+            </DialogTitle>
+            <DialogDescription>
+              Shots are filtered to {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better and sorted by the selected column.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant={shotSort === 'quality' ? 'default' : 'outline'} onClick={() => setShotSort('quality')}>
+              Quality
+            </Button>
+            <Button type="button" size="sm" variant={shotSort === 'distance' ? 'default' : 'outline'} onClick={() => setShotSort('distance')}>
+              Distance
+            </Button>
+            <Button type="button" size="sm" variant={shotSort === 'alignment' ? 'default' : 'outline'} onClick={() => setShotSort('alignment')}>
+              Alignment
+            </Button>
+          </div>
+          <div className="max-h-[60vh] overflow-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Quality</TableHead>
+                  <TableHead className="text-right">Distance</TableHead>
+                  <TableHead className="text-right">Alignment</TableHead>
+                  <TableHead>Start lie</TableHead>
+                  <TableHead>End lie</TableHead>
+                  <TableHead>Strike</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detailShots.map((shot) => (
+                  <TableRow key={shot.id}>
+                    <TableCell className="whitespace-nowrap">{getShotDateKey(shot.date)}</TableCell>
+                    <TableCell>{shot.shotQuality || '-'}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(shot.total)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmtSigned(shot.side)}</TableCell>
+                    <TableCell>{shot.startLie || '-'}</TableCell>
+                    <TableCell>{shot.endLie || '-'}</TableCell>
+                    <TableCell>{shot.strikeQuality || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {detailShots.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      No matching shots.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

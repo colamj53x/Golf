@@ -21,6 +21,7 @@ export interface ShotProfile {
   targetSideLeft: number | null;
   targetSideRight: number | null;
   targetVariationPct: number | null;
+  targetQualityCutoff: number | null;
 }
 
 export type ShotProfileMap = Record<string, ShotProfile>;
@@ -57,6 +58,7 @@ function makeProfile(
     targetSideLeft: null,
     targetSideRight: null,
     targetVariationPct: null,
+    targetQualityCutoff: null,
   };
 }
 
@@ -163,6 +165,8 @@ function readRaw(): ShotProfileMap {
         ...(merged[id] ?? profile),
         ...profile,
         targets: profile.targets?.filter((target) => target === 'green' || target === 'fairway') ?? merged[id]?.targets ?? ['green'],
+        targetVariationPct: profile.targetVariationPct ?? merged[id]?.targetVariationPct ?? null,
+        targetQualityCutoff: profile.targetQualityCutoff ?? merged[id]?.targetQualityCutoff ?? null,
       };
     }
     return enablePunchProfiles(merged);
@@ -187,6 +191,7 @@ type ShotProfileRow = {
   target_side_left: number | null;
   target_side_right: number | null;
   target_variation_pct: number | null;
+  target_quality_cutoff: number | null;
 };
 
 function fromRow(row: ShotProfileRow): ShotProfile {
@@ -206,6 +211,7 @@ function fromRow(row: ShotProfileRow): ShotProfile {
     targetSideLeft: row.target_side_left,
     targetSideRight: row.target_side_right,
     targetVariationPct: row.target_variation_pct,
+    targetQualityCutoff: row.target_quality_cutoff,
   };
 }
 
@@ -227,6 +233,7 @@ function toRow(profile: ShotProfile, userId: string) {
     target_side_left: profile.targetSideLeft,
     target_side_right: profile.targetSideRight,
     target_variation_pct: profile.targetVariationPct,
+    target_quality_cutoff: profile.targetQualityCutoff,
   };
 }
 
