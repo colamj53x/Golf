@@ -11,7 +11,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions, ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
-import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { ProfileTarget, ShotProfile, ShotProfileMap, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS } from '@/types/practiceClubs';
@@ -95,6 +95,10 @@ function isDriverDrivingShot(shot: Shot): boolean {
   return getClubConfigId(shot.club) === 'dr' && shot.type.trim().toLowerCase().startsWith('driv');
 }
 
+function isPunchClub(clubId: string): boolean {
+  return clubId === '6i' || clubId === '7i';
+}
+
 function matchesShotContext(shot: Shot, context: ShotContext): boolean {
   if (isDriverDrivingShot(shot)) return context === 'tee';
 
@@ -123,6 +127,11 @@ function parseOptionalNumber(value: string): number | null {
 
 function getClubName(profile: ShotProfile): string {
   return PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
+}
+
+function getShotLabel(profile: ShotProfile): string {
+  if (profile.shotType === 'punch') return 'Punch';
+  return 'Full';
 }
 
 function fmtSideRange(left: number | null, right: number | null): string {
@@ -204,6 +213,7 @@ function getEstimatedVerticalWindow(total: number | null, config: ClubPracticeCo
 }
 
 function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
+  if (profile.shotType !== 'full' || profile.power !== 'full') return session.clubId === profile.id;
   return session.clubId === profile.id || session.clubId === profile.clubId;
 }
 
@@ -227,6 +237,48 @@ function getRangeTargetPct(
   return mean(sessionScores);
 }
 
+function getFullShotTargetMax(
+  clubId: string,
+  profiles: ShotProfileMap,
+  practiceConfigs: ClubPracticeConfig[],
+): number | null {
+  const fullProfile = profiles[`${clubId}_full_full`];
+  const fullConfig = practiceConfigs.find((config) => config.clubId === `${clubId}_full_full`)
+    ?? practiceConfigs.find((config) => config.clubId === clubId);
+  const rangeMax = getMetricTargetRange(fullConfig, 'total_distance').max;
+  if (rangeMax !== null) return rangeMax;
+  return fullProfile?.targetTotal ?? null;
+}
+
+function isPunchShot(
+  shot: Shot,
+  fullTargetMax: number | null,
+): boolean {
+  const clubId = getClubConfigId(shot.club);
+  if (!isPunchClub(clubId)) return false;
+  if (shot.startLie.toLowerCase().includes('tee')) return false;
+
+  const lie = shot.startLie.toLowerCase();
+  const text = `${shot.type} ${shot.shotQuality} ${shot.strikeQuality} ${shot.notes}`.toLowerCase();
+  const isRecoveryLie = lie.includes('recovery') || lie.includes('tree') || lie.includes('trouble') || lie.includes('punch');
+  const isRoughLie = lie.includes('rough');
+  const isLowIntentional = text.includes('low') && (text.includes('intended') || text.includes('as intended'));
+  const isOutsideFullWindow = fullTargetMax !== null && shot.target > fullTargetMax + 15;
+
+  return isRecoveryLie || isRoughLie || isLowIntentional || isOutsideFullWindow;
+}
+
+function matchesProfileShot(
+  shot: Shot,
+  profile: ShotProfile,
+  fullTargetMax: number | null,
+): boolean {
+  const punchShot = isPunchShot(shot, fullTargetMax);
+  if (profile.shotType === 'punch') return punchShot;
+  if (profile.shotType === 'full' && isPunchClub(profile.clubId)) return !punchShot;
+  return profile.shotType === 'full';
+}
+
 function buildRow(
   profile: ShotProfile,
   target: ProfileTarget,
@@ -234,8 +286,10 @@ function buildRow(
   practiceSessions: PracticeSession[],
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
+  profiles: ShotProfileMap,
 ): GappingRow {
-  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId);
+  const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
   const referenceShots = cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
@@ -304,8 +358,9 @@ export function ClubGappingTab() {
     return Object.values(profiles)
       .filter((profile) => profile.enabled && profile.showOnCourse)
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
-      .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
-      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession)))
+      .filter((profile) => profile.power === 'full')
+      .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
+      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles)))
       .filter((row) => row.shotCount > 0);
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
 
@@ -380,6 +435,7 @@ export function ClubGappingTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[120px]">Club</TableHead>
+                  <TableHead>Shot</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Vertical</TableHead>
@@ -400,6 +456,9 @@ export function ClubGappingTab() {
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
                         {index === 0 ? clubName : ''}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}>{getShotLabel(row.profile)}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
@@ -432,7 +491,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
