@@ -261,7 +261,8 @@ export function UploadTab() {
             Upload Shot Data
           </CardTitle>
           <CardDescription>
-            Add new shots by uploading a CSV file. Your current data has {shots.length} shots.
+            Upload your full ParGolf CSV or the simple shot template. Putting rows are skipped for now.
+            Your current data has {shots.length} shots.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -341,7 +342,11 @@ export function UploadTab() {
 
           {/* CSV Format Info */}
           <div className="text-sm text-muted-foreground border-t pt-4 mt-4">
-            <p className="font-medium text-foreground mb-2">Expected CSV columns</p>
+            <p className="font-medium text-foreground mb-2">Accepted CSV columns</p>
+            <p className="mb-2">
+              Full ParGolf exports are supported. If offline distance is blank, the app estimates it from tags like
+              #pull, #push, #slice, #hook, #fade, and #draw.
+            </p>
             <code className="block overflow-x-auto rounded bg-muted p-3 text-xs">
               Date, Club, Type, Start Lie, End Lie, Strike Quality, Shot Quality, Target, End Distance from Target, Distance Hit, Dispersion
             </code>

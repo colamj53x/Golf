@@ -320,6 +320,12 @@ export function parseDate(dateStr: string): DateParseResult {
     const [year, month, day] = trimmed.split('-').map(Number);
     return fromParts(year, month, day);
   }
+
+  // ParGolf exports full timestamps like "2026-05-23 20:52:16 +0000".
+  const ymdWithTime = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s/);
+  if (ymdWithTime) {
+    return fromParts(Number(ymdWithTime[1]), Number(ymdWithTime[2]), Number(ymdWithTime[3]));
+  }
   
   // Try DD/MM/YYYY, D/M/YYYY, DD-MM-YYYY, or D-M-YYYY format
   const dmy = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
@@ -341,45 +347,100 @@ export interface CSVParseResult {
   warnings: { row: number; issue: string }[];
 }
 
+function parseCSVRow(row: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < row.length; i++) {
+    const char = row[i];
+    const nextChar = row[i + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function parseNumeric(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function estimateDispersion(dispersion: string, shotNotes: string, shape: string): number {
+  const parsed = Number.parseFloat(dispersion);
+  if (Number.isFinite(parsed)) return parsed;
+
+  const text = `${shotNotes} ${shape}`.toLowerCase();
+  const rightMisses = [
+    { term: 'slice', amount: 30 },
+    { term: 'push', amount: 18 },
+    { term: 'fade', amount: 12 },
+  ];
+  const leftMisses = [
+    { term: 'hook', amount: 30 },
+    { term: 'pull', amount: 18 },
+    { term: 'draw', amount: 12 },
+  ];
+
+  const rightAmount = rightMisses.reduce((amount, miss) => text.includes(miss.term) ? Math.max(amount, miss.amount) : amount, 0);
+  const leftAmount = leftMisses.reduce((amount, miss) => text.includes(miss.term) ? Math.max(amount, miss.amount) : amount, 0);
+
+  if (rightAmount > leftAmount) return rightAmount;
+  if (leftAmount > rightAmount) return -leftAmount;
+  return 0;
+}
+
 export function parseCSV(csvContent: string): CSVParseResult {
   const lines = csvContent.trim().split('\n');
   if (lines.length < 2) return { shots: [], warnings: [] };
 
-  const headerValues: string[] = [];
-  let headerCurrent = '';
-  let headerInQuotes = false;
-  for (const char of lines[0]) {
-    if (char === '"') headerInQuotes = !headerInQuotes;
-    else if (char === ',' && !headerInQuotes) {
-      headerValues.push(headerCurrent.trim().toLowerCase());
-      headerCurrent = '';
-    } else headerCurrent += char;
-  }
-  headerValues.push(headerCurrent.trim().toLowerCase());
+  const headerValues = parseCSVRow(lines[0]).map(header => header.trim().toLowerCase());
 
   const normalizedHeader = headerValues.map(h => h.replace(/[^a-z0-9]/g, ''));
   const legacyHeader = ['date', 'club', 'type', 'startlie', 'endlie', 'strikequality', 'shotquality', 'target', 'enddistancefromtarget', 'distancehit', 'dispersion'];
   const isLegacyFormat = legacyHeader.every((name, index) => normalizedHeader[index] === name);
-  const column = (aliases: string[]) => normalizedHeader.findIndex(header => aliases.includes(header));
+  const column = (aliases: string[]) => {
+    for (const alias of aliases) {
+      const index = normalizedHeader.findIndex(header => header === alias);
+      if (index !== -1) return index;
+    }
+    return -1;
+  };
   const indexes = {
     date: isLegacyFormat ? 0 : column(['date', 'shotdate']),
     club: isLegacyFormat ? 1 : column(['club', 'clubcode']),
-    type: isLegacyFormat ? 2 : column(['type', 'shottype', 'category']),
+    type: isLegacyFormat ? 2 : column(['category', 'shottype', 'type']),
     startLie: isLegacyFormat ? 3 : column(['startlie', 'lie']),
     endLie: isLegacyFormat ? 4 : column(['endlie', 'resultlie', 'finishlie']),
-    strikeQuality: isLegacyFormat ? 5 : column(['strikequality', 'strike']),
-    shotQuality: isLegacyFormat ? 6 : column(['shotquality', 'quality']),
-    target: isLegacyFormat ? 7 : column(['target', 'targetdistance', 'distancetohole']),
-    endDistFromTarget: isLegacyFormat ? 8 : column(['enddistancefromtarget', 'enddistance', 'proximity', 'proximitytohole']),
-    distanceHit: isLegacyFormat ? 9 : column(['distancehit', 'total', 'totaldistance']),
-    dispersion: isLegacyFormat ? 10 : column(['dispersion', 'offline', 'side', 'lateral']),
+    strikeQuality: isLegacyFormat ? 5 : column(['strikequality', 'strike', 'quality']),
+    shotQuality: isLegacyFormat ? 6 : column(['shotquality']),
+    target: isLegacyFormat ? 7 : column(['target', 'targetdistance', 'distancetohole', 'distancetotargetm']),
+    endDistFromTarget: isLegacyFormat ? 8 : column(['enddistancefromtarget', 'enddistance', 'proximity', 'proximitytohole', 'proximitym']),
+    distanceHit: isLegacyFormat ? 9 : column(['distancehit', 'total', 'totaldistance', 'distancetraveledm']),
+    dispersion: isLegacyFormat ? 10 : column(['dispersion', 'offline', 'side', 'lateral', 'degreesoffline']),
     shotNotes: isLegacyFormat ? 11 : column(['shotnotes', 'notes', 'note']),
+    trajectory: column(['trajectory']),
+    shape: column(['shape']),
+    clubType: column(['clubtype']),
   };
 
   const shots: Shot[] = [];
   const warnings: { row: number; issue: string }[] = [];
 
-  if (Object.entries(indexes).some(([key, index]) => key !== 'shotNotes' && index === -1)) {
+  const optionalIndexes = ['shotNotes', 'trajectory', 'shape', 'clubType'];
+  if (Object.entries(indexes).some(([key, index]) => !optionalIndexes.includes(key) && index === -1)) {
     return {
       shots: [],
       warnings: [{ row: 1, issue: 'CSV header does not match the required shot data columns.' }],
@@ -390,21 +451,7 @@ export function parseCSV(csvContent: string): CSVParseResult {
     const line = lines[i];
     if (!line.trim()) continue;
 
-    const values: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (const char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    values.push(current.trim());
+    const values = parseCSVRow(line);
 
     if (values.length >= 11) {
       const read = (index: number) => index >= 0 ? values[index] || '' : '';
@@ -419,9 +466,15 @@ export function parseCSV(csvContent: string): CSVParseResult {
       const endDistFromTarget = read(indexes.endDistFromTarget);
       const distanceHit = read(indexes.distanceHit);
       const dispersion = read(indexes.dispersion);
-      const shotNotes = read(indexes.shotNotes);
+      const trajectory = read(indexes.trajectory);
+      const shape = read(indexes.shape);
+      const clubType = read(indexes.clubType);
+      const shotNotes = read(indexes.shotNotes) || trajectory || shape;
       
-      if (club.trim().toLowerCase() === 'pu') continue;
+      const normalizedClub = club.trim().toLowerCase();
+      const normalizedType = type.trim().toLowerCase();
+      const normalizedClubType = clubType.trim().toLowerCase();
+      if (normalizedClub === 'pu' || normalizedType === 'putting' || normalizedClubType === 'putter') continue;
       
       const dateResult = parseDate(date);
       if (dateResult.hadIssue) {
@@ -436,15 +489,15 @@ export function parseCSV(csvContent: string): CSVParseResult {
         id: `shot-${i}`,
         club: club.trim(),
         type: type.trim(),
-        target: parseFloat(target) || 0,
-        total: parseFloat(distanceHit) || 0,
-        side: parseFloat(dispersion) || 0,
+        target: parseNumeric(target),
+        total: parseNumeric(distanceHit),
+        side: estimateDispersion(dispersion, shotNotes, shape),
         shotQuality: shotQuality.trim(),
         date: dateResult.date,
         startLie: startLie.trim(),
         endLie: endLie.trim(),
         strikeQuality: strikeQuality.trim(),
-        endDistanceFromTarget: parseFloat(endDistFromTarget) || 0,
+        endDistanceFromTarget: parseNumeric(endDistFromTarget),
         notes: shotNotes?.trim() || '',
       });
     } else if (values.length > 0 && values.some(v => v.trim())) {
