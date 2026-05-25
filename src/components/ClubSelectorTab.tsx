@@ -24,7 +24,7 @@ const CLOCKS = [
 
 type LieOption = 'tee' | 'fairway' | 'rough' | 'sand' | 'recovery' | 'awkward';
 type TargetOption = 'green' | 'fairway';
-type TroubleOption = 'none' | 'left' | 'right' | 'short' | 'long';
+type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
 
 interface ClubRecommendation {
@@ -42,6 +42,9 @@ interface ClubRecommendation {
   shortRisk: number;
   longRisk: number;
   goodShotPct: number;
+  hitPct: number;
+  hitCount: number;
+  goodDistancePct: number;
   badges: string[];
   pointer: string;
 }
@@ -75,7 +78,6 @@ const targetOptions: Array<{ value: TargetOption; label: string }> = [
 ];
 
 const troubleOptions: Array<{ value: TroubleOption; label: string }> = [
-  { value: 'none', label: 'None' },
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
   { value: 'short', label: 'Short' },
@@ -112,6 +114,18 @@ function matchesLie(shot: Shot, lie: LieOption): boolean {
   return normalizeLie(shot.startLie || '').includes(lie);
 }
 
+function matchesTargetDestination(shot: Shot, target: TargetOption): boolean {
+  const endLie = (shot.endLie || '').toLowerCase();
+  if (target === 'green') {
+    return endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
+  }
+  return endLie.includes('fairway');
+}
+
+function canTargetDestination(club: ClubConfig, target: TargetOption): boolean {
+  return target === 'fairway' || club.distanceToTargetEnabled;
+}
+
 function inferClock(shot: Shot): string {
   const text = `${shot.type} ${shot.notes}`.toLowerCase();
   if (text.includes('7.30') || text.includes('7:30') || text.includes('730')) return '730pm';
@@ -143,11 +157,18 @@ function getSampleBadge(confidence: DataConfidence, count: number) {
   return <Badge variant="outline" className="border-red-500 text-red-700">{label}</Badge>;
 }
 
-function buildPointer(result: ClubRecommendation, target: TargetOption, trouble: TroubleOption, mustCarry: boolean): string {
+function toggleTroubleSide(current: TroubleOption[], side: TroubleOption): TroubleOption[] {
+  return current.includes(side)
+    ? current.filter((item) => item !== side)
+    : [...current, side];
+}
+
+function buildPointer(result: ClubRecommendation, target: TargetOption, trouble: TroubleOption[], mustCarry: boolean): string {
   if (mustCarry && result.shortRisk > 30) return 'Take more club or choose a fuller swing; short is the main problem.';
-  if (trouble === 'left' && result.leftRisk > 25) return 'Commit to start line and avoid trying to turn this over.';
-  if (trouble === 'right' && result.rightRisk > 25) return 'Aim with room right; hold the face through impact.';
-  if (trouble === 'long' && result.longRisk > 25) return 'Take speed off only if that is a practiced shot; otherwise club down.';
+  if (trouble.includes('left') && result.leftRisk > 25) return 'Commit to start line and avoid trying to turn this over.';
+  if (trouble.includes('right') && result.rightRisk > 25) return 'Aim with room right; hold the face through impact.';
+  if (trouble.includes('long') && result.longRisk > 25) return 'Take speed off only if that is a practiced shot; otherwise club down.';
+  if (trouble.includes('short') && result.shortRisk > 25) return 'Favour enough club; the short miss is too expensive here.';
   if (target === 'fairway') return 'Pick a conservative start line and make the stock swing.';
   return 'Stock tempo, clear target, commit to the finish.';
 }
@@ -156,24 +177,39 @@ function calculateRecommendations(
   shots: Shot[],
   clubs: ClubConfig[],
   targetDistance: number,
+  minimumSafeDistance: number | null,
   lie: LieOption,
   target: TargetOption,
-  trouble: TroubleOption,
+  trouble: TroubleOption[],
   mustCarry: boolean,
 ): ClubRecommendation[] {
   if (!targetDistance || targetDistance <= 0) return [];
 
   return clubs
     .map((club) => {
+      if (!canTargetDestination(club, target)) return null;
+
       const clubShots = shots.filter((shot) => getClubConfigId(shot.club) === club.id);
       if (clubShots.length === 0 && Math.abs(club.stockDistance - targetDistance) > 35) return null;
 
-      const scenarioShots = clubShots.filter((shot) =>
-        Math.abs(shot.target - targetDistance) <= 15 && matchesLie(shot, lie)
+      const distanceWindow = 10;
+      const intentWindow = 20;
+      const minSafe = minimumSafeDistance && minimumSafeDistance > 0 ? minimumSafeDistance : null;
+      const isSafeDistance = (shot: Shot) =>
+        shot.total >= (minSafe ?? targetDistance - distanceWindow) &&
+        shot.total <= targetDistance + distanceWindow;
+      const isGoodDistance = (shot: Shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality) && isSafeDistance(shot);
+
+      const likelyTargetIntentShots = clubShots.filter((shot) =>
+        Math.abs(shot.target - targetDistance) <= intentWindow &&
+        (target === 'fairway' || club.distanceToTargetEnabled)
       );
-      const lieShots = clubShots.filter((shot) => matchesLie(shot, lie));
-      const sample = scenarioShots.length >= 3 ? scenarioShots : lieShots.length >= 3 ? lieShots : clubShots;
-      const sampleLabel = scenarioShots.length >= 3 ? 'scenario' : lieShots.length >= 3 ? 'lie' : 'club';
+      const scenarioShots = likelyTargetIntentShots.filter((shot) =>
+        matchesLie(shot, lie)
+      );
+      const lieShots = clubShots.filter((shot) => matchesLie(shot, lie) && (target === 'fairway' || club.distanceToTargetEnabled));
+      const sample = scenarioShots.length >= 3 ? scenarioShots : likelyTargetIntentShots.length >= 3 ? likelyTargetIntentShots : lieShots.length >= 3 ? lieShots : clubShots;
+      const sampleLabel = scenarioShots.length >= 3 ? 'scenario' : likelyTargetIntentShots.length >= 3 ? 'distance' : lieShots.length >= 3 ? 'lie' : 'club';
 
       const avgTotal = sample.length ? mean(sample.map((shot) => shot.total || 0)) : club.stockDistance;
       const avgSide = sample.length ? mean(sample.map((shot) => shot.side || 0)) : 0;
@@ -192,34 +228,50 @@ function calculateRecommendations(
         ? (sample.filter((shot) => shot.total > targetDistance + distanceBand).length / sample.length) * 100
         : avgTotal > targetDistance + distanceBand ? 35 : 15;
 
+      const hitCount = sample.filter((shot) => isSafeDistance(shot) && matchesTargetDestination(shot, target)).length;
+      const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
+      const goodDistanceCount = sample.filter(isGoodDistance).length;
+      const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : 0;
+      const goodShotDistanceAverage = sample.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality));
+      const goodAvgTotal = goodShotDistanceAverage.length
+        ? mean(goodShotDistanceAverage.map((shot) => shot.total || 0))
+        : club.stockDistance;
+
       const distanceError = Math.abs(avgTotal - targetDistance);
-      const targetFit = clamp(100 - distanceError * (target === 'green' ? 4 : 2.5));
-      const troublePenalty =
-        trouble === 'left' ? leftRisk :
-        trouble === 'right' ? rightRisk :
-        trouble === 'short' ? shortRisk :
-        trouble === 'long' ? longRisk :
-        0;
+      const goodDistanceError = Math.abs(goodAvgTotal - targetDistance);
+      const targetFit = clamp((100 - distanceError * (target === 'green' ? 3 : 2)) * 0.35 + (100 - goodDistanceError * 4) * 0.65);
+      const troublePenalty = trouble.reduce((total, side) => {
+        if (side === 'left') return total + leftRisk;
+        if (side === 'right') return total + rightRisk;
+        if (side === 'short') return total + shortRisk;
+        return total + longRisk;
+      }, 0) / Math.max(1, trouble.length);
       const carryPenalty = mustCarry ? shortRisk * 0.7 : 0;
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
       const liePenalty = lie === 'sand' || lie === 'recovery' || lie === 'awkward' ? 6 : 0;
+      const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const confidence = Math.round(clamp(
-        targetFit * 0.38 +
-        goodShotPct * 0.28 +
-        (100 - Math.min(leftRisk + rightRisk, 100)) * 0.18 +
-        (100 - Math.min(shortRisk + longRisk, 100)) * 0.16 -
+        hitPct * 0.34 +
+        targetFit * 0.24 +
+        goodDistancePct * 0.18 +
+        goodShotPct * 0.12 +
+        (100 - Math.min(leftRisk + rightRisk, 100)) * 0.06 +
+        (100 - Math.min(shortRisk + longRisk, 100)) * 0.06 -
         troublePenalty * 0.35 -
         carryPenalty -
         samplePenalty -
-        liePenalty
+        liePenalty -
+        missingOutcomePenalty
       ));
 
       const badges: string[] = [];
       if (mustCarry && shortRisk > 25) badges.push('short carry risk');
-      if (trouble === 'left' && leftRisk > 20) badges.push('left risk');
-      if (trouble === 'right' && rightRisk > 20) badges.push('right risk');
-      if (trouble === 'long' && longRisk > 20) badges.push('long risk');
-      if (trouble === 'short' && shortRisk > 20) badges.push('short risk');
+      if (trouble.includes('left') && leftRisk > 20) badges.push('left risk');
+      if (trouble.includes('right') && rightRisk > 20) badges.push('right risk');
+      if (trouble.includes('long') && longRisk > 20) badges.push('long risk');
+      if (trouble.includes('short') && shortRisk > 20) badges.push('short risk');
+      if (minSafe) badges.push(`safe ${Math.round(minSafe)}m+`);
+      if (hitPct === 0) badges.push(`no ${target} hits at number`);
       if (Math.abs(avgSide) > sideBand) badges.push(avgSide > 0 ? 'right bias' : 'left bias');
       if (sampleLabel !== 'scenario') badges.push(`${sampleLabel} data`);
 
@@ -238,6 +290,9 @@ function calculateRecommendations(
         shortRisk,
         longRisk,
         goodShotPct,
+        hitPct,
+        hitCount,
+        goodDistancePct,
         badges,
         pointer: '',
       };
@@ -255,15 +310,17 @@ export function ClubSelectorTab() {
   const { shots, clubs, isLoading } = useGolfData();
   const { practiceSessions } = usePracticeData();
   const [targetDistance, setTargetDistance] = useState('120');
+  const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
   const [target, setTarget] = useState<TargetOption>('green');
-  const [trouble, setTrouble] = useState<TroubleOption>('none');
+  const [trouble, setTrouble] = useState<TroubleOption[]>([]);
   const [mustCarry, setMustCarry] = useState(false);
 
   const numericTarget = Number(targetDistance);
+  const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
   const recommendations = useMemo(
-    () => calculateRecommendations(shots, clubs, numericTarget, lie, target, trouble, mustCarry),
-    [shots, clubs, numericTarget, lie, target, trouble, mustCarry],
+    () => calculateRecommendations(shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry),
+    [shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -342,17 +399,32 @@ export function ClubSelectorTab() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[180px_1fr]">
-            <div className="space-y-2">
-              <Label htmlFor="target-distance">Target distance (m)</Label>
-              <Input
-                id="target-distance"
-                type="number"
-                inputMode="numeric"
-                min="1"
-                max="300"
-                value={targetDistance}
-                onChange={(event) => setTargetDistance(event.target.value)}
-              />
+            <div className="grid gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="target-distance">Target distance (m)</Label>
+                <Input
+                  id="target-distance"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="300"
+                  value={targetDistance}
+                  onChange={(event) => setTargetDistance(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="safe-distance">Minimum safe (m)</Label>
+                <Input
+                  id="safe-distance"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="300"
+                  value={minimumSafeDistance}
+                  onChange={(event) => setMinimumSafeDistance(event.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <ButtonGroup label="Lie">
@@ -386,13 +458,21 @@ export function ClubSelectorTab() {
 
           <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
             <ButtonGroup label="Trouble side">
+              <Button
+                type="button"
+                variant={trouble.length === 0 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTrouble([])}
+              >
+                None
+              </Button>
               {troubleOptions.map((option) => (
                 <Button
                   key={option.value}
                   type="button"
-                  variant={trouble === option.value ? 'default' : 'outline'}
+                  variant={trouble.includes(option.value) ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setTrouble(option.value)}
+                  onClick={() => setTrouble((current) => toggleTroubleSide(current, option.value))}
                 >
                   {option.label}
                 </Button>
@@ -452,8 +532,8 @@ export function ClubSelectorTab() {
                     </div>
                     <div className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
                       <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
-                      <Metric label="Target fit" value={`${result.targetFit}%`} />
-                      <Metric label="Good shots" value={`${Math.round(result.goodShotPct)}%`} />
+                      <Metric label={`${target} hits`} value={`${Math.round(result.hitPct)}% (${result.hitCount})`} />
+                      <Metric label="Good distance" value={`${Math.round(result.goodDistancePct)}%`} />
                       <Metric label="Bias" value={`${Math.round(Math.abs(result.avgSide))}m ${result.avgSide > 0 ? 'R' : result.avgSide < 0 ? 'L' : ''}`} />
                     </div>
                     {result.badges.length > 0 && (
