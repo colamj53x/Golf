@@ -11,7 +11,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions, ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
-import { ProfileTarget, ShotProfile, ShotProfileMap, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { ProfileTarget, ShotProfile, ShotProfileMap, ShotProfileTargetValues, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { PRACTICE_CLUBS } from '@/types/practiceClubs';
@@ -79,6 +79,7 @@ interface GappingRow {
   shotCount: number;
   rangeShotCount: number;
   qualityCutoff: number;
+  savedTarget: Partial<ShotProfileTargetValues>;
 }
 
 function mean(values: number[]): number | null {
@@ -144,6 +145,27 @@ function sortShots(shots: Shot[], sortKey: ShotSortKey): Shot[] {
     if (qualityDelta !== 0) return qualityDelta;
     return b.total - a.total;
   });
+}
+
+function getTargetSettings(profile: ShotProfile, target: ProfileTarget): Partial<ShotProfileTargetValues> {
+  const targetOverride = profile.targetOverrides[target] ?? {};
+  const useLegacyTargets = profile.targets.length <= 1;
+  return {
+    targetTotal: targetOverride.targetTotal ?? (useLegacyTargets ? profile.targetTotal : null),
+    targetCarry: targetOverride.targetCarry ?? (useLegacyTargets ? profile.targetCarry : null),
+    targetVariationPct: targetOverride.targetVariationPct ?? (useLegacyTargets ? profile.targetVariationPct : null),
+    targetSideLeft: targetOverride.targetSideLeft ?? (useLegacyTargets ? profile.targetSideLeft : null),
+    targetSideRight: targetOverride.targetSideRight ?? (useLegacyTargets ? profile.targetSideRight : null),
+    targetQualityCutoff: targetOverride.targetQualityCutoff ?? profile.targetQualityCutoff,
+  };
+}
+
+function getProfileTargetTotal(profile: ShotProfile | undefined): number | null {
+  if (!profile) return null;
+  return profile.targetOverrides.green?.targetTotal
+    ?? profile.targetOverrides.fairway?.targetTotal
+    ?? profile.targetTotal
+    ?? null;
 }
 
 function withoutDistanceOutliers(shots: Shot[]): Shot[] {
@@ -292,6 +314,44 @@ function getEstimatedVerticalWindow(total: number | null, config: ClubPracticeCo
   };
 }
 
+function getIntentDistanceWindow(
+  savedTarget: Partial<ShotProfileTargetValues>,
+  rangeTargetWindow: { min: number | null; max: number | null },
+  rangeTargetTotal: number | null,
+  rangeTargetVariationPct: number | null,
+): { min: number | null; max: number | null } {
+  if (savedTarget.targetTotal !== undefined && savedTarget.targetTotal !== null) {
+    const variation = savedTarget.targetVariationPct ?? rangeTargetVariationPct;
+    return variation !== null
+      ? {
+          min: savedTarget.targetTotal * (1 - variation / 100),
+          max: savedTarget.targetTotal * (1 + variation / 100),
+        }
+      : { min: null, max: savedTarget.targetTotal };
+  }
+
+  if (rangeTargetWindow.min !== null || rangeTargetWindow.max !== null) {
+    return rangeTargetWindow;
+  }
+
+  return { min: null, max: rangeTargetTotal };
+}
+
+function isGreenIntentShot(shot: Shot, window: { min: number | null; max: number | null }): boolean {
+  if (!Number.isFinite(shot.target) || window.max === null) return false;
+  if (window.min !== null) return shot.target >= window.min && shot.target <= window.max;
+  return shot.target <= window.max;
+}
+
+function matchesTargetIntent(
+  shot: Shot,
+  target: ProfileTarget,
+  window: { min: number | null; max: number | null },
+): boolean {
+  const greenIntent = isGreenIntentShot(shot, window);
+  return target === 'green' ? greenIntent : !greenIntent;
+}
+
 function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
   if (profile.shotType !== 'full' || profile.power !== 'full') return session.clubId === profile.id;
   return session.clubId === profile.id || session.clubId === profile.clubId;
@@ -331,7 +391,7 @@ function getFullShotTargetMax(
     ?? practiceConfigs.find((config) => config.clubId === clubId);
   const rangeMax = getMetricTargetRange(fullConfig, 'total_distance').max;
   if (rangeMax !== null) return rangeMax;
-  return fullProfile?.targetTotal ?? null;
+  return getProfileTargetTotal(fullProfile);
 }
 
 function isPunchShot(
@@ -373,32 +433,32 @@ function buildRow(
   profiles: ShotProfileMap,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
-  const qualityCutoff = profile.targetQualityCutoff ?? DEFAULT_QUALITY_CUTOFF;
-  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
-  const cleanedClubShots = withoutDistanceOutliers(clubShots);
-  const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
-  const targetReferenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
-  const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
-  const top = referenceShots;
-  const totals = top.map((shot) => shot.total);
-  const variationTotals = referenceShots.map((shot) => shot.total);
-  const sides = top.map((shot) => shot.side);
-
+  const savedTarget = getTargetSettings(profile, target);
+  const qualityCutoff = savedTarget.targetQualityCutoff ?? DEFAULT_QUALITY_CUTOFF;
   const sessions = practiceSessions
     .filter((session) => matchesPracticeProfile(session, profile))
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
-  const liveTotal = mean(totals);
   const rangeTargetTotal = getMetricTargetValue(practiceConfig, 'total_distance');
   const rangeTargetCarry = getMetricTargetValue(practiceConfig, 'carry');
   const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
   const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
   const rangeTargetVariationPct = rangeVariationPct(rangeTargetTotalWindow);
+  const intentWindow = getIntentDistanceWindow(savedTarget, rangeTargetTotalWindow, rangeTargetTotal, rangeTargetVariationPct);
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
+  const cleanedClubShots = withoutDistanceOutliers(clubShots);
+  const targetReferenceShots = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow)));
+  const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
+  const top = referenceShots;
+  const totals = top.map((shot) => shot.total);
+  const variationTotals = referenceShots.map((shot) => shot.total);
+  const sides = top.map((shot) => shot.side);
+  const liveTotal = mean(totals);
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
-  const displayTotal = profile.targetTotal ?? liveTotal ?? rangeTargetTotal;
+  const displayTotal = savedTarget.targetTotal ?? liveTotal ?? rangeTargetTotal;
   const liveVariationPct = variationPct(variationTotals, liveTotal);
-  const displayVariationPct = profile.targetVariationPct ?? liveVariationPct ?? rangeTargetVariationPct;
+  const displayVariationPct = savedTarget.targetVariationPct ?? liveVariationPct ?? rangeTargetVariationPct;
   const variationWindow = displayTotal !== null && displayVariationPct !== null
     ? {
         min: displayTotal * (1 - displayVariationPct / 100),
@@ -414,6 +474,7 @@ function buildRow(
     .sort()
     .slice(-3);
   const lastThreeClubShots = clubShots.filter((shot) => uniqueDates.includes(getShotDateKey(shot.date)));
+  const lastThreeIntentShots = lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow));
 
   return {
     profile,
@@ -429,22 +490,23 @@ function buildRow(
     rangeTargetSide,
     displayVariationPct,
     displayTotal,
-    displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
+    displayCarry: savedTarget.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
     totalMin: variationWindow?.min ?? (rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min),
     totalMax: variationWindow?.max ?? (rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
-    displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
-    displaySideRight: profile.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null),
+    displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
+    displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null),
     sideBias: mean(sides),
-    targetPct: lastThreeClubShots.length ? (lastThreeClubShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeClubShots.length) * 100 : null,
-    safePct: lastThreeClubShots.length ? (lastThreeClubShots.filter(isSafeOutcome).length / lastThreeClubShots.length) * 100 : null,
+    targetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
+    safePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: referenceShots.length,
     rangeShotCount,
     qualityCutoff,
+    savedTarget,
   };
 }
 
@@ -490,12 +552,12 @@ export function ClubGappingTab() {
   const openEdit = (row: GappingRow) => {
     setEditingRow(row);
     setDraft({
-      targetTotal: row.profile.targetTotal?.toString() ?? '',
-      targetCarry: row.profile.targetCarry?.toString() ?? '',
-      targetVariationPct: row.profile.targetVariationPct?.toString() ?? '',
-      targetQualityCutoff: row.profile.targetQualityCutoff?.toString() ?? '',
-      targetSideLeft: row.profile.targetSideLeft?.toString() ?? '',
-      targetSideRight: row.profile.targetSideRight?.toString() ?? '',
+      targetTotal: row.savedTarget.targetTotal?.toString() ?? '',
+      targetCarry: row.savedTarget.targetCarry?.toString() ?? '',
+      targetVariationPct: row.savedTarget.targetVariationPct?.toString() ?? '',
+      targetQualityCutoff: row.savedTarget.targetQualityCutoff?.toString() ?? '',
+      targetSideLeft: row.savedTarget.targetSideLeft?.toString() ?? '',
+      targetSideRight: row.savedTarget.targetSideRight?.toString() ?? '',
     });
   };
 
@@ -525,13 +587,19 @@ export function ClubGappingTab() {
 
   const saveEdit = () => {
     if (!editingRow) return;
+    const nextTargetOverrides = {
+      ...editingRow.profile.targetOverrides,
+      [editingRow.target]: {
+        targetTotal: parseOptionalNumber(draft.targetTotal),
+        targetCarry: parseOptionalNumber(draft.targetCarry),
+        targetVariationPct: parseOptionalNumber(draft.targetVariationPct),
+        targetQualityCutoff: parseOptionalNumber(draft.targetQualityCutoff),
+        targetSideLeft: parseOptionalNumber(draft.targetSideLeft),
+        targetSideRight: parseOptionalNumber(draft.targetSideRight),
+      },
+    };
     updateShotProfile(editingRow.profile.id, {
-      targetTotal: parseOptionalNumber(draft.targetTotal),
-      targetCarry: parseOptionalNumber(draft.targetCarry),
-      targetVariationPct: parseOptionalNumber(draft.targetVariationPct),
-      targetQualityCutoff: parseOptionalNumber(draft.targetQualityCutoff),
-      targetSideLeft: parseOptionalNumber(draft.targetSideLeft),
-      targetSideRight: parseOptionalNumber(draft.targetSideRight),
+      targetOverrides: nextTargetOverrides,
     });
     setEditingRow(null);
   };

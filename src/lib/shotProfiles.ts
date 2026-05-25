@@ -2,8 +2,18 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, getPracticeConfigKey } from '@/types/practiceClubs';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 export type ProfileTarget = 'green' | 'fairway';
+
+export interface ShotProfileTargetValues {
+  targetTotal: number | null;
+  targetCarry: number | null;
+  targetSideLeft: number | null;
+  targetSideRight: number | null;
+  targetVariationPct: number | null;
+  targetQualityCutoff: number | null;
+}
 
 export interface ShotProfile {
   id: string;
@@ -22,6 +32,7 @@ export interface ShotProfile {
   targetSideRight: number | null;
   targetVariationPct: number | null;
   targetQualityCutoff: number | null;
+  targetOverrides: Partial<Record<ProfileTarget, Partial<ShotProfileTargetValues>>>;
 }
 
 export type ShotProfileMap = Record<string, ShotProfile>;
@@ -59,6 +70,7 @@ function makeProfile(
     targetSideRight: null,
     targetVariationPct: null,
     targetQualityCutoff: null,
+    targetOverrides: {},
   };
 }
 
@@ -167,6 +179,7 @@ function readRaw(): ShotProfileMap {
         targets: profile.targets?.filter((target) => target === 'green' || target === 'fairway') ?? merged[id]?.targets ?? ['green'],
         targetVariationPct: profile.targetVariationPct ?? merged[id]?.targetVariationPct ?? null,
         targetQualityCutoff: profile.targetQualityCutoff ?? merged[id]?.targetQualityCutoff ?? null,
+        targetOverrides: profile.targetOverrides ?? merged[id]?.targetOverrides ?? {},
       };
     }
     return enablePunchProfiles(merged);
@@ -192,7 +205,30 @@ type ShotProfileRow = {
   target_side_right: number | null;
   target_variation_pct: number | null;
   target_quality_cutoff: number | null;
+  target_overrides?: Json | null;
 };
+
+function parseTargetOverrides(value: Json | null | undefined): ShotProfile['targetOverrides'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const parsed: ShotProfile['targetOverrides'] = {};
+  for (const target of ['green', 'fairway'] as const) {
+    const targetValue = value[target];
+    if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) continue;
+    parsed[target] = {
+      targetTotal: typeof targetValue.targetTotal === 'number' ? targetValue.targetTotal : null,
+      targetCarry: typeof targetValue.targetCarry === 'number' ? targetValue.targetCarry : null,
+      targetSideLeft: typeof targetValue.targetSideLeft === 'number' ? targetValue.targetSideLeft : null,
+      targetSideRight: typeof targetValue.targetSideRight === 'number' ? targetValue.targetSideRight : null,
+      targetVariationPct: typeof targetValue.targetVariationPct === 'number' ? targetValue.targetVariationPct : null,
+      targetQualityCutoff: typeof targetValue.targetQualityCutoff === 'number' ? targetValue.targetQualityCutoff : null,
+    };
+  }
+  return parsed;
+}
+
+function serializeTargetOverrides(overrides: ShotProfile['targetOverrides']): Json {
+  return overrides as Json;
+}
 
 function fromRow(row: ShotProfileRow): ShotProfile {
   return {
@@ -212,6 +248,7 @@ function fromRow(row: ShotProfileRow): ShotProfile {
     targetSideRight: row.target_side_right,
     targetVariationPct: row.target_variation_pct,
     targetQualityCutoff: row.target_quality_cutoff,
+    targetOverrides: parseTargetOverrides(row.target_overrides),
   };
 }
 
@@ -234,6 +271,7 @@ function toRow(profile: ShotProfile, userId: string) {
     target_side_right: profile.targetSideRight,
     target_variation_pct: profile.targetVariationPct,
     target_quality_cutoff: profile.targetQualityCutoff,
+    target_overrides: serializeTargetOverrides(profile.targetOverrides),
   };
 }
 

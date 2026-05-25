@@ -188,6 +188,7 @@ export type Database = {
           target_side_left: number | null
           target_side_right: number | null
           target_total: number | null
+          target_overrides: Json
           target_variation_pct: number | null
           target_quality_cutoff: number | null
           targets: string[]
@@ -210,6 +211,7 @@ export type Database = {
           target_side_left?: number | null
           target_side_right?: number | null
           target_total?: number | null
+          target_overrides?: Json
           target_variation_pct?: number | null
           target_quality_cutoff?: number | null
           targets?: string[]
@@ -232,6 +234,7 @@ export type Database = {
           target_side_left?: number | null
           target_side_right?: number | null
           target_total?: number | null
+          target_overrides?: Json
           target_variation_pct?: number | null
           target_quality_cutoff?: number | null
           targets?: string[]
