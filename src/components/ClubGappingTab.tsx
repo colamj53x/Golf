@@ -77,6 +77,7 @@ interface GappingRow {
   safePct: number | null;
   rangeConfidence: number | null;
   shotCount: number;
+  intentShotCount: number;
   rangeShotCount: number;
   qualityCutoff: number;
   savedTarget: Partial<ShotProfileTargetValues>;
@@ -504,6 +505,7 @@ function buildRow(
     safePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: referenceShots.length,
+    intentShotCount: targetReferenceShots.length,
     rangeShotCount,
     qualityCutoff,
     savedTarget,
@@ -537,7 +539,7 @@ export function ClubGappingTab() {
       .filter((profile) => profile.power === 'full')
       .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles)))
-      .filter((row) => row.shotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
+      .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
 
   const groupedRows = useMemo(() => {
