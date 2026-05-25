@@ -31,9 +31,12 @@ interface GappingRow {
   topQuartile: Shot[];
   liveTotal: number | null;
   liveCarry: number | null;
+  liveVariationPct: number | null;
+  rangeTargetVariationPct: number | null;
   rangeTargetTotal: number | null;
   rangeTargetCarry: number | null;
   rangeTargetSide: number | null;
+  displayVariationPct: number | null;
   displayTotal: number | null;
   displayCarry: number | null;
   displayCarryMin: number | null;
@@ -62,6 +65,19 @@ function metricAverage(valueMin: number | null, valueMax: number | null): number
   const max = valueMax !== null && Number.isFinite(valueMax) ? valueMax : null;
   if (min !== null && max !== null) return (min + max) / 2;
   return min ?? max;
+}
+
+function variationPct(values: number[], center: number | null): number | null {
+  if (center === null || !Number.isFinite(center) || center <= 0 || values.length === 0) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return (Math.max(Math.abs(center - min), Math.abs(max - center)) / center) * 100;
+}
+
+function rangeVariationPct(range: { min: number | null; max: number | null }): number | null {
+  const center = metricAverage(range.min, range.max);
+  if (center === null || range.min === null || range.max === null) return null;
+  return variationPct([range.min, range.max], center);
 }
 
 function topQuartile(shots: Shot[]): Shot[] {
@@ -300,7 +316,7 @@ function buildRow(
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
-  const referenceShots = cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
+  const referenceShots = target === 'fairway' ? cleanedTargetHits : cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
   const top = topQuartile(referenceShots);
   const totals = top.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
@@ -315,8 +331,17 @@ function buildRow(
   const rangeTargetCarry = getMetricTargetValue(practiceConfig, 'carry');
   const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
   const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
+  const rangeTargetVariationPct = rangeVariationPct(rangeTargetTotalWindow);
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
   const displayTotal = profile.targetTotal ?? liveTotal ?? rangeTargetTotal;
+  const liveVariationPct = variationPct(totals, liveTotal);
+  const displayVariationPct = profile.targetVariationPct ?? liveVariationPct ?? rangeTargetVariationPct;
+  const fairwayVariationWindow = target === 'fairway' && displayTotal !== null && displayVariationPct !== null
+    ? {
+        min: displayTotal * (1 - displayVariationPct / 100),
+        max: displayTotal * (1 + displayVariationPct / 100),
+      }
+    : null;
   const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
   const displayCarryWindow = getRangeCarryWindow(displayTotal, practiceConfig);
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
@@ -334,15 +359,18 @@ function buildRow(
     topQuartile: top,
     liveTotal,
     liveCarry,
+    liveVariationPct,
+    rangeTargetVariationPct,
     rangeTargetTotal,
     rangeTargetCarry,
     rangeTargetSide,
+    displayVariationPct,
     displayTotal,
     displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
-    totalMin: totals.length > 1 ? Math.min(...totals) : rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min,
-    totalMax: totals.length > 1 ? Math.max(...totals) : rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max,
+    totalMin: fairwayVariationWindow?.min ?? (totals.length > 1 ? Math.min(...totals) : rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min),
+    totalMax: fairwayVariationWindow?.max ?? (totals.length > 1 ? Math.max(...totals) : rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
@@ -367,6 +395,7 @@ export function ClubGappingTab() {
   const [draft, setDraft] = useState({
     targetTotal: '',
     targetCarry: '',
+    targetVariationPct: '',
     targetSideLeft: '',
     targetSideRight: '',
   });
@@ -396,6 +425,7 @@ export function ClubGappingTab() {
     setDraft({
       targetTotal: row.profile.targetTotal?.toString() ?? '',
       targetCarry: row.profile.targetCarry?.toString() ?? '',
+      targetVariationPct: row.profile.targetVariationPct?.toString() ?? '',
       targetSideLeft: row.profile.targetSideLeft?.toString() ?? '',
       targetSideRight: row.profile.targetSideRight?.toString() ?? '',
     });
@@ -406,6 +436,7 @@ export function ClubGappingTab() {
     setDraft({
       targetTotal: editingRow.liveTotal?.toFixed(0) ?? '',
       targetCarry: editingRow.liveCarry?.toFixed(0) ?? '',
+      targetVariationPct: editingRow.liveVariationPct?.toFixed(0) ?? '',
       targetSideLeft: editingRow.sideLeft?.toFixed(0) ?? '',
       targetSideRight: editingRow.sideRight?.toFixed(0) ?? '',
     });
@@ -416,6 +447,7 @@ export function ClubGappingTab() {
     setDraft({
       targetTotal: editingRow.rangeTargetTotal?.toFixed(0) ?? '',
       targetCarry: editingRow.rangeTargetCarry?.toFixed(0) ?? '',
+      targetVariationPct: editingRow.rangeTargetVariationPct?.toFixed(0) ?? '',
       targetSideLeft: editingRow.rangeTargetSide?.toFixed(0) ?? '',
       targetSideRight: editingRow.rangeTargetSide?.toFixed(0) ?? '',
     });
@@ -426,6 +458,7 @@ export function ClubGappingTab() {
     updateShotProfile(editingRow.profile.id, {
       targetTotal: parseOptionalNumber(draft.targetTotal),
       targetCarry: parseOptionalNumber(draft.targetCarry),
+      targetVariationPct: parseOptionalNumber(draft.targetVariationPct),
       targetSideLeft: parseOptionalNumber(draft.targetSideLeft),
       targetSideRight: parseOptionalNumber(draft.targetSideRight),
     });
@@ -554,15 +587,17 @@ export function ClubGappingTab() {
                     </Button>
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-5">
                   <div>Total {fmt(editingRow.liveTotal)}</div>
                   <div>Carry {fmt(editingRow.liveCarry)}</div>
+                  <div>Variation {fmt(editingRow.liveVariationPct, '%')}</div>
                   <div>Side {fmtSideRange(editingRow.sideLeft, editingRow.sideRight)}</div>
                   <div>Mean {fmtSigned(editingRow.sideBias)}</div>
                 </div>
-                <div className="mt-2 grid gap-2 border-t pt-2 sm:grid-cols-4">
+                <div className="mt-2 grid gap-2 border-t pt-2 sm:grid-cols-5">
                   <div>Range total {fmt(editingRow.rangeTargetTotal)}</div>
                   <div>Range carry {fmt(editingRow.rangeTargetCarry)}</div>
+                  <div>Range variation {fmt(editingRow.rangeTargetVariationPct, '%')}</div>
                   <div>Range side {fmt(editingRow.rangeTargetSide)}</div>
                   <div>Range shots {editingRow.rangeShotCount}</div>
                 </div>
@@ -575,6 +610,10 @@ export function ClubGappingTab() {
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="target-carry">Carry</label>
               <Input id="target-carry" type="number" value={draft.targetCarry} onChange={(event) => setDraft(prev => ({ ...prev, targetCarry: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="target-variation">Vertical variation %</label>
+              <Input id="target-variation" type="number" value={draft.targetVariationPct} onChange={(event) => setDraft(prev => ({ ...prev, targetVariationPct: event.target.value }))} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="target-left">Left side</label>

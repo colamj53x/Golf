@@ -20,6 +20,7 @@ export interface ShotProfile {
   targetCarry: number | null;
   targetSideLeft: number | null;
   targetSideRight: number | null;
+  targetVariationPct: number | null;
 }
 
 export type ShotProfileMap = Record<string, ShotProfile>;
@@ -55,6 +56,7 @@ function makeProfile(
     targetCarry: null,
     targetSideLeft: null,
     targetSideRight: null,
+    targetVariationPct: null,
   };
 }
 
@@ -184,6 +186,7 @@ type ShotProfileRow = {
   target_carry: number | null;
   target_side_left: number | null;
   target_side_right: number | null;
+  target_variation_pct: number | null;
 };
 
 function fromRow(row: ShotProfileRow): ShotProfile {
@@ -202,6 +205,7 @@ function fromRow(row: ShotProfileRow): ShotProfile {
     targetCarry: row.target_carry,
     targetSideLeft: row.target_side_left,
     targetSideRight: row.target_side_right,
+    targetVariationPct: row.target_variation_pct,
   };
 }
 
@@ -222,6 +226,7 @@ function toRow(profile: ShotProfile, userId: string) {
     target_carry: profile.targetCarry,
     target_side_left: profile.targetSideLeft,
     target_side_right: profile.targetSideRight,
+    target_variation_pct: profile.targetVariationPct,
   };
 }
 

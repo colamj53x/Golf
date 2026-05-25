@@ -188,6 +188,7 @@ export type Database = {
           target_side_left: number | null
           target_side_right: number | null
           target_total: number | null
+          target_variation_pct: number | null
           targets: string[]
           technique: string | null
           updated_at: string
@@ -208,6 +209,7 @@ export type Database = {
           target_side_left?: number | null
           target_side_right?: number | null
           target_total?: number | null
+          target_variation_pct?: number | null
           targets?: string[]
           technique?: string | null
           updated_at?: string
@@ -228,6 +230,7 @@ export type Database = {
           target_side_left?: number | null
           target_side_right?: number | null
           target_total?: number | null
+          target_variation_pct?: number | null
           targets?: string[]
           technique?: string | null
           updated_at?: string
