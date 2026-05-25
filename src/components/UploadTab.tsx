@@ -253,39 +253,6 @@ export function UploadTab() {
 
   return (
     <div className="space-y-6">
-      {/* Current Data Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Current Data
-          </CardTitle>
-          <CardDescription>
-            You currently have {shots.length} shots in the database.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={handleDeleteLastUpload}
-            disabled={isDeleting || shots.length === 0}
-            className="gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            {isDeleting ? 'Deleting...' : 'Delete Last Upload'}
-          </Button>
-          <Button 
-            variant="destructive" 
-            onClick={handleDeleteAll}
-            disabled={isDeleting || shots.length === 0}
-            className="gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            {isDeleting ? 'Deleting...' : 'Delete All Data'}
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* Upload Section */}
       <Card>
         <CardHeader>
@@ -294,20 +261,23 @@ export function UploadTab() {
             Upload Shot Data
           </CardTitle>
           <CardDescription>
-            Upload a CSV file with your shot data. Data will be appended by default.
+            Add new shots by uploading a CSV file. Your current data has {shots.length} shots.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Replace toggle */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3">
             <Switch
               id="replace-mode"
               checked={replaceAll}
               onCheckedChange={setReplaceAll}
             />
-            <Label htmlFor="replace-mode">
-              Replace all existing data (instead of appending)
-            </Label>
+            <div className="space-y-1">
+              <Label htmlFor="replace-mode">Replace existing shot history</Label>
+              <p className="text-xs text-muted-foreground">
+                Leave this off to append new shots. Turn it on only when you want to wipe and reload your shot data.
+              </p>
+            </div>
           </div>
 
           {/* Drag and drop zone */}
@@ -371,11 +341,44 @@ export function UploadTab() {
 
           {/* CSV Format Info */}
           <div className="text-sm text-muted-foreground border-t pt-4 mt-4">
-            <p className="font-medium mb-2">Expected CSV format:</p>
-            <code className="block bg-muted p-2 rounded text-xs">
+            <p className="font-medium text-foreground mb-2">Expected CSV columns</p>
+            <code className="block overflow-x-auto rounded bg-muted p-3 text-xs">
               Date, Club, Type, Start Lie, End Lie, Strike Quality, Shot Quality, Target, End Distance from Target, Distance Hit, Dispersion
             </code>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Current Data Status */}
+      <Card className="border-destructive/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Manage Stored Data
+          </CardTitle>
+          <CardDescription>
+            Delete uploaded shot data only when you need to undo an import or start again.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            variant="outline"
+            onClick={handleDeleteLastUpload}
+            disabled={isDeleting || shots.length === 0}
+            className="gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isDeleting ? 'Deleting...' : 'Delete Last Upload'}
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={handleDeleteAll}
+            disabled={isDeleting || shots.length === 0}
+            className="gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isDeleting ? 'Deleting...' : 'Delete All Data'}
+          </Button>
         </CardContent>
       </Card>
     </div>

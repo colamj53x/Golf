@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Goal } from 'lucide-react';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('Please enter a valid email address');
@@ -112,26 +112,16 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(circle_at_top,hsla(var(--primary),0.10),transparent_34%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--secondary)))] p-4">
+      <Card className="w-full max-w-md border-border/70 shadow-lg shadow-primary/5">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="h-7 w-7 text-primary-foreground"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="18" r="3" />
-                <path d="M12 15V4" />
-                <path d="M12 4l4 3" />
-              </svg>
+              <Goal className="h-7 w-7 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Golf Performance</CardTitle>
-          <CardDescription>Sign in to access your dashboard</CardDescription>
+          <CardTitle className="text-2xl">Golf Stats Hub</CardTitle>
+          <CardDescription>Track your rounds, practice, putting, and club trends</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">

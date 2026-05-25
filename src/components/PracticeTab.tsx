@@ -26,18 +26,18 @@ export function PracticeTab() {
 
   return (
     <Tabs defaultValue="full-swing" className="w-full">
-      <TabsList className="mb-6">
-        <TabsTrigger value="full-swing">Full Swing</TabsTrigger>
-        <TabsTrigger value="putting">Putting</TabsTrigger>
+      <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsTrigger value="full-swing" className="shrink-0">Full Swing</TabsTrigger>
+        <TabsTrigger value="putting" className="shrink-0">Putting</TabsTrigger>
       </TabsList>
 
       <TabsContent value="full-swing">
         <Tabs value={fullSwingTab} onValueChange={setFullSwingTab} className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="logs">Practice Logs</TabsTrigger>
-            <TabsTrigger value="plan">Practice Plan</TabsTrigger>
-            <TabsTrigger value="drills">Drill Bank</TabsTrigger>
+          <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="summary" className="shrink-0">Summary</TabsTrigger>
+            <TabsTrigger value="logs" className="shrink-0">Practice Logs</TabsTrigger>
+            <TabsTrigger value="plan" className="shrink-0">Practice Plan</TabsTrigger>
+            <TabsTrigger value="drills" className="shrink-0">Drill Bank</TabsTrigger>
           </TabsList>
 
           <TabsContent value="summary">
@@ -62,4 +62,3 @@ export function PracticeTab() {
     </Tabs>
   );
 }
-

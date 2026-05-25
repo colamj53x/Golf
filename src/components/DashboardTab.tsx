@@ -24,8 +24,11 @@ import { ClubSummaryCard } from '@/components/ClubSummaryCard';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { LatestRoundTab } from '@/components/dashboard/LatestRoundTab';
 
+interface DashboardTabProps {
+  onOpenUpload?: () => void;
+}
 
-export function DashboardTab() {
+export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const { clubs, shots, isLoading, availableClubs, availableStartLies, distanceToTargetTolerance } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
@@ -182,8 +185,21 @@ export function DashboardTab() {
   if (!processedData) {
     return (
       <Card>
-        <CardContent className="py-12 text-center text-muted-foreground">
-          No shot data available. Upload your shot data to get started.
+        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+            <Target className="h-6 w-6 text-primary" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">No shot data yet</h2>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Upload a CSV to unlock your dashboard, club trends, reports, and practice insights.
+            </p>
+          </div>
+          {onOpenUpload && (
+            <Button onClick={onOpenUpload}>
+              Go to Upload
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
