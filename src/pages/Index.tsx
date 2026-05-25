@@ -76,7 +76,7 @@ const Index = () => {
               <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
                 <TabsTrigger value="dashboard" className="shrink-0">Dashboard</TabsTrigger>
                 <TabsTrigger value="all-clubs" className="shrink-0">All Clubs</TabsTrigger>
-                <TabsTrigger value="club-selector" className="shrink-0">Club Selector</TabsTrigger>
+                <TabsTrigger value="club-selector" className="shrink-0">On Course</TabsTrigger>
                 <TabsTrigger value="upload" className="shrink-0">Upload</TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard">
