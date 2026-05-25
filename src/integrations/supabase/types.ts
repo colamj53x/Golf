@@ -184,6 +184,10 @@ export type Database = {
           shot_type: string
           show_in_practice: boolean
           show_on_course: boolean
+          target_carry: number | null
+          target_side_left: number | null
+          target_side_right: number | null
+          target_total: number | null
           targets: string[]
           technique: string | null
           updated_at: string
@@ -200,6 +204,10 @@ export type Database = {
           shot_type: string
           show_in_practice?: boolean
           show_on_course?: boolean
+          target_carry?: number | null
+          target_side_left?: number | null
+          target_side_right?: number | null
+          target_total?: number | null
           targets?: string[]
           technique?: string | null
           updated_at?: string
@@ -216,6 +224,10 @@ export type Database = {
           shot_type?: string
           show_in_practice?: boolean
           show_on_course?: boolean
+          target_carry?: number | null
+          target_side_left?: number | null
+          target_side_right?: number | null
+          target_total?: number | null
           targets?: string[]
           technique?: string | null
           updated_at?: string

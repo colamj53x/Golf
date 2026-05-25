@@ -5,11 +5,12 @@ import { SettingsTab } from '@/components/SettingsTab';
 import { UploadTab } from '@/components/UploadTab';
 import { PracticeTab } from '@/components/PracticeTab';
 import { ClubSelectorTab } from '@/components/ClubSelectorTab';
+import { ClubGappingTab } from '@/components/ClubGappingTab';
 import { ReportsTab } from '@/components/reports/ReportsTab';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair } from 'lucide-react';
+import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair, Gauge } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const Index = () => {
@@ -61,6 +62,10 @@ const Index = () => {
               <Crosshair className="h-4 w-4" />
               On Course
             </TabsTrigger>
+            <TabsTrigger value="club-gapping" className="shrink-0 gap-2">
+              <Gauge className="h-4 w-4" />
+              Club Gapping
+            </TabsTrigger>
             <TabsTrigger value="practice" className="shrink-0 gap-2">
               <Target className="h-4 w-4" />
               Practice
@@ -99,6 +104,10 @@ const Index = () => {
 
           <TabsContent value="on-course">
             <ClubSelectorTab />
+          </TabsContent>
+
+          <TabsContent value="club-gapping">
+            <ClubGappingTab />
           </TabsContent>
 
           <TabsContent value="practice">

@@ -16,6 +16,10 @@ export interface ShotProfile {
   targets: ProfileTarget[];
   technique: string;
   routine: string;
+  targetTotal: number | null;
+  targetCarry: number | null;
+  targetSideLeft: number | null;
+  targetSideRight: number | null;
 }
 
 export type ShotProfileMap = Record<string, ShotProfile>;
@@ -46,6 +50,10 @@ function makeProfile(
     targets,
     technique: '',
     routine: '',
+    targetTotal: null,
+    targetCarry: null,
+    targetSideLeft: null,
+    targetSideRight: null,
   };
 }
 
@@ -153,6 +161,10 @@ type ShotProfileRow = {
   targets: string[];
   technique: string | null;
   routine: string | null;
+  target_total: number | null;
+  target_carry: number | null;
+  target_side_left: number | null;
+  target_side_right: number | null;
 };
 
 function fromRow(row: ShotProfileRow): ShotProfile {
@@ -167,6 +179,10 @@ function fromRow(row: ShotProfileRow): ShotProfile {
     targets: row.targets.filter((target): target is ProfileTarget => target === 'green' || target === 'fairway'),
     technique: row.technique ?? '',
     routine: row.routine ?? '',
+    targetTotal: row.target_total,
+    targetCarry: row.target_carry,
+    targetSideLeft: row.target_side_left,
+    targetSideRight: row.target_side_right,
   };
 }
 
@@ -183,6 +199,10 @@ function toRow(profile: ShotProfile, userId: string) {
     targets: profile.targets,
     technique: profile.technique || null,
     routine: profile.routine || null,
+    target_total: profile.targetTotal,
+    target_carry: profile.targetCarry,
+    target_side_left: profile.targetSideLeft,
+    target_side_right: profile.targetSideRight,
   };
 }
 
