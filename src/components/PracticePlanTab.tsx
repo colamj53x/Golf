@@ -206,7 +206,7 @@ export function PracticePlanTab() {
               <Select value={selectedPower} onValueChange={setSelectedPower}>
                 <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {getEnabledPowersForClub(selectedClub).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
-import { useEnabledCombos, updateClubCombos } from '@/lib/practiceEnabledCombos';
+import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 
 const CATEGORIES: ClubCategory[] = ['Tee', 'Long Approach', 'Approach', 'Short / Scoring'];
 
@@ -380,7 +380,7 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      <PracticeCombosCard />
+      <ShotProfilesCard />
 
 
 
@@ -413,67 +413,129 @@ export function SettingsTab() {
   );
 }
 
-function PracticeCombosCard() {
-  const combos = useEnabledCombos();
+function ShotProfilesCard() {
+  const profiles = useShotProfiles();
+  const profileList = Object.values(profiles).sort((a, b) => {
+    const clubA = PRACTICE_CLUBS.findIndex(club => club.id === a.clubId);
+    const clubB = PRACTICE_CLUBS.findIndex(club => club.id === b.clubId);
+    const shotA = SHOT_TYPES.findIndex(shot => shot.id === a.shotType);
+    const shotB = SHOT_TYPES.findIndex(shot => shot.id === b.shotType);
+    const powerA = POWER_OPTIONS.findIndex(power => power.id === a.power);
+    const powerB = POWER_OPTIONS.findIndex(power => power.id === b.power);
+    return clubA - clubB || shotA - shotB || powerA - powerB;
+  });
 
-  const toggle = (clubId: string, kind: 'shotTypes' | 'powers', id: string, on: boolean) => {
-    const current = combos[clubId];
-    const set = new Set(current[kind]);
-    if (on) set.add(id); else set.delete(id);
-    updateClubCombos(clubId, {
-      ...current,
-      [kind]: Array.from(set),
-    });
+  const nameFor = (profile: ShotProfile) => ({
+    club: PRACTICE_CLUBS.find(club => club.id === profile.clubId)?.name ?? profile.clubId,
+    shot: SHOT_TYPES.find(shot => shot.id === profile.shotType)?.name ?? profile.shotType,
+    power: POWER_OPTIONS.find(power => power.id === profile.power)?.name ?? profile.power,
+  });
+
+  const toggleTarget = (profile: ShotProfile, target: ProfileTarget, checked: boolean) => {
+    const next = new Set(profile.targets);
+    if (checked) next.add(target); else next.delete(target);
+    updateShotProfile(profile.id, { targets: Array.from(next) as ProfileTarget[] });
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Practice Combos</CardTitle>
+        <CardTitle>Shot Profiles</CardTitle>
         <CardDescription>
-          Pick which shot types and power levels appear in the Practice dropdowns for each club.
+          One shared setup for Practice, On Course recommendations, wedge matrix, and future technique/routine cards.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {PRACTICE_CLUBS.map(club => {
-            const c = combos[club.id] ?? { shotTypes: [], powers: [] };
-            return (
-              <div key={club.id} className="rounded-md border p-3">
-                <div className="mb-2 font-medium">{club.name}</div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Shot Types</div>
-                    <div className="flex flex-wrap gap-3">
-                      {SHOT_TYPES.map(s => (
-                        <label key={s.id} className="flex items-center gap-2 text-sm">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="min-w-[90px]">Enabled</th>
+                <th className="min-w-[100px]">Club</th>
+                <th className="min-w-[110px]">Shot</th>
+                <th className="min-w-[90px]">Power</th>
+                <th className="min-w-[120px]">Targets</th>
+                <th className="min-w-[100px]">Practice</th>
+                <th className="min-w-[100px]">On Course</th>
+                <th className="min-w-[220px]">Technique Cue</th>
+                <th className="min-w-[220px]">Routine Cue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profileList.map(profile => {
+                const names = nameFor(profile);
+                return (
+                  <tr key={profile.id}>
+                    <td>
+                      <Checkbox
+                        checked={profile.enabled}
+                        onCheckedChange={(value) => updateShotProfile(profile.id, {
+                          enabled: !!value,
+                          showInPractice: value === true ? profile.showInPractice || !profile.showOnCourse : false,
+                          showOnCourse: value === true ? profile.showOnCourse || !profile.showInPractice : false,
+                        })}
+                      />
+                    </td>
+                    <td className="font-medium">{names.club}</td>
+                    <td>{names.shot}</td>
+                    <td>{names.power}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-3">
+                        <label className="flex items-center gap-2 text-sm">
                           <Checkbox
-                            checked={c.shotTypes.includes(s.id)}
-                            onCheckedChange={(v) => toggle(club.id, 'shotTypes', s.id, !!v)}
+                            checked={profile.targets.includes('green')}
+                            disabled={!profile.enabled}
+                            onCheckedChange={(value) => toggleTarget(profile, 'green', !!value)}
                           />
-                          {s.name}
+                          Green
                         </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Power</div>
-                    <div className="flex flex-wrap gap-3">
-                      {POWER_OPTIONS.map(p => (
-                        <label key={p.id} className="flex items-center gap-2 text-sm">
+                        <label className="flex items-center gap-2 text-sm">
                           <Checkbox
-                            checked={c.powers.includes(p.id)}
-                            onCheckedChange={(v) => toggle(club.id, 'powers', p.id, !!v)}
+                            checked={profile.targets.includes('fairway')}
+                            disabled={!profile.enabled}
+                            onCheckedChange={(value) => toggleTarget(profile, 'fairway', !!value)}
                           />
-                          {p.name}
+                          Fairway
                         </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                      </div>
+                    </td>
+                    <td>
+                      <Checkbox
+                        checked={profile.showInPractice}
+                        disabled={!profile.enabled}
+                        onCheckedChange={(value) => updateShotProfile(profile.id, { showInPractice: !!value })}
+                      />
+                    </td>
+                    <td>
+                      <Checkbox
+                        checked={profile.showOnCourse}
+                        disabled={!profile.enabled}
+                        onCheckedChange={(value) => updateShotProfile(profile.id, { showOnCourse: !!value })}
+                      />
+                    </td>
+                    <td>
+                      <Input
+                        value={profile.technique}
+                        disabled={!profile.enabled}
+                        onChange={(event) => updateShotProfile(profile.id, { technique: event.target.value })}
+                        placeholder="e.g. chest through, hold finish"
+                        className="h-8 min-w-[210px] text-sm"
+                      />
+                    </td>
+                    <td>
+                      <Input
+                        value={profile.routine}
+                        disabled={!profile.enabled}
+                        onChange={(event) => updateShotProfile(profile.id, { routine: event.target.value })}
+                        placeholder="e.g. pick start line, one rehearsal"
+                        className="h-8 min-w-[210px] text-sm"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>

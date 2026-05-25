@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getClubConfigId } from '@/lib/golfCalculations';
-import { parsePracticeConfigKey } from '@/types/practiceClubs';
+import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { ClubConfig, Shot } from '@/types/golf';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
@@ -30,6 +31,9 @@ type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
 interface ClubRecommendation {
   clubId: string;
   clubName: string;
+  profileName: string;
+  technique: string;
+  routine: string;
   confidence: number;
   targetFit: number;
   sampleCount: number;
@@ -126,6 +130,21 @@ function canTargetDestination(club: ClubConfig, target: TargetOption): boolean {
   return target === 'fairway' || club.distanceToTargetEnabled;
 }
 
+function getEligibleProfiles(profiles: ShotProfile[], clubId: string, target: TargetOption): ShotProfile[] {
+  return profiles.filter((profile) =>
+    profile.clubId === clubId &&
+    profile.enabled &&
+    profile.showOnCourse &&
+    profile.targets.includes(target)
+  );
+}
+
+function getShortProfileName(profile: ShotProfile): string {
+  const shot = SHOT_TYPES.find((item) => item.id === profile.shotType)?.name ?? profile.shotType;
+  const power = POWER_OPTIONS.find((item) => item.id === profile.power)?.name ?? profile.power;
+  return `${shot} / ${power}`;
+}
+
 function inferClock(shot: Shot): string {
   const text = `${shot.type} ${shot.notes}`.toLowerCase();
   if (text.includes('7.30') || text.includes('7:30') || text.includes('730')) return '730pm';
@@ -182,12 +201,15 @@ function calculateRecommendations(
   target: TargetOption,
   trouble: TroubleOption[],
   mustCarry: boolean,
+  profiles: ShotProfile[],
 ): ClubRecommendation[] {
   if (!targetDistance || targetDistance <= 0) return [];
 
   return clubs
     .map((club) => {
-      if (!canTargetDestination(club, target)) return null;
+      const eligibleProfiles = getEligibleProfiles(profiles, club.id, target);
+      if (!canTargetDestination(club, target) || eligibleProfiles.length === 0) return null;
+      const primaryProfile = eligibleProfiles[0];
 
       const clubShots = shots.filter((shot) => getClubConfigId(shot.club) === club.id);
       if (clubShots.length === 0 && Math.abs(club.stockDistance - targetDistance) > 35) return null;
@@ -278,6 +300,9 @@ function calculateRecommendations(
       const result: ClubRecommendation = {
         clubId: club.id,
         clubName: club.clubName,
+        profileName: getShortProfileName(primaryProfile),
+        technique: primaryProfile.technique,
+        routine: primaryProfile.routine,
         confidence,
         targetFit: Math.round(targetFit),
         sampleCount: sample.length,
@@ -309,6 +334,7 @@ function calculateRecommendations(
 export function ClubSelectorTab() {
   const { shots, clubs, isLoading } = useGolfData();
   const { practiceSessions } = usePracticeData();
+  const shotProfiles = useShotProfiles();
   const [targetDistance, setTargetDistance] = useState('120');
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
@@ -319,8 +345,8 @@ export function ClubSelectorTab() {
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
   const recommendations = useMemo(
-    () => calculateRecommendations(shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry),
-    [shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry],
+    () => calculateRecommendations(shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, Object.values(shotProfiles)),
+    [shots, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, shotProfiles],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -521,6 +547,7 @@ export function ClubSelectorTab() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-lg font-semibold">{result.clubName}</span>
+                          <Badge variant="outline">{result.profileName}</Badge>
                           {index === 0 && <Badge>Best</Badge>}
                           <Badge variant={result.confidence >= 60 ? 'default' : 'outline'} className={getConfidenceClass(result.confidence)}>
                             {result.confidence}
@@ -544,6 +571,12 @@ export function ClubSelectorTab() {
                             {badge}
                           </Badge>
                         ))}
+                      </div>
+                    )}
+                    {(result.technique || result.routine) && (
+                      <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                        {result.technique && <Metric label="Technique" value={result.technique} />}
+                        {result.routine && <Metric label="Routine" value={result.routine} />}
                       </div>
                     )}
                   </div>

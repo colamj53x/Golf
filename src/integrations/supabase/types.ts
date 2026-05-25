@@ -172,6 +172,57 @@ export type Database = {
           },
         ]
       }
+      shot_profiles: {
+        Row: {
+          club_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          power: string
+          profile_key: string
+          routine: string | null
+          shot_type: string
+          show_in_practice: boolean
+          show_on_course: boolean
+          targets: string[]
+          technique: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          club_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          power: string
+          profile_key: string
+          routine?: string | null
+          shot_type: string
+          show_in_practice?: boolean
+          show_on_course?: boolean
+          targets?: string[]
+          technique?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          club_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          power?: string
+          profile_key?: string
+          routine?: string | null
+          shot_type?: string
+          show_in_practice?: boolean
+          show_on_course?: boolean
+          targets?: string[]
+          technique?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

@@ -1052,7 +1052,7 @@ export function PracticeDashboardTab() {
                   <SelectValue placeholder="Select power" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getEnabledPowersForClub(selectedClub).map(power => (
+                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
                     <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1828,7 +1828,7 @@ export function PracticeDashboardTab() {
                     <SelectValue placeholder="Select power" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getEnabledPowersForClub(newClubSelection).map(power => (
+                    {getEnabledPowersForClub(newClubSelection, newShotTypeSelection).map(power => (
                       <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
                     ))}
                   </SelectContent>
