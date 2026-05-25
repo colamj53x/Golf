@@ -26,6 +26,7 @@ export type ShotProfileMap = Record<string, ShotProfile>;
 
 const STORAGE_KEY = 'golf_shot_profiles_v1';
 const OLD_COMBOS_KEY = 'practice_enabled_combos_v1';
+const PUNCH_PROFILE_IDS = ['6i_punch_full', '7i_punch_full'];
 const EVENT = 'golf-shot-profiles-changed';
 
 function profileId(clubId: string, shotType: string, power: string): string {
@@ -129,11 +130,27 @@ function migrateOldCombos(base: ShotProfileMap): ShotProfileMap {
   }
 }
 
+function enablePunchProfiles(profiles: ShotProfileMap): ShotProfileMap {
+  const next = { ...profiles };
+  for (const id of PUNCH_PROFILE_IDS) {
+    const profile = next[id];
+    if (!profile) continue;
+    next[id] = {
+      ...profile,
+      enabled: true,
+      showInPractice: true,
+      showOnCourse: true,
+      targets: profile.targets.length ? profile.targets : ['fairway', 'green'],
+    };
+  }
+  return next;
+}
+
 function readRaw(): ShotProfileMap {
   const known = allKnownProfiles();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return migrateOldCombos(known);
+    if (!raw) return enablePunchProfiles(migrateOldCombos(known));
 
     const stored = JSON.parse(raw) as Partial<ShotProfileMap>;
     const merged = { ...known };
@@ -146,9 +163,9 @@ function readRaw(): ShotProfileMap {
         targets: profile.targets?.filter((target) => target === 'green' || target === 'fairway') ?? merged[id]?.targets ?? ['green'],
       };
     }
-    return merged;
+    return enablePunchProfiles(merged);
   } catch {
-    return migrateOldCombos(known);
+    return enablePunchProfiles(migrateOldCombos(known));
   }
 }
 
@@ -288,7 +305,11 @@ export function useShotProfiles(): ShotProfileMap {
           ...profile,
         };
       }
-      setShotProfiles(next);
+      const migrated = enablePunchProfiles(next);
+      setShotProfiles(migrated);
+      for (const id of PUNCH_PROFILE_IDS) {
+        void persistProfile(migrated[id]);
+      }
     })();
 
     return () => {
