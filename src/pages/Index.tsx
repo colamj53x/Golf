@@ -9,7 +9,7 @@ import { ReportsTab } from '@/components/reports/ReportsTab';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Settings, Target, LogOut, TrendingUp, Database, Goal } from 'lucide-react';
+import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const Index = () => {
@@ -57,6 +57,10 @@ const Index = () => {
               <Database className="h-4 w-4" />
               Playing Data
             </TabsTrigger>
+            <TabsTrigger value="on-course" className="shrink-0 gap-2">
+              <Crosshair className="h-4 w-4" />
+              On Course
+            </TabsTrigger>
             <TabsTrigger value="practice" className="shrink-0 gap-2">
               <Target className="h-4 w-4" />
               Practice
@@ -76,7 +80,6 @@ const Index = () => {
               <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
                 <TabsTrigger value="dashboard" className="shrink-0">Dashboard</TabsTrigger>
                 <TabsTrigger value="all-clubs" className="shrink-0">All Clubs</TabsTrigger>
-                <TabsTrigger value="club-selector" className="shrink-0">On Course</TabsTrigger>
                 <TabsTrigger value="upload" className="shrink-0">Upload</TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard">
@@ -88,13 +91,14 @@ const Index = () => {
               <TabsContent value="all-clubs">
                 <AllClubsTab />
               </TabsContent>
-              <TabsContent value="club-selector">
-                <ClubSelectorTab />
-              </TabsContent>
               <TabsContent value="upload">
                 <UploadTab />
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="on-course">
+            <ClubSelectorTab />
           </TabsContent>
 
           <TabsContent value="practice">
