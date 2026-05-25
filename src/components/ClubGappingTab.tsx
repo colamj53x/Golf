@@ -14,15 +14,14 @@ import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
-import { PRACTICE_CLUBS, POWER_OPTIONS, SHOT_TYPES } from '@/types/practiceClubs';
+import { PRACTICE_CLUBS } from '@/types/practiceClubs';
 
-type ShotContext = 'tee' | 'fairway' | 'rough' | 'recovery';
+type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
 
 const SHOT_CONTEXT_OPTIONS: Array<{ id: ShotContext; label: string }> = [
   { id: 'tee', label: 'Tee' },
   { id: 'fairway', label: 'Fairway' },
-  { id: 'rough', label: 'Rough' },
-  { id: 'recovery', label: 'Recovery' },
+  { id: 'roughRecovery', label: 'Rough / Recovery' },
 ];
 
 interface GappingRow {
@@ -43,12 +42,15 @@ interface GappingRow {
 }
 
 function mean(values: number[]): number | null {
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const finiteValues = values.filter(Number.isFinite);
+  return finiteValues.length ? finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length : null;
 }
 
 function metricAverage(valueMin: number | null, valueMax: number | null): number | null {
-  if (valueMin !== null && valueMax !== null) return (valueMin + valueMax) / 2;
-  return valueMin ?? valueMax;
+  const min = valueMin !== null && Number.isFinite(valueMin) ? valueMin : null;
+  const max = valueMax !== null && Number.isFinite(valueMax) ? valueMax : null;
+  if (min !== null && max !== null) return (min + max) / 2;
+  return min ?? max;
 }
 
 function topQuartile(shots: Shot[]): Shot[] {
@@ -86,16 +88,15 @@ function matchesShotContext(shot: Shot, context: ShotContext): boolean {
   const lie = shot.startLie.toLowerCase();
   if (context === 'tee') return lie.includes('tee');
   if (context === 'fairway') return lie.includes('fairway');
-  if (context === 'rough') return lie.includes('rough');
-  return lie.includes('recovery') || lie.includes('tree') || lie.includes('punch') || lie.includes('trouble');
+  return lie.includes('rough') || lie.includes('recovery') || lie.includes('tree') || lie.includes('punch') || lie.includes('trouble');
 }
 
 function fmt(value: number | null, suffix = 'm', digits = 0): string {
-  return value === null ? '-' : `${value.toFixed(digits)}${suffix}`;
+  return value === null || !Number.isFinite(value) ? '-' : `${value.toFixed(digits)}${suffix}`;
 }
 
 function fmtSigned(value: number | null): string {
-  if (value === null) return '-';
+  if (value === null || !Number.isFinite(value)) return '-';
   if (Math.abs(value) < 0.5) return 'Neutral';
   return `${Math.abs(value).toFixed(0)}m ${value > 0 ? 'R' : 'L'}`;
 }
@@ -111,17 +112,8 @@ function getClubName(profile: ShotProfile): string {
   return PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
 }
 
-function getShotLabel(profile: ShotProfile, target: ProfileTarget): string {
-  const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
-  const powerName = POWER_OPTIONS.find((power) => power.id === profile.power)?.name ?? profile.power;
-
-  if (profile.clubId === 'dr' && profile.shotType === 'full' && profile.power === 'full') return 'Tee shot';
-  if (profile.shotType === 'full' && profile.power === 'full') return target === 'green' ? 'Stock approach' : 'Stock fairway';
-  return `${shotName} · ${powerName}`;
-}
-
 function fmtSideRange(left: number | null, right: number | null): string {
-  if (left === null || right === null) return '-';
+  if (left === null || right === null || !Number.isFinite(left) || !Number.isFinite(right)) return '-';
   return `${left.toFixed(0)}L - ${right.toFixed(0)}R`;
 }
 
@@ -182,7 +174,7 @@ function buildRow(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   const carryValues = sessions
     .map((session) => getMetricValue(session.metrics, 'carry'))
-    .filter((value): value is number => value !== null);
+    .filter((value): value is number => value !== null && Number.isFinite(value));
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
 
@@ -228,6 +220,7 @@ export function ClubGappingTab() {
     const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
     return Object.values(profiles)
       .filter((profile) => profile.enabled && profile.showOnCourse)
+      .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession)))
       .filter((row) => row.sample.length > 0 || row.liveCarry !== null);
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
@@ -303,7 +296,6 @@ export function ClubGappingTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[120px]">Club</TableHead>
-                  <TableHead className="min-w-[150px]">Shot</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Vertical</TableHead>
@@ -322,9 +314,6 @@ export function ClubGappingTab() {
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
                         {index === 0 ? clubName : ''}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{getShotLabel(row.profile, row.target)}</div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
@@ -359,7 +348,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
