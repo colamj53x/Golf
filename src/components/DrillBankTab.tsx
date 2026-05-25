@@ -102,7 +102,7 @@ const EMPTY_FORM: CustomDrillInput = {
 export function DrillBankTab() {
   const [customVersion, setCustomVersion] = useState(0);
   const [showHidden, setShowHidden] = useState(false);
-  const hiddenIds = useMemo(() => loadHiddenDrills(), [customVersion]);
+  const hiddenIds = loadHiddenDrills();
   const drills = useMemo(() => {
     const overrides = loadOverrides();
     const builtIns = getAllDrills().map((m) => applyOverride(m, overrides[m.drill.id]));
