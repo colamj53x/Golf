@@ -479,7 +479,7 @@ function buildRow(
   return {
     profile,
     target,
-    sample: referenceShots,
+    sample: targetReferenceShots,
     topQuartile: top,
     liveTotal,
     liveCarry,
@@ -503,7 +503,7 @@ function buildRow(
     targetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
     safePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
-    shotCount: referenceShots.length,
+    shotCount: targetReferenceShots.length,
     intentShotCount: targetReferenceShots.length,
     rangeShotCount,
     qualityCutoff,
@@ -794,7 +794,7 @@ export function ClubGappingTab() {
               {shotsRow ? `${getClubName(shotsRow.profile)} ${getShotLabel(shotsRow.profile)} to ${shotsRow.target}` : 'Shots'}
             </DialogTitle>
             <DialogDescription>
-              Shots use the stricter of top quartile by quality and {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better, sorted by the selected column.
+              These are all imported shots for this lie, shot, and intent. Gapping numbers still use the stricter of top quartile by quality and {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2">
