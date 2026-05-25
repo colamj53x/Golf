@@ -131,6 +131,13 @@ function confidenceTone(value: number | null): string {
   return 'border-red-500 text-red-700';
 }
 
+function percentDotTone(value: number | null): string {
+  if (value === null) return 'border-muted bg-background';
+  if (value >= 65) return 'border-green-600 bg-green-600';
+  if (value >= 40) return 'border-amber-500 bg-amber-500';
+  return 'border-red-600 bg-red-600';
+}
+
 function shotCountTone(count: number): string {
   if (count >= 50) return 'text-green-600';
   if (count >= 25) return 'text-amber-500';
@@ -396,15 +403,11 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmtSigned(row.sideBias)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={row.targetPct !== null && row.targetPct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.targetPct)}>
-                          {fmt(row.targetPct, '%')}
-                        </Badge>
+                      <TableCell className="text-center">
+                        <span className={`mx-auto block h-3 w-3 rounded-full border ${percentDotTone(row.targetPct)}`} title={`Target ${fmt(row.targetPct, '%')}`} />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={row.safePct !== null && row.safePct >= 70 ? 'default' : 'outline'} className={confidenceTone(row.safePct)}>
-                          {fmt(row.safePct, '%')}
-                        </Badge>
+                      <TableCell className="text-center">
+                        <span className={`mx-auto block h-3 w-3 rounded-full border ${percentDotTone(row.safePct)}`} title={`Safe ${fmt(row.safePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant={row.rangeConfidence !== null && row.rangeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.rangeConfidence)}>
