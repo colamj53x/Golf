@@ -165,7 +165,8 @@ function buildRow(
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId);
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const cleanedTargetHits = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTarget(shot, target)));
-  const top = topQuartile(cleanedTargetHits);
+  const referenceShots = cleanedTargetHits.length > 0 ? cleanedTargetHits : cleanedClubShots;
+  const top = topQuartile(referenceShots);
   const totals = top.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
 
@@ -186,7 +187,7 @@ function buildRow(
   return {
     profile,
     target,
-    sample: cleanedTargetHits,
+    sample: referenceShots,
     topQuartile: top,
     liveTotal: mean(totals),
     liveCarry: mean(carryValues),
