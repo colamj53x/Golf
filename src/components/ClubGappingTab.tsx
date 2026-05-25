@@ -91,7 +91,13 @@ function isSafeOutcome(shot: Shot): boolean {
   return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
 }
 
+function isDriverDrivingShot(shot: Shot): boolean {
+  return getClubConfigId(shot.club) === 'dr' && shot.type.trim().toLowerCase().startsWith('driv');
+}
+
 function matchesShotContext(shot: Shot, context: ShotContext): boolean {
+  if (isDriverDrivingShot(shot)) return context === 'tee';
+
   const lie = shot.startLie.toLowerCase();
   if (context === 'tee') return lie.includes('tee');
   if (context === 'fairway') return lie.includes('fairway');
