@@ -31,6 +31,9 @@ interface GappingRow {
   topQuartile: Shot[];
   liveTotal: number | null;
   liveCarry: number | null;
+  rangeTargetTotal: number | null;
+  rangeTargetCarry: number | null;
+  rangeTargetSide: number | null;
   displayTotal: number | null;
   displayCarry: number | null;
   displayCarryMin: number | null;
@@ -46,6 +49,7 @@ interface GappingRow {
   safePct: number | null;
   rangeConfidence: number | null;
   shotCount: number;
+  rangeShotCount: number;
 }
 
 function mean(values: number[]): number | null {
@@ -237,6 +241,10 @@ function getRangeTargetPct(
   return mean(sessionScores);
 }
 
+function getRangeShotCount(sessions: PracticeSession[], shotsBySession: ShotsBySession): number {
+  return sessions.slice(0, 3).reduce((sum, session) => sum + (shotsBySession[session.id]?.length ?? 0), 0);
+}
+
 function getFullShotTargetMax(
   clubId: string,
   profiles: ShotProfileMap,
@@ -303,7 +311,12 @@ function buildRow(
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
   const liveTotal = mean(totals);
-  const displayTotal = profile.targetTotal ?? liveTotal;
+  const rangeTargetTotal = getMetricTargetValue(practiceConfig, 'total_distance');
+  const rangeTargetCarry = getMetricTargetValue(practiceConfig, 'carry');
+  const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
+  const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
+  const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
+  const displayTotal = profile.targetTotal ?? liveTotal ?? rangeTargetTotal;
   const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
   const displayCarryWindow = getRangeCarryWindow(displayTotal, practiceConfig);
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
@@ -320,12 +333,15 @@ function buildRow(
     topQuartile: top,
     liveTotal,
     liveCarry,
+    rangeTargetTotal,
+    rangeTargetCarry,
+    rangeTargetSide,
     displayTotal,
-    displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry,
+    displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
-    totalMin: totals.length > 1 ? Math.min(...totals) : estimatedVerticalWindow.min,
-    totalMax: totals.length > 1 ? Math.max(...totals) : estimatedVerticalWindow.max,
+    totalMin: totals.length > 1 ? Math.min(...totals) : rangeTargetTotalWindow.min ?? estimatedVerticalWindow.min,
+    totalMax: totals.length > 1 ? Math.max(...totals) : rangeTargetTotalWindow.max ?? estimatedVerticalWindow.max,
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
@@ -335,6 +351,7 @@ function buildRow(
     safePct: lastThreeClubShots.length ? (lastThreeClubShots.filter(isSafeOutcome).length / lastThreeClubShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: referenceShots.length,
+    rangeShotCount,
   };
 }
 
@@ -361,7 +378,7 @@ export function ClubGappingTab() {
       .filter((profile) => profile.power === 'full')
       .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles)))
-      .filter((row) => row.shotCount > 0);
+      .filter((row) => row.shotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
 
   const groupedRows = useMemo(() => {
@@ -390,6 +407,16 @@ export function ClubGappingTab() {
       targetCarry: editingRow.liveCarry?.toFixed(0) ?? '',
       targetSideLeft: editingRow.sideLeft?.toFixed(0) ?? '',
       targetSideRight: editingRow.sideRight?.toFixed(0) ?? '',
+    });
+  };
+
+  const useRangeInDraft = () => {
+    if (!editingRow) return;
+    setDraft({
+      targetTotal: editingRow.rangeTargetTotal?.toFixed(0) ?? '',
+      targetCarry: editingRow.rangeTargetCarry?.toFixed(0) ?? '',
+      targetSideLeft: editingRow.rangeTargetSide?.toFixed(0) ?? '',
+      targetSideRight: editingRow.rangeTargetSide?.toFixed(0) ?? '',
     });
   };
 
@@ -507,24 +534,36 @@ export function ClubGappingTab() {
           <DialogHeader>
             <DialogTitle>Edit Gapping Targets</DialogTitle>
             <DialogDescription>
-              Saved targets are shown in the table. Refresh latest pulls current live values into the form.
+              Saved targets are shown in the table. Refresh from course data or range targets before saving.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             {editingRow && (
               <div className="rounded-md border bg-muted/40 p-3 text-sm sm:col-span-2">
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                   <div className="font-medium">Latest live values</div>
-                  <Button type="button" size="sm" variant="outline" onClick={useLiveInDraft}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Refresh latest
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={useLiveInDraft}>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Course
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={useRangeInDraft}>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Range
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-4">
                   <div>Total {fmt(editingRow.liveTotal)}</div>
                   <div>Carry {fmt(editingRow.liveCarry)}</div>
                   <div>Side {fmtSideRange(editingRow.sideLeft, editingRow.sideRight)}</div>
                   <div>Mean {fmtSigned(editingRow.sideBias)}</div>
+                </div>
+                <div className="mt-2 grid gap-2 border-t pt-2 sm:grid-cols-4">
+                  <div>Range total {fmt(editingRow.rangeTargetTotal)}</div>
+                  <div>Range carry {fmt(editingRow.rangeTargetCarry)}</div>
+                  <div>Range side {fmt(editingRow.rangeTargetSide)}</div>
+                  <div>Range shots {editingRow.rangeShotCount}</div>
                 </div>
               </div>
             )}
