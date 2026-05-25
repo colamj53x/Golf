@@ -1,0 +1,1 @@
+UPDATE public.shots SET shot_date = '2026-05-22' WHERE shot_date = '2026-05-21' AND created_at = '2026-05-24 23:23:22.537266+00';

@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Golf Performance Dashboard Design System */
+
+@layer base {
+  :root {
+    /* Core palette - Golf-inspired */
+    --background: 150 10% 97%;
+    --foreground: 150 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 150 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 30% 10%;
+
+    /* Primary - Deep Golf Green */
+    --primary: 152 45% 22%;
+    --primary-foreground: 45 100% 97%;
+
+    /* Secondary - Soft sage */
+    --secondary: 150 15% 92%;
+    --secondary-foreground: 150 30% 15%;
+
+    /* Muted - Light gray-green */
+    --muted: 150 10% 94%;
+    --muted-foreground: 150 10% 45%;
+
+    /* Accent - Gold */
+    --accent: 42 85% 55%;
+    --accent-foreground: 150 30% 10%;
+
+    /* Status colors */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 42 90% 50%;
+    --warning-foreground: 150 30% 10%;
+    
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 15% 88%;
+    --input: 150 15% 88%;
+    --ring: 152 45% 22%;
+
+    --radius: 0.5rem;
+
+    /* Table specific */
+    --table-header: 150 20% 95%;
+    --table-row-alt: 150 10% 98%;
+    --table-border: 150 15% 90%;
+
+    /* Sidebar */
+    --sidebar-background: 152 35% 18%;
+    --sidebar-foreground: 150 10% 95%;
+    --sidebar-primary: 42 85% 55%;
+    --sidebar-primary-foreground: 150 30% 10%;
+    --sidebar-accent: 152 30% 25%;
+    --sidebar-accent-foreground: 150 10% 95%;
+    --sidebar-border: 152 30% 25%;
+    --sidebar-ring: 42 85% 55%;
+  }
+
+  .dark {
+    --background: 150 25% 8%;
+    --foreground: 150 10% 95%;
+
+    --card: 150 20% 12%;
+    --card-foreground: 150 10% 95%;
+
+    --popover: 150 20% 12%;
+    --popover-foreground: 150 10% 95%;
+
+    --primary: 152 50% 45%;
+    --primary-foreground: 150 30% 5%;
+
+    --secondary: 150 15% 18%;
+    --secondary-foreground: 150 10% 90%;
+
+    --muted: 150 15% 20%;
+    --muted-foreground: 150 10% 60%;
+
+    --accent: 42 85% 55%;
+    --accent-foreground: 150 30% 5%;
+
+    --success: 152 60% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 15% 22%;
+    --input: 150 15% 22%;
+    --ring: 152 50% 45%;
+
+    --table-header: 150 20% 15%;
+    --table-row-alt: 150 15% 10%;
+    --table-border: 150 15% 20%;
+
+    --sidebar-background: 150 25% 6%;
+    --sidebar-foreground: 150 10% 95%;
+    --sidebar-primary: 42 85% 55%;
+    --sidebar-primary-foreground: 150 30% 5%;
+    --sidebar-accent: 150 20% 12%;
+    --sidebar-accent-foreground: 150 10% 95%;
+    --sidebar-border: 150 15% 15%;
+    --sidebar-ring: 42 85% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .stat-card {
+    @apply bg-card rounded-lg border border-border p-4 shadow-sm transition-shadow hover:shadow-md;
+  }
+
+  .data-table {
+    @apply w-full border-collapse;
+  }
+
+  .data-table th {
+    @apply bg-[hsl(var(--table-header))] px-4 py-3 text-left text-sm font-semibold text-foreground border-b border-[hsl(var(--table-border))];
+  }
+
+  .data-table td {
+    @apply px-4 py-3 text-sm border-b border-[hsl(var(--table-border))];
+  }
+
+  .data-table tr:nth-child(even) {
+    @apply bg-[hsl(var(--table-row-alt))];
+  }
+
+  .data-table tr:hover {
+    @apply bg-muted/50;
+  }
+
+  .metric-positive {
+    @apply text-success font-medium;
+  }
+
+  .metric-negative {
+    @apply text-destructive font-medium;
+  }
+
+  .metric-neutral {
+    @apply text-muted-foreground;
+  }
+
+  .tab-active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .input-editable {
+    @apply bg-transparent border-transparent hover:border-input focus:border-primary focus:ring-1 focus:ring-primary transition-colors;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

@@ -1,0 +1,1 @@
+UPDATE public.shots SET club = UPPER(club) WHERE club ~ '^[0-9]+[a-zA-Z]$';
