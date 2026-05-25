@@ -23,6 +23,7 @@ export function usePracticeShots(sessionId: string | null) {
         .from('practice_shots')
         .select('*')
         .eq('session_id', sessionId)
+        .eq('user_id', user.id)
         .order('shot_number', { ascending: true });
 
       if (error) throw error;
@@ -87,6 +88,8 @@ export function usePracticeShots(sessionId: string | null) {
 
   // Toggle excluded status for a shot
   const toggleExcluded = useCallback(async (shotId: string) => {
+    if (!user) return;
+
     const shot = shots.find(s => s.id === shotId);
     if (!shot) return;
 
@@ -101,7 +104,8 @@ export function usePracticeShots(sessionId: string | null) {
       const { error } = await supabase
         .from('practice_shots')
         .update({ excluded: newExcluded })
-        .eq('id', shotId);
+        .eq('id', shotId)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -113,7 +117,7 @@ export function usePracticeShots(sessionId: string | null) {
       ));
       toast.error('Failed to update shot');
     }
-  }, [shots]);
+  }, [shots, user]);
 
   // Get only included shots
   const includedShots = shots.filter(s => !s.excluded);

@@ -343,6 +343,11 @@ export function PracticeDashboardTab() {
   }, {} as Record<string, typeof config.metrics>);
 
   const handleAddSession = async () => {
+    if (!user) {
+      toast.error('Sign in to save practice sessions');
+      return;
+    }
+
     const baseMetrics: PracticeMetricValue[] = config.metrics.map(m => {
       // Smash Factor is computed, not entered
       const valueStr = m.id === 'smash_factor' ? '' : (newSessionMetrics[m.id] || '');
@@ -373,7 +378,7 @@ export function PracticeDashboardTab() {
           session_date: newSessionDate,
           metrics: JSON.parse(JSON.stringify(metricsPayload)),
           notes: newSessionNotes,
-          user_id: user?.id,
+          user_id: user.id,
         }])
         .select()
         .single();
@@ -401,7 +406,7 @@ export function PracticeDashboardTab() {
             swingSpeed: shot.swingSpeed,
             peakHandSpeed: shot.peakHandSpeed,
           })),
-          user_id: user?.id,
+          user_id: user.id,
         }));
 
         const { error: shotsError } = await supabase

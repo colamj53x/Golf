@@ -27,7 +27,8 @@ export function usePracticeShotsBySessions(sessionIds: string[]) {
       const { data, error } = await supabase
         .from('practice_shots')
         .select('session_id, excluded, metrics')
-        .in('session_id', sessionIds);
+        .in('session_id', sessionIds)
+        .eq('user_id', user.id);
 
       if (cancelled) return;
       if (error) {

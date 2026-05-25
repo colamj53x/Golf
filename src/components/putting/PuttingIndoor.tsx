@@ -26,11 +26,16 @@ export function PuttingIndoor({ onBack }: Props) {
   const [builderOpen, setBuilderOpen] = useState(false);
 
   const loadDrills = useCallback(async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('putting_drills')
       .select('*')
-      .eq('category', 'indoor')
-      .order('sort_order');
+      .eq('category', 'indoor');
+
+    query = user
+      ? query.or(`is_builtin.eq.true,user_id.eq.${user.id}`)
+      : query.eq('is_builtin', true);
+
+    const { data, error } = await query.order('sort_order');
     if (error) {
       toast.error('Failed to load drills');
       return;
@@ -41,13 +46,14 @@ export function PuttingIndoor({ onBack }: Props) {
       scoring_inputs: d.scoring_inputs as unknown as ScoringInput[],
       level_bands: d.level_bands as unknown as LevelBand[],
     })));
-  }, []);
+  }, [user]);
 
   const loadSessions = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase
       .from('putting_sessions')
       .select('*')
+      .eq('user_id', user.id)
       .eq('category', 'indoor')
       .order('session_date', { ascending: false })
       .limit(1000);
@@ -68,7 +74,13 @@ export function PuttingIndoor({ onBack }: Props) {
 
   const handleDeleteDrill = async (id: string) => {
     if (!confirm('Delete this custom drill?')) return;
-    const { error } = await supabase.from('putting_drills').delete().eq('id', id);
+    if (!user) return;
+    const { error } = await supabase
+      .from('putting_drills')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .eq('is_builtin', false);
     if (error) {
       toast.error('Failed to delete');
       return;

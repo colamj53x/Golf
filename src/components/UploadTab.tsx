@@ -44,6 +44,11 @@ export function UploadTab() {
   };
 
   const processFile = async (file: File) => {
+    if (!user) {
+      setUploadResult({ success: false, message: 'Sign in before uploading shot data.' });
+      return;
+    }
+
     setIsUploading(true);
     setUploadResult(null);
     setUploadWarnings([]);
@@ -91,7 +96,7 @@ export function UploadTab() {
 
       // If replace mode, delete existing data first
       if (replaceAll) {
-        const { error: deleteError } = await supabase.from('shots').delete().eq('user_id', user?.id);
+        const { error: deleteError } = await supabase.from('shots').delete().eq('user_id', user.id);
         if (deleteError) {
           setUploadResult({ success: false, message: getUserFriendlyError(deleteError) });
           return;
@@ -114,7 +119,7 @@ export function UploadTab() {
           : null,
         notes: shot.notes,
         shot_date: getShotDateKey(shot.date),
-        user_id: user?.id,
+        user_id: user.id,
       }));
 
       // Insert in batches of 100
@@ -168,6 +173,11 @@ export function UploadTab() {
   };
 
   const handleDeleteAll = async () => {
+    if (!user) {
+      setUploadResult({ success: false, message: 'Sign in before deleting shot data.' });
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete ALL shot data? This cannot be undone.')) {
       return;
     }
@@ -176,7 +186,7 @@ export function UploadTab() {
     setUploadResult(null);
 
     try {
-      const { error } = await supabase.from('shots').delete().eq('user_id', user?.id);
+      const { error } = await supabase.from('shots').delete().eq('user_id', user.id);
       
       if (error) {
         setUploadResult({ success: false, message: getUserFriendlyError(error) });
@@ -195,13 +205,18 @@ export function UploadTab() {
   };
 
   const handleDeleteLastUpload = async () => {
+    if (!user) {
+      setUploadResult({ success: false, message: 'Sign in before deleting shot data.' });
+      return;
+    }
+
     setIsDeleting(true);
     setUploadResult(null);
     try {
       const { data: latest, error: latestErr } = await supabase
         .from('shots')
         .select('created_at')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -218,7 +233,7 @@ export function UploadTab() {
       const { count, error: countErr } = await supabase
         .from('shots')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .gte('created_at', start)
         .lte('created_at', end);
 
@@ -234,7 +249,7 @@ export function UploadTab() {
       const { error } = await supabase
         .from('shots')
         .delete()
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .gte('created_at', start)
         .lte('created_at', end);
 

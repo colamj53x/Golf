@@ -105,6 +105,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         const { data: sessionsData, error: sessionsError } = await supabase
           .from('practice_sessions')
           .select('*')
+          .eq('user_id', user.id)
           .order('session_date', { ascending: false });
 
         if (sessionsError) throw sessionsError;
@@ -131,7 +132,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         // Load stored configs
         const { data: configsData, error: configsError } = await supabase
           .from('practice_configs')
-          .select('*');
+          .select('*')
+          .eq('user_id', user.id);
 
         if (configsError) throw configsError;
 
@@ -196,6 +198,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
   }, [storedConfigs]);
 
   const updatePracticeConfig = useCallback(async (clubId: string, metrics: PracticeMetricTarget[]): Promise<boolean> => {
+    if (!user) return false;
+
     // Update local state
     setPracticeConfigs(prev => {
       const existing = prev.find(c => c.clubId === clubId);
@@ -216,8 +220,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
           shot_type: shotType,
           power,
           metrics: JSON.parse(JSON.stringify(metrics)),
-          user_id: user?.id,
-        }, { onConflict: 'config_key' })
+          user_id: user.id,
+        }, { onConflict: 'user_id,config_key' })
         .select();
 
       if (error) throw error;
@@ -255,6 +259,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const savePracticeConfig = useCallback(async (club: string, shotType: string, power: string, metrics: PracticeMetricTarget[]) => {
+    if (!user) return;
+
     const configKey = getPracticeConfigKey(club, shotType, power);
     
     try {
@@ -266,8 +272,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
           shot_type: shotType,
           power,
           metrics: JSON.parse(JSON.stringify(metrics)),
-          user_id: user?.id,
-        }, { onConflict: 'config_key' })
+          user_id: user.id,
+        }, { onConflict: 'user_id,config_key' })
         .select()
         .single();
 
@@ -305,11 +311,14 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const deletePracticeConfig = useCallback(async (configKey: string) => {
+    if (!user) return;
+
     try {
       const { error } = await supabase
         .from('practice_configs')
         .delete()
-        .eq('config_key', configKey);
+        .eq('config_key', configKey)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -335,13 +344,15 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Failed to delete configuration. Please try again.');
     }
-  }, []);
+  }, [user]);
 
   const resetToDefaults = useCallback(() => {
     setPracticeConfigs(DEFAULT_PRACTICE_CONFIGS);
   }, []);
 
   const addPracticeSession = useCallback(async (session: Omit<PracticeSession, 'id'>) => {
+    if (!user) return;
+
     try {
       // Store metrics and consistency together in the JSONB column
       const metricsPayload = session.consistency 
@@ -355,7 +366,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
           session_date: session.date.toISOString().split('T')[0],
           metrics: JSON.parse(JSON.stringify(metricsPayload)),
           notes: session.notes,
-          user_id: user?.id,
+          user_id: user.id,
         }])
         .select()
         .single();
@@ -389,6 +400,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const updatePracticeSession = useCallback(async (id: string, updates: Partial<PracticeSession>) => {
+    if (!user) return;
+
     try {
       const updateData: {
         club_id?: string;
@@ -416,7 +429,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase
         .from('practice_sessions')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -430,14 +444,17 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Failed to update session. Please try again.');
     }
-  }, [practiceSessions]);
+  }, [practiceSessions, user]);
 
   const deletePracticeSession = useCallback(async (id: string) => {
+    if (!user) return;
+
     try {
       const { error } = await supabase
         .from('practice_sessions')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -449,7 +466,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Failed to delete session. Please try again.');
     }
-  }, []);
+  }, [user]);
 
   const getSessionsForClub = useCallback((clubId: string) => {
     // Parse the config key to get the base club for legacy data matching

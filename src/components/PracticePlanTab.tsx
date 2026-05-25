@@ -150,7 +150,12 @@ export function PracticePlanTab() {
   };
 
   const deleteScore = async (id: string) => {
-    const { error } = await supabase.from('practice_drill_scores').delete().eq('id', id);
+    if (!user) { toast.error('Sign in to delete scores'); return; }
+    const { error } = await supabase
+      .from('practice_drill_scores')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) { toast.error('Delete failed'); return; }
     setScores(prev => prev.filter(s => s.id !== id));
   };

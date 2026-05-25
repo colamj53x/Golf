@@ -53,6 +53,11 @@ export function DrillBuilderDialog({ open, onOpenChange, category, onSaved }: Pr
   };
 
   const handleSave = async () => {
+    if (!user) {
+      toast.error('Sign in to save drills');
+      return;
+    }
+
     if (!name.trim()) {
       toast.error('Drill name is required');
       return;
@@ -63,7 +68,7 @@ export function DrillBuilderDialog({ open, onOpenChange, category, onSaved }: Pr
     }
     setSaving(true);
     const { error } = await supabase.from('putting_drills').insert({
-      user_id: user?.id,
+      user_id: user.id,
       category,
       name: name.trim().slice(0, 80),
       purpose: purpose.trim().slice(0, 500) || null,

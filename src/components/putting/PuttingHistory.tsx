@@ -9,6 +9,7 @@ import { format, startOfWeek } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
 interface Props {
   sessions: PuttingSessionRecord[];
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function PuttingHistory({ sessions, onChanged }: Props) {
+  const { user } = useAuth();
   const chartData = useMemo(() => {
     return [...sessions]
       .sort((a, b) => a.session_date.localeCompare(b.session_date))
@@ -44,7 +46,12 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this session?')) return;
-    const { error } = await supabase.from('putting_sessions').delete().eq('id', id);
+    if (!user) return;
+    const { error } = await supabase
+      .from('putting_sessions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) {
       toast.error('Failed to delete');
       return;

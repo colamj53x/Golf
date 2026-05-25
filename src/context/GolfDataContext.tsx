@@ -78,6 +78,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase
           .from('shots')
           .select('*')
+          .eq('user_id', user.id)
           .order('shot_date', { ascending: true })
           .range(from, from + pageSize - 1);
 
