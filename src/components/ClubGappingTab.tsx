@@ -124,17 +124,17 @@ function fmtSideRange(left: number | null, right: number | null): string {
   return `${left.toFixed(0)}L - ${right.toFixed(0)}R`;
 }
 
-function confidenceTone(value: number | null): string {
-  if (value === null) return 'border-muted text-muted-foreground';
-  if (value >= 70) return 'bg-green-600 text-white';
-  if (value >= 50) return 'bg-amber-500 text-white';
-  return 'border-red-500 text-red-700';
-}
-
 function percentDotTone(value: number | null): string {
   if (value === null) return 'border-muted bg-background';
   if (value >= 65) return 'border-green-600 bg-green-600';
   if (value >= 40) return 'border-amber-500 bg-amber-500';
+  return 'border-red-600 bg-red-600';
+}
+
+function rangeDotTone(value: number | null): string {
+  if (value === null) return 'border-muted bg-background';
+  if (value > 50) return 'border-green-600 bg-green-600';
+  if (value >= 20) return 'border-amber-500 bg-amber-500';
   return 'border-red-600 bg-red-600';
 }
 
@@ -404,15 +404,13 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-3 w-3 rounded-full border ${percentDotTone(row.targetPct)}`} title={`Target ${fmt(row.targetPct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.targetPct)}`} title={`Target ${fmt(row.targetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-3 w-3 rounded-full border ${percentDotTone(row.safePct)}`} title={`Safe ${fmt(row.safePct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.safePct)}`} title={`Safe ${fmt(row.safePct, '%')}`} />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={row.rangeConfidence !== null && row.rangeConfidence >= 70 ? 'default' : 'outline'} className={confidenceTone(row.rangeConfidence)}>
-                          {fmt(row.rangeConfidence, '%')}
-                        </Badge>
+                      <TableCell className="text-center">
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <Signal className={`mx-auto h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
