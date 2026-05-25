@@ -124,10 +124,18 @@ function confidenceTone(value: number | null): string {
   return 'border-red-500 text-red-700';
 }
 
-function getMetricValue(metrics: Array<{ metricId: string; valueMin: number | null; valueMax: number | null }>, id: string): number | null {
-  const metric = metrics.find((item) => item.metricId === id);
+function getMetricTargetValue(config: ClubPracticeConfig | undefined, id: string): number | null {
+  const metric = config?.metrics.find((item) => item.id === id);
   if (!metric) return null;
-  return metricAverage(metric.valueMin, metric.valueMax);
+  return metricAverage(metric.targetMin, metric.targetMax);
+}
+
+function getRangeCarryEstimate(total: number | null, config: ClubPracticeConfig | undefined): number | null {
+  if (total === null || !Number.isFinite(total)) return null;
+  const targetCarry = getMetricTargetValue(config, 'carry');
+  const targetTotal = getMetricTargetValue(config, 'total_distance');
+  if (targetCarry === null || targetTotal === null || targetTotal <= 0) return null;
+  return total * (targetCarry / targetTotal);
 }
 
 function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
@@ -173,11 +181,9 @@ function buildRow(
   const sessions = practiceSessions
     .filter((session) => matchesPracticeProfile(session, profile))
     .sort((a, b) => b.date.getTime() - a.date.getTime());
-  const carryValues = sessions
-    .map((session) => getMetricValue(session.metrics, 'carry'))
-    .filter((value): value is number => value !== null && Number.isFinite(value));
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
+  const liveTotal = mean(totals);
 
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
@@ -189,8 +195,8 @@ function buildRow(
     target,
     sample: referenceShots,
     topQuartile: top,
-    liveTotal: mean(totals),
-    liveCarry: mean(carryValues),
+    liveTotal,
+    liveCarry: getRangeCarryEstimate(liveTotal, practiceConfig),
     totalMin: totals.length ? Math.min(...totals) : null,
     totalMax: totals.length ? Math.max(...totals) : null,
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
