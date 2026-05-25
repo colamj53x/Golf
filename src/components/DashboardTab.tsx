@@ -210,72 +210,76 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Controls */}
-      <div className="flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Club:</label>
-          <Select value={selectedClub} onValueChange={setSelectedClub}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select club" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clubs</SelectItem>
-              {availableClubs
-                .filter(club => club && club.trim() !== '')
-                .sort((a, b) => {
-                  const configA = clubs.find(c => c.id === getClubConfigId(a));
-                  const configB = clubs.find(c => c.id === getClubConfigId(b));
-                  const distA = configA?.stockDistance ?? 0;
-                  const distB = configB?.stockDistance ?? 0;
-                  return distB - distA; // longest to shortest
-                })
-                .map(club => (
-                  <SelectItem key={club} value={club}>{club}</SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Start Lie:</label>
-          <Select value={selectedStartLie} onValueChange={setSelectedStartLie}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select lie" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Lies</SelectItem>
-              {availableStartLies
-                .filter(lie => lie && lie.trim() !== '')
-                .map(lie => (
-                  <SelectItem key={lie} value={lie}>{lie}</SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Distance to Hole:</label>
-          <Select value={selectedDistanceFilter} onValueChange={setSelectedDistanceFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Select distance" />
-            </SelectTrigger>
-            <SelectContent>
-              {DISTANCE_FILTER_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {overall.shotCount} shots analyzed
-        </div>
-      </div>
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Club</label>
+              <Select value={selectedClub} onValueChange={setSelectedClub}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select club" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clubs</SelectItem>
+                  {availableClubs
+                    .filter(club => club && club.trim() !== '')
+                    .sort((a, b) => {
+                      const configA = clubs.find(c => c.id === getClubConfigId(a));
+                      const configB = clubs.find(c => c.id === getClubConfigId(b));
+                      const distA = configA?.stockDistance ?? 0;
+                      const distB = configB?.stockDistance ?? 0;
+                      return distB - distA; // longest to shortest
+                    })
+                    .map(club => (
+                      <SelectItem key={club} value={club}>{club}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Start Lie</label>
+              <Select value={selectedStartLie} onValueChange={setSelectedStartLie}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select lie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Lies</SelectItem>
+                  {availableStartLies
+                    .filter(lie => lie && lie.trim() !== '')
+                    .map(lie => (
+                      <SelectItem key={lie} value={lie}>{lie}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Distance to Hole</label>
+              <Select value={selectedDistanceFilter} onValueChange={setSelectedDistanceFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select distance" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISTANCE_FILTER_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
+            <span className="font-medium text-foreground">{overall.shotCount}</span> shots analyzed
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dashboard Sub-Tabs */}
       <Tabs value={dashboardView} onValueChange={setDashboardView}>
-        <TabsList>
-          <TabsTrigger value="latest-round" className="gap-2">
+        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="latest-round" className="shrink-0 gap-2">
             <Calendar className="h-4 w-4" />
             Latest Round
           </TabsTrigger>
-          <TabsTrigger value="overview" className="gap-2">
+          <TabsTrigger value="overview" className="shrink-0 gap-2">
             <TrendingUp className="h-4 w-4" />
             Overview
           </TabsTrigger>
