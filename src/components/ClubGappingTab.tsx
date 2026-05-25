@@ -320,6 +320,7 @@ function buildRow(
   const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
   const displayCarryWindow = getRangeCarryWindow(displayTotal, practiceConfig);
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
+  const rangeOnly = referenceShots.length === 0 && rangeShotCount > 0;
 
   const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
     .sort()
@@ -340,8 +341,8 @@ function buildRow(
     displayCarry: profile.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
-    totalMin: totals.length > 1 ? Math.min(...totals) : rangeTargetTotalWindow.min ?? estimatedVerticalWindow.min,
-    totalMax: totals.length > 1 ? Math.max(...totals) : rangeTargetTotalWindow.max ?? estimatedVerticalWindow.max,
+    totalMin: totals.length > 1 ? Math.min(...totals) : rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min,
+    totalMax: totals.length > 1 ? Math.max(...totals) : rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max,
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: profile.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null),
