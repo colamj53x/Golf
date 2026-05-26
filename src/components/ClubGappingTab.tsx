@@ -884,6 +884,7 @@ function buildRow(
   const displayTotal = savedTarget.targetTotal ?? liveTotal ?? rangeTotal;
   const liveVariationPct = variationPct(variationTotals, liveTotal);
   const displayVariationPct = savedTarget.targetVariationPct ?? liveVariationPct ?? rangeLiveVariationPct;
+  const usesLiveTotal = displayTotal !== null && liveTotal !== null && Math.abs(displayTotal - liveTotal) < 0.5;
   const variationWindow = displayTotal !== null && displayVariationPct !== null
     ? {
         min: displayTotal * (1 - displayVariationPct / 100),
@@ -915,7 +916,7 @@ function buildRow(
     rangeTargetSide,
     displayVariationPct,
     displayTotal,
-    displayCarry: savedTarget.targetCarry ?? liveCarry ?? rangeCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig),
+    displayCarry: savedTarget.targetCarry ?? (usesLiveTotal ? liveCarry : null) ?? rangeCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig),
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
     totalMin: variationWindow?.min ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
