@@ -75,7 +75,6 @@ interface GappingRow {
   sideBias: number | null;
   overallTargetPct: number | null;
   recentTargetPct: number | null;
-  overallSafePct: number | null;
   recentSafePct: number | null;
   rangeConfidence: number | null;
   shotCount: number;
@@ -579,7 +578,6 @@ function buildRow(
     sideBias: mean(sides) ?? rangeSideStats.mean,
     overallTargetPct: targetReferenceShots.length ? (targetReferenceShots.filter((shot) => matchesTarget(shot, target)).length / targetReferenceShots.length) * 100 : null,
     recentTargetPct: recentIntentShots.length ? (recentIntentShots.filter((shot) => matchesTarget(shot, target)).length / recentIntentShots.length) * 100 : null,
-    overallSafePct: targetReferenceShots.length ? (targetReferenceShots.filter(isSafeOutcome).length / targetReferenceShots.length) * 100 : null,
     recentSafePct: recentIntentShots.length ? (recentIntentShots.filter(isSafeOutcome).length / recentIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: targetReferenceShots.length,
@@ -717,6 +715,7 @@ export function ClubGappingTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[120px]">Club</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Shots</TableHead>
                   <TableHead>Shot</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
@@ -727,10 +726,8 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Carry Range</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Overall T</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Last 20 T</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Overall Safe</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Last 20 Safe</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
-                  <TableHead className="text-center whitespace-nowrap">Shots</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -740,6 +737,19 @@ export function ClubGappingTab() {
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
                         {index === 0 ? clubName : ''}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="mx-auto h-8 w-8"
+                          title={`${row.shotCount} shots`}
+                          onClick={() => setShotsRow(row)}
+                          disabled={row.shotCount === 0}
+                        >
+                          <Signal className={`h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
+                        </Button>
                       </TableCell>
                       <TableCell>
                         <Badge variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}>{getShotLabel(row.profile)}</Badge>
@@ -760,26 +770,10 @@ export function ClubGappingTab() {
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Last 20 target ${fmt(row.recentTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.overallSafePct)}`} title={`Overall safe ${fmt(row.overallSafePct, '%')}`} />
-                      </TableCell>
-                      <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Last 20 safe ${fmt(row.recentSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="mx-auto h-8 w-8"
-                          title={`${row.shotCount} shots`}
-                          onClick={() => setShotsRow(row)}
-                          disabled={row.shotCount === 0}
-                        >
-                          <Signal className={`h-4 w-4 ${shotCountTone(row.shotCount)}`} aria-label={`${row.shotCount} shots`} />
-                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="icon" variant="ghost" title="Edit targets" onClick={() => openEdit(row)}>
@@ -791,7 +785,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={15} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={14} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
