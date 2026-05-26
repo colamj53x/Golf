@@ -14,7 +14,7 @@ import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { ProfileTarget, ShotProfile, ShotProfileMap, ShotProfileTargetValues, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
-import { PRACTICE_CLUBS } from '@/types/practiceClubs';
+import { parsePracticeConfigKey, POWER_OPTIONS, PRACTICE_CLUBS, SHOT_TYPES } from '@/types/practiceClubs';
 
 type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
 type ShotSortKey = 'quality' | 'distance' | 'alignment';
@@ -237,9 +237,21 @@ function getClubName(profile: ShotProfile): string {
   return PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
 }
 
+function getPowerLabel(power: string): string {
+  if (power === 'full') return '';
+  if (power === '730pm') return '7.30';
+  if (power === '9pm') return '9';
+  if (power === '10pm') return '10';
+  return POWER_OPTIONS.find((option) => option.id === power)?.name.replace(/pm$/i, '') ?? power;
+}
+
 function getShotLabel(profile: ShotProfile): string {
-  if (profile.shotType === 'punch') return 'Punch';
-  return 'Full';
+  if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
+
+  const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
+  const base = profile.shotType === 'bump' ? 'Bump and Run' : shotName;
+  const power = getPowerLabel(profile.power);
+  return power ? `${base} ${power}` : base;
 }
 
 function fmtSideRange(left: number | null, right: number | null): string {
@@ -443,6 +455,38 @@ function hasRangePracticeForProfile(profile: ShotProfile, practiceSessions: Prac
   return practiceSessions.some((session) => matchesPracticeProfile(session, profile));
 }
 
+function isCompositePracticeKey(key: string): boolean {
+  const parsed = parsePracticeConfigKey(key);
+  return Boolean(parsed.club && parsed.shotType && parsed.power);
+}
+
+function profileFromPracticeKey(key: string): ShotProfile | null {
+  if (!isCompositePracticeKey(key)) return null;
+  const parsed = parsePracticeConfigKey(key);
+  const clubExists = PRACTICE_CLUBS.some((club) => club.id === parsed.club);
+  if (!clubExists) return null;
+
+  return {
+    id: key,
+    clubId: parsed.club,
+    shotType: parsed.shotType,
+    power: parsed.power,
+    enabled: true,
+    showInPractice: true,
+    showOnCourse: true,
+    targets: ['green'],
+    technique: '',
+    routine: '',
+    targetTotal: null,
+    targetCarry: null,
+    targetSideLeft: null,
+    targetSideRight: null,
+    targetVariationPct: null,
+    targetQualityCutoff: null,
+    targetOverrides: {},
+  };
+}
+
 function getFullShotTargetMax(
   clubId: string,
   profiles: ShotProfileMap,
@@ -608,7 +652,14 @@ export function ClubGappingTab() {
 
   const rows = useMemo(() => {
     const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
-    return Object.values(profiles)
+    const profilesWithRangeSessions = { ...profiles };
+    for (const session of practiceSessions) {
+      if (profilesWithRangeSessions[session.clubId]) continue;
+      const rangeProfile = profileFromPracticeKey(session.clubId);
+      if (rangeProfile) profilesWithRangeSessions[session.clubId] = rangeProfile;
+    }
+
+    return Object.values(profilesWithRangeSessions)
       .filter((profile) => {
         const hasRangePractice = shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions);
         if (shotContext === 'tee') return profile.enabled && profile.showOnCourse;

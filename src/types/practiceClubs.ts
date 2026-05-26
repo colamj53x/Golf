@@ -19,13 +19,14 @@ export const SHOT_TYPES = [
   { id: 'punch', name: 'Punch' },
   { id: 'pitch', name: 'Pitch' },
   { id: 'chip', name: 'Chip' },
-  { id: 'bump', name: 'Bump' },
+  { id: 'bump', name: 'Bump and Run' },
 ] as const;
 
 export const POWER_OPTIONS = [
   { id: 'full', name: 'Full' },
-  { id: '9pm', name: '9pm' },
-  { id: '730pm', name: '7.30pm' },
+  { id: '730pm', name: '7.30' },
+  { id: '9pm', name: '9' },
+  { id: '10pm', name: '10' },
 ] as const;
 
 export type PracticeClubId = typeof PRACTICE_CLUBS[number]['id'];
