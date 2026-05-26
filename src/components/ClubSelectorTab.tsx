@@ -35,7 +35,7 @@ const MATRIX_POWER_COLUMNS = [
   { id: '9pm', label: 'Half' },
 ] as const;
 
-type LieOption = 'tee' | 'fairway' | 'rough' | 'sand' | 'recovery' | 'awkward';
+type LieOption = 'tee' | 'fairway' | 'roughRecovery' | 'sand' | 'uphill' | 'downhill';
 type TargetOption = 'green' | 'fairway';
 type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
@@ -107,10 +107,10 @@ interface MatrixCombo {
 const lieOptions: Array<{ value: LieOption; label: string }> = [
   { value: 'tee', label: 'Tee' },
   { value: 'fairway', label: 'Fairway' },
-  { value: 'rough', label: 'Rough' },
+  { value: 'roughRecovery', label: 'Rough / Recovery' },
   { value: 'sand', label: 'Sand' },
-  { value: 'recovery', label: 'Recovery' },
-  { value: 'awkward', label: 'Awkward/Stance' },
+  { value: 'uphill', label: 'Uphill Lie' },
+  { value: 'downhill', label: 'Downhill Lie' },
 ];
 
 const targetOptions: Array<{ value: TargetOption; label: string }> = [
@@ -159,15 +159,32 @@ function normalizeLie(value: string): string {
   const lower = value.toLowerCase();
   if (lower.includes('tee')) return 'tee';
   if (lower.includes('fairway')) return 'fairway';
-  if (lower.includes('rough')) return 'rough';
+  if (lower.includes('uphill')) return 'uphill';
+  if (lower.includes('downhill')) return 'downhill';
+  if (lower.includes('rough')) return 'roughRecovery';
   if (lower.includes('sand') || lower.includes('bunker')) return 'sand';
-  if (lower.includes('recovery') || lower.includes('tree') || lower.includes('punch')) return 'recovery';
-  if (lower.includes('awkward') || lower.includes('slope') || lower.includes('stance')) return 'awkward';
+  if (lower.includes('recovery') || lower.includes('tree') || lower.includes('punch') || lower.includes('trouble')) return 'roughRecovery';
   return lower;
 }
 
 function matchesLie(shot: Shot, lie: LieOption): boolean {
-  return normalizeLie(shot.startLie || '').includes(lie);
+  return normalizeLie(shot.startLie || '') === lie;
+}
+
+function isSlopeLie(lie: LieOption): boolean {
+  return lie === 'uphill' || lie === 'downhill';
+}
+
+function slopeDistanceAdjustment(targetDistance: number, lie: LieOption): number {
+  if (lie === 'uphill') return Math.max(8, targetDistance * 0.08);
+  if (lie === 'downhill') return -Math.max(8, targetDistance * 0.08);
+  return 0;
+}
+
+function slopeSideAdjustment(lie: LieOption): number {
+  if (lie === 'uphill') return -5;
+  if (lie === 'downhill') return 5;
+  return 0;
 }
 
 function matchesTargetDestination(shot: Shot, target: TargetOption): boolean {
@@ -557,7 +574,9 @@ function toggleTroubleSide(current: TroubleOption[], side: TroubleOption): Troub
     : [...current, side];
 }
 
-function buildPointer(result: ClubRecommendation, target: TargetOption, trouble: TroubleOption[], mustCarry: boolean): string {
+function buildPointer(result: ClubRecommendation, target: TargetOption, trouble: TroubleOption[], mustCarry: boolean, lie: LieOption): string {
+  if (lie === 'uphill') return 'Take more club for the shorter flight and aim right to cover the left tendency.';
+  if (lie === 'downhill') return 'Take less club for the lower running flight and aim left to cover the right tendency.';
   if (mustCarry && result.shortRisk > 30) return 'Take more club or choose a fuller swing; short is the main problem.';
   if (trouble.includes('left') && result.leftRisk > 25) return 'Commit to start line and avoid trying to turn this over.';
   if (trouble.includes('right') && result.rightRisk > 25) return 'Aim with room right; hold the face through impact.';
@@ -594,44 +613,49 @@ function calculateRecommendations(
       const mappedTotal = getMappedTotal(primaryProfile, target, practiceConfigs);
       const mappedSide = getMappedSide(primaryProfile, target, practiceConfigs);
       const fallbackDistance = mappedTotal ?? club.stockDistance;
-      if (Math.abs(fallbackDistance - targetDistance) > 45) return null;
+      const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
+      const sideAdjustment = slopeSideAdjustment(lie);
+      const lieSample = isSlopeLie(lie) ? 'club' : 'lie';
+      if (Math.abs(fallbackDistance - adjustedTargetDistance) > 45) return null;
 
       const distanceWindow = 10;
       const intentWindow = 20;
       const minSafe = minimumSafeDistance && minimumSafeDistance > 0 ? minimumSafeDistance : null;
       const isSafeDistance = (shot: Shot) =>
-        shot.total >= (minSafe ?? targetDistance - distanceWindow) &&
-        shot.total <= targetDistance + distanceWindow;
+        shot.total >= (minSafe ?? adjustedTargetDistance - distanceWindow) &&
+        shot.total <= adjustedTargetDistance + distanceWindow;
       const isGoodDistance = (shot: Shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality) && isSafeDistance(shot);
 
-      const profileShots = getProfileSamples(shots, primaryProfile, mappedTotal, lie);
+      const profileShots = getProfileSamples(shots, primaryProfile, mappedTotal, isSlopeLie(lie) ? undefined : lie);
       const likelyTargetIntentShots = profileShots.filter((shot) =>
-        Math.abs(shot.target - targetDistance) <= intentWindow &&
+        Math.abs(shot.target - adjustedTargetDistance) <= intentWindow &&
         (target === 'fairway' || club.distanceToTargetEnabled)
       );
-      const scenarioShots = likelyTargetIntentShots.filter((shot) =>
-        matchesLie(shot, lie)
-      );
-      const lieShots = profileShots.filter((shot) => matchesLie(shot, lie) && (target === 'fairway' || club.distanceToTargetEnabled));
+      const scenarioShots = isSlopeLie(lie)
+        ? []
+        : likelyTargetIntentShots.filter((shot) => matchesLie(shot, lie));
+      const lieShots = isSlopeLie(lie)
+        ? []
+        : profileShots.filter((shot) => matchesLie(shot, lie) && (target === 'fairway' || club.distanceToTargetEnabled));
       const sample = scenarioShots.length >= 3 ? scenarioShots : likelyTargetIntentShots.length >= 3 ? likelyTargetIntentShots : lieShots.length >= 3 ? lieShots : profileShots;
-      const sampleLabel = scenarioShots.length >= 3 ? 'scenario' : likelyTargetIntentShots.length >= 3 ? 'distance' : lieShots.length >= 3 ? 'lie' : 'club';
+      const sampleLabel = scenarioShots.length >= 3 ? 'scenario' : likelyTargetIntentShots.length >= 3 ? 'distance' : lieShots.length >= 3 ? lieSample : 'club';
 
       const avgTotal = sample.length ? mean(sample.map((shot) => shot.total || 0)) : fallbackDistance;
-      const avgSide = sample.length ? mean(sample.map((shot) => shot.side || 0)) : 0;
+      const avgSide = sample.length ? mean(sample.map((shot) => (shot.side || 0) + sideAdjustment)) : sideAdjustment;
       const sideBand = Math.max(5, mappedSide ?? club.acceptableSideBand);
       const distanceBand = Math.max(6, club.acceptableDistanceBand);
       const goodShotPct = sample.length
         ? (sample.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality)).length / sample.length) * 100
         : 45;
 
-      const leftRisk = sample.length ? (sample.filter((shot) => shot.side < -sideBand).length / sample.length) * 100 : 20;
-      const rightRisk = sample.length ? (sample.filter((shot) => shot.side > sideBand).length / sample.length) * 100 : 20;
+      const leftRisk = sample.length ? (sample.filter((shot) => (shot.side + sideAdjustment) < -sideBand).length / sample.length) * 100 : lie === 'uphill' ? 35 : 20;
+      const rightRisk = sample.length ? (sample.filter((shot) => (shot.side + sideAdjustment) > sideBand).length / sample.length) * 100 : lie === 'downhill' ? 35 : 20;
       const shortRisk = sample.length
-        ? (sample.filter((shot) => shot.total < targetDistance - distanceBand).length / sample.length) * 100
-        : avgTotal < targetDistance ? 45 : 15;
+        ? (sample.filter((shot) => shot.total < adjustedTargetDistance - distanceBand).length / sample.length) * 100
+        : avgTotal < adjustedTargetDistance ? 45 : 15;
       const longRisk = sample.length
-        ? (sample.filter((shot) => shot.total > targetDistance + distanceBand).length / sample.length) * 100
-        : avgTotal > targetDistance + distanceBand ? 35 : 15;
+        ? (sample.filter((shot) => shot.total > adjustedTargetDistance + distanceBand).length / sample.length) * 100
+        : avgTotal > adjustedTargetDistance + distanceBand ? 35 : 15;
 
       const hitCount = sample.filter((shot) => isSafeDistance(shot) && matchesTargetDestination(shot, target)).length;
       const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
@@ -642,8 +666,8 @@ function calculateRecommendations(
         ? mean(goodShotDistanceAverage.map((shot) => shot.total || 0))
         : fallbackDistance;
 
-      const distanceError = Math.abs(avgTotal - targetDistance);
-      const goodDistanceError = Math.abs(goodAvgTotal - targetDistance);
+      const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
+      const goodDistanceError = Math.abs(goodAvgTotal - adjustedTargetDistance);
       const targetFit = clamp((100 - distanceError * (target === 'green' ? 3 : 2)) * 0.35 + (100 - goodDistanceError * 4) * 0.65);
       const troublePenalty = trouble.reduce((total, side) => {
         if (side === 'left') return total + leftRisk;
@@ -653,7 +677,7 @@ function calculateRecommendations(
       }, 0) / Math.max(1, trouble.length);
       const carryPenalty = mustCarry ? shortRisk * 0.7 : 0;
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
-      const liePenalty = lie === 'sand' || lie === 'recovery' || lie === 'awkward' ? 6 : 0;
+      const liePenalty = lie === 'sand' || lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const confidence = Math.round(clamp(
         hitPct * 0.34 +
@@ -678,6 +702,8 @@ function calculateRecommendations(
       if (minSafe) badges.push(`safe ${Math.round(minSafe)}m+`);
       if (hitPct === 0) badges.push(`no ${target} hits at number`);
       if (Math.abs(avgSide) > sideBand) badges.push(avgSide > 0 ? 'right bias' : 'left bias');
+      if (lie === 'uphill') badges.push('take more club', 'aim right');
+      if (lie === 'downhill') badges.push('take less club', 'aim left');
       if (sampleLabel !== 'scenario') badges.push(`${sampleLabel} data`);
 
       const result: ClubRecommendation = {
@@ -708,14 +734,15 @@ function calculateRecommendations(
         pointer: '',
       };
 
-      result.pointer = buildPointer(result, target, trouble, mustCarry);
+      result.pointer = buildPointer(result, target, trouble, mustCarry, lie);
       return result;
     })
     .filter((result): result is ClubRecommendation => Boolean(result))
     .filter((result) => result.confidence >= 25)
     .sort((a, b) => {
-      const aDistance = Math.abs(a.avgTotal - targetDistance);
-      const bDistance = Math.abs(b.avgTotal - targetDistance);
+      const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
+      const aDistance = Math.abs(a.avgTotal - adjustedTargetDistance);
+      const bDistance = Math.abs(b.avgTotal - adjustedTargetDistance);
       const confidenceDelta = b.confidence - a.confidence;
       return Math.abs(confidenceDelta) > 8 ? confidenceDelta : aDistance - bDistance;
     })
