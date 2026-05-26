@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Gauge, Pencil, RefreshCw, Signal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, Gauge, Pencil, RefreshCw, Signal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +49,14 @@ const SHOT_QUALITY_HANDICAP: Record<string, number> = {
 
 const DEFAULT_QUALITY_CUTOFF = 10;
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
+const SHOT_CATEGORY_OVERRIDES_KEY = 'golf_gapping_shot_category_overrides_v1';
+
+type ShotCategoryOverride = {
+  profileId: string;
+  target: ProfileTarget;
+};
+
+type ShotCategoryOverrides = Record<string, ShotCategoryOverride>;
 
 interface GappingRow {
   profile: ShotProfile;
@@ -275,6 +283,12 @@ function isShortShot(profile: ShotProfile): boolean {
 function getShotBadgeClass(profile: ShotProfile, isHardestShortShot = false): string {
   if (profile.shotType === 'punch') return '';
   if (!isShortShot(profile)) return '';
+  if (profile.shotType === 'pitch' && profile.power === '9pm') {
+    return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
+  }
+  if (profile.shotType === 'pitch' && profile.power === '730pm') {
+    return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
+  }
   if (isHardestShortShot) {
     return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
   }
@@ -675,7 +689,11 @@ function matchesProfileShot(
   practiceSessions: PracticeSession[],
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
+  shotCategoryOverrides: ShotCategoryOverrides,
 ): boolean {
+  const override = shotCategoryOverrides[shot.id];
+  if (override) return override.profileId === profile.id;
+
   const punchShot = isPunchShot(shot, fullTargetMax);
   if (profile.shotType === 'punch') return punchShot;
   const gapWedgePitchPower = getClosestGapWedgePitchPower(shot, practiceSessions, practiceConfigs, shotsBySession);
@@ -698,6 +716,7 @@ function buildRow(
   shotsBySession: ShotsBySession,
   profiles: ShotProfileMap,
   globalQualityCutoff: number,
+  shotCategoryOverrides: ShotCategoryOverrides,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
   const fullTargetTotal = getFullShotTargetTotal(profile.clubId, profiles, practiceConfigs, courseShots);
@@ -734,11 +753,15 @@ function buildRow(
     practiceSessions,
     practiceConfigs,
     shotsBySession,
+    shotCategoryOverrides,
   ));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const shouldSplitByIntent = profile.targets.length > 1;
   const targetReferenceShots = shouldSplitByIntent
-    ? withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow)))
+    ? withoutDistanceOutliers(cleanedClubShots.filter((shot) => {
+        const override = shotCategoryOverrides[shot.id];
+        return override ? override.target === target : matchesTargetIntent(shot, target, intentWindow);
+      }))
     : cleanedClubShots;
   const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
   const top = referenceShots;
@@ -812,6 +835,14 @@ export function ClubGappingTab() {
   const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
   const [shotsRow, setShotsRow] = useState<GappingRow | null>(null);
   const [shotSort, setShotSort] = useState<ShotSortKey>('quality');
+  const [shotCategoryOverrides, setShotCategoryOverrides] = useState<ShotCategoryOverrides>(() => {
+    try {
+      const raw = localStorage.getItem(SHOT_CATEGORY_OVERRIDES_KEY);
+      return raw ? JSON.parse(raw) as ShotCategoryOverrides : {};
+    } catch {
+      return {};
+    }
+  });
   const [draft, setDraft] = useState({
     targetTotal: '',
     targetCarry: '',
@@ -820,6 +851,10 @@ export function ClubGappingTab() {
     targetSideLeft: '',
     targetSideRight: '',
   });
+
+  useEffect(() => {
+    localStorage.setItem(SHOT_CATEGORY_OVERRIDES_KEY, JSON.stringify(shotCategoryOverrides));
+  }, [shotCategoryOverrides]);
 
   const rows = useMemo(() => {
     const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
@@ -839,9 +874,19 @@ export function ClubGappingTab() {
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
       .filter((profile) => !(profile.clubId === 'gw' && profile.shotType === 'full'))
       .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
-      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles, gappingHcpTarget)))
+      .flatMap((profile) => profile.targets.map((target) => buildRow(
+        profile,
+        target,
+        contextShots,
+        practiceSessions,
+        practiceConfigs,
+        shotsBySession,
+        profiles,
+        gappingHcpTarget,
+        shotCategoryOverrides,
+      )))
       .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
-  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget]);
+  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
@@ -919,6 +964,52 @@ export function ClubGappingTab() {
   };
 
   const detailShots = useMemo(() => sortShots(shotsRow?.sample ?? [], shotSort), [shotsRow, shotSort]);
+
+  const moveShotDown = (shot: Shot) => {
+    if (!shotsRow) return;
+    const clubRows = rows
+      .filter((row) => row.profile.clubId === shotsRow.profile.clubId)
+      .sort((a, b) => {
+        const aDistance = a.displayTotal ?? Number.NEGATIVE_INFINITY;
+        const bDistance = b.displayTotal ?? Number.NEGATIVE_INFINITY;
+        if (aDistance !== bDistance) return bDistance - aDistance;
+        return getShotLabel(a.profile).localeCompare(getShotLabel(b.profile));
+      });
+    const currentIndex = clubRows.findIndex((row) => row.profile.id === shotsRow.profile.id && row.target === shotsRow.target);
+    const nextRow = currentIndex >= 0 ? clubRows[currentIndex + 1] : null;
+    if (!nextRow) return;
+
+    setShotCategoryOverrides((prev) => ({
+      ...prev,
+      [shot.id]: {
+        profileId: nextRow.profile.id,
+        target: nextRow.target,
+      },
+    }));
+  };
+
+  const resetShotCategory = (shot: Shot) => {
+    setShotCategoryOverrides((prev) => {
+      const next = { ...prev };
+      delete next[shot.id];
+      return next;
+    });
+  };
+
+  const getNextCategoryLabel = () => {
+    if (!shotsRow) return null;
+    const clubRows = rows
+      .filter((row) => row.profile.clubId === shotsRow.profile.clubId)
+      .sort((a, b) => {
+        const aDistance = a.displayTotal ?? Number.NEGATIVE_INFINITY;
+        const bDistance = b.displayTotal ?? Number.NEGATIVE_INFINITY;
+        if (aDistance !== bDistance) return bDistance - aDistance;
+        return getShotLabel(a.profile).localeCompare(getShotLabel(b.profile));
+      });
+    const currentIndex = clubRows.findIndex((row) => row.profile.id === shotsRow.profile.id && row.target === shotsRow.target);
+    const nextRow = currentIndex >= 0 ? clubRows[currentIndex + 1] : null;
+    return nextRow ? `${getShotLabel(nextRow.profile)} ${fmt(nextRow.displayTotal)}` : null;
+  };
 
   return (
     <div className="space-y-6">
@@ -1122,7 +1213,7 @@ export function ClubGappingTab() {
               {shotsRow ? `${getClubName(shotsRow.profile)} ${getShotLabel(shotsRow.profile)} to ${shotsRow.target}` : 'Shots'}
             </DialogTitle>
             <DialogDescription>
-              These are all imported shots for this lie, shot, and intent. Gapping numbers still use the stricter of top quartile by quality and {shotsRow?.qualityCutoff ?? DEFAULT_QUALITY_CUTOFF} Handicap or better.
+              These are all imported shots for this lie, shot, and intent. Move a shot down if the automatic category is too firm for the actual shot you played.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2">
@@ -1147,23 +1238,48 @@ export function ClubGappingTab() {
                   <TableHead>Start lie</TableHead>
                   <TableHead>End lie</TableHead>
                   <TableHead>Strike</TableHead>
+                  <TableHead className="text-right">Category</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {detailShots.map((shot) => (
-                  <TableRow key={shot.id}>
-                    <TableCell className="whitespace-nowrap">{getShotDateKey(shot.date)}</TableCell>
-                    <TableCell>{shot.shotQuality || '-'}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(shot.total)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmtSigned(shot.side)}</TableCell>
-                    <TableCell>{shot.startLie || '-'}</TableCell>
-                    <TableCell>{shot.endLie || '-'}</TableCell>
-                    <TableCell>{shot.strikeQuality || '-'}</TableCell>
-                  </TableRow>
-                ))}
+                {detailShots.map((shot) => {
+                  const override = shotCategoryOverrides[shot.id];
+                  const nextCategoryLabel = getNextCategoryLabel();
+
+                  return (
+                    <TableRow key={shot.id}>
+                      <TableCell className="whitespace-nowrap">{getShotDateKey(shot.date)}</TableCell>
+                      <TableCell>{shot.shotQuality || '-'}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(shot.total)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmtSigned(shot.side)}</TableCell>
+                      <TableCell>{shot.startLie || '-'}</TableCell>
+                      <TableCell>{shot.endLie || '-'}</TableCell>
+                      <TableCell>{shot.strikeQuality || '-'}</TableCell>
+                      <TableCell className="text-right">
+                        {override ? (
+                          <Button type="button" size="sm" variant="outline" onClick={() => resetShotCategory(shot)}>
+                            Reset
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => moveShotDown(shot)}
+                            disabled={!nextCategoryLabel}
+                            title={nextCategoryLabel ? `Move to ${nextCategoryLabel}` : 'No softer category'}
+                          >
+                            <ArrowDown className="mr-1 h-3 w-3" />
+                            Down
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {detailShots.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                       No matching shots.
                     </TableCell>
                   </TableRow>
