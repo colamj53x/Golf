@@ -71,15 +71,41 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary">
-                <Goal className="h-6 w-6 text-primary-foreground" />
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary">
+                  <Goal className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold text-foreground">Nic&apos;s Golf Hub</h1>
+                  <p className="text-sm text-muted-foreground">Rounds, practice, putting, and club trends</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-foreground">Nic&apos;s Golf Hub</h1>
-                <p className="text-sm text-muted-foreground">Rounds, practice, putting, and club trends</p>
-              </div>
+              <Tabs value={activeTab} onValueChange={handleMainTabChange} className="min-w-0">
+                <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
+                  <TabsTrigger value="on-course" className="shrink-0 gap-2">
+                    <Crosshair className="h-4 w-4" />
+                    On Course
+                  </TabsTrigger>
+                  <TabsTrigger value="club-gapping" className="shrink-0 gap-2">
+                    <Gauge className="h-4 w-4" />
+                    Club Gapping
+                  </TabsTrigger>
+                  <TabsTrigger value="playing-data" className="shrink-0 gap-2">
+                    <Database className="h-4 w-4" />
+                    Playing Data
+                  </TabsTrigger>
+                  <TabsTrigger value="practice" className="shrink-0 gap-2">
+                    <Target className="h-4 w-4" />
+                    Practice
+                  </TabsTrigger>
+                  <TabsTrigger value="settings" className="shrink-0 gap-2">
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
             <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-4">
               <span className="truncate text-sm text-muted-foreground">
@@ -97,29 +123,6 @@ const Index = () => {
       {/* Main Content */}
       <main className="container py-6">
         <Tabs value={activeTab} onValueChange={handleMainTabChange}>
-          <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
-            <TabsTrigger value="on-course" className="shrink-0 gap-2">
-              <Crosshair className="h-4 w-4" />
-              On Course
-            </TabsTrigger>
-            <TabsTrigger value="club-gapping" className="shrink-0 gap-2">
-              <Gauge className="h-4 w-4" />
-              Club Gapping
-            </TabsTrigger>
-            <TabsTrigger value="playing-data" className="shrink-0 gap-2">
-              <Database className="h-4 w-4" />
-              Playing Data
-            </TabsTrigger>
-            <TabsTrigger value="practice" className="shrink-0 gap-2">
-              <Target className="h-4 w-4" />
-              Practice
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="shrink-0 gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </TabsTrigger>
-          </TabsList>
-
           <TabsContent value="playing-data">
             <Tabs value={playingDataTab} onValueChange={handlePlayingDataTabChange} className="w-full">
               <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
