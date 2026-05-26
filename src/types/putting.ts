@@ -4,6 +4,14 @@ export interface ScoringInput {
   points: number;
 }
 
+export type PuttingMetric = 'startLineStrike' | 'paceTouch' | 'conversionPressure';
+
+export interface PuttingMetricScore {
+  metric: PuttingMetric;
+  label: string;
+  percent: number;
+}
+
 export interface LevelBand {
   min: number;
   max: number;
@@ -26,6 +34,7 @@ export interface PuttingDrill {
   recommendation: string | null;
   is_builtin: boolean;
   sort_order: number;
+  scoring_mode?: 'standard' | 'pressure_ladder';
 }
 
 export interface DrillResult {
@@ -37,6 +46,8 @@ export interface DrillResult {
   max_score: number; // scaled_max if scaled, else max_score
   level: string;
   percent: number;
+  metric_scores?: PuttingMetricScore[];
+  putts_used?: number;
 }
 
 export interface PuttingSessionRecord {

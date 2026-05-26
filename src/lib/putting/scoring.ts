@@ -1,4 +1,5 @@
 import { DrillResult, PuttingDrill, getLevelLabel, SESSION_LEVELS } from '@/types/putting';
+import { DRILL_METRIC_WEIGHTS, PUTTING_METRIC_LABELS } from './drills';
 
 export function computeDrillResult(drill: PuttingDrill, counts: Record<string, number>): DrillResult {
   const rawScore = drill.scoring_inputs.reduce((sum, input) => {
@@ -14,6 +15,12 @@ export function computeDrillResult(drill: PuttingDrill, counts: Record<string, n
 
   const level = getLevelLabel(finalScore, drill.level_bands);
   const percent = max > 0 ? (finalScore / max) * 100 : 0;
+  const metricWeights = DRILL_METRIC_WEIGHTS[drill.name] ?? {};
+  const metric_scores = Object.entries(metricWeights).map(([metric, weight]) => ({
+    metric: metric as keyof typeof PUTTING_METRIC_LABELS,
+    label: PUTTING_METRIC_LABELS[metric as keyof typeof PUTTING_METRIC_LABELS],
+    percent: percent * (weight ?? 0),
+  }));
 
   return {
     drill_id: drill.id,
@@ -24,6 +31,8 @@ export function computeDrillResult(drill: PuttingDrill, counts: Record<string, n
     max_score: max,
     level,
     percent,
+    metric_scores,
+    putts_used: counts.putts_used,
   };
 }
 
@@ -69,6 +78,15 @@ export function summarizeSession(results: DrillResult[], drills: PuttingDrill[])
 
 export function validateDrillCounts(drill: PuttingDrill, counts: Record<string, number>): string | null {
   const total = drill.scoring_inputs.reduce((s, i) => s + (counts[i.id] ?? 0), 0);
+  if (drill.scoring_mode === 'pressure_ladder') {
+    if (total !== 1) {
+      return 'Choose the furthest level completed.';
+    }
+    if (!counts.putts_used || counts.putts_used < 1 || counts.putts_used > 20) {
+      return 'Enter putts used from 1 to 20.';
+    }
+    return null;
+  }
   if (total !== drill.reps) {
     return `Total reps must equal ${drill.reps} (currently ${total}).`;
   }

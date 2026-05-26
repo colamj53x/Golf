@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Eye, Flag, Footprints, Home, ScanLine, TreePine } from 'lucide-react';
+import { PuttingDashboard } from './PuttingDashboard';
 
 interface Props {
   onSelect: (category: 'indoor' | 'outdoor') => void;
@@ -132,6 +133,8 @@ export function PuttingHome({ onSelect }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <PuttingDashboard />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card

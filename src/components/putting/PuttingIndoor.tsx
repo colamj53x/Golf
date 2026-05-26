@@ -10,6 +10,7 @@ import { PuttingDrill, PuttingSessionRecord, DrillResult, LevelBand, ScoringInpu
 import { PuttingSessionRunner } from './PuttingSessionRunner';
 import { PuttingHistory } from './PuttingHistory';
 import { DrillBuilderDialog } from './DrillBuilderDialog';
+import { mergeLockedIndoorDrills } from '@/lib/putting/drills';
 
 interface Props {
   onBack: () => void;
@@ -40,12 +41,14 @@ export function PuttingIndoor({ onBack }: Props) {
       toast.error('Failed to load drills');
       return;
     }
-    setDrills((data ?? []).map(d => ({
+    const remoteDrills = (data ?? []).map(d => ({
       ...d,
       category: d.category as 'indoor' | 'outdoor',
       scoring_inputs: d.scoring_inputs as unknown as ScoringInput[],
       level_bands: d.level_bands as unknown as LevelBand[],
-    })));
+      scoring_mode: 'standard' as const,
+    }));
+    setDrills(mergeLockedIndoorDrills(remoteDrills));
   }, [user]);
 
   const loadSessions = useCallback(async () => {
