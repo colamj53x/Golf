@@ -737,15 +737,14 @@ function calculateRecommendations(
       return result;
     })
     .filter((result): result is ClubRecommendation => Boolean(result))
-    .filter((result) => result.confidence >= 25)
     .sort((a, b) => {
       const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
       const aDistance = Math.abs(a.avgTotal - adjustedTargetDistance);
       const bDistance = Math.abs(b.avgTotal - adjustedTargetDistance);
       const confidenceDelta = b.confidence - a.confidence;
-      return Math.abs(confidenceDelta) > 8 ? confidenceDelta : aDistance - bDistance;
+      return aDistance - bDistance || confidenceDelta;
     })
-    .slice(0, 8);
+    .slice(0, 10);
 }
 
 export function ClubSelectorTab() {
@@ -1067,12 +1066,12 @@ export function ClubSelectorTab() {
                 ) : (
                   <div className="space-y-3">
                     {recommendations.slice(0, 4).map((result, index) => (
-                      <div key={result.profileId} className="rounded-md border p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div key={result.profileId} className="overflow-hidden rounded-md border">
+                        <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                          {index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
+                        </div>
+                        <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-0">
                           <div>
-                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              {index === 0 ? 'Best' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
-                            </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-lg font-semibold">{result.clubName}</span>
                               <Badge variant="outline">{result.shotLabel}</Badge>
@@ -1085,18 +1084,18 @@ export function ClubSelectorTab() {
                             </p>
                           </div>
                         </div>
-                        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                        <div className="grid gap-2 p-4 pb-0 text-sm sm:grid-cols-3">
                           <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
                           <Metric label="Avg carry" value={formatDistance(result.avgCarry)} />
                           <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
                         </div>
-                        <div className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+                        <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
                           <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
                           <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
                           <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
                         </div>
                         {result.badges.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2 px-4 pb-4">
                             {result.badges.map((badge) => (
                               <Badge key={badge} variant="outline" className="gap-1">
                                 <ShieldAlert className="h-3 w-3" />
@@ -1140,9 +1139,11 @@ function ConfidenceMetric({ label, value }: { label: string; value: number | nul
   return (
     <div className="rounded-md bg-muted/50 px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="flex items-center gap-2 font-medium">
-        <span className={`block h-3.5 w-3.5 shrink-0 rounded-full border ${getPercentDotClass(value)}`} />
-        {fmtPct(value)}
+      <div className="flex items-center font-medium">
+        <span
+          className={`block h-5 w-5 shrink-0 rounded-full border ${getPercentDotClass(value)}`}
+          title={fmtPct(value)}
+        />
       </div>
     </div>
   );
