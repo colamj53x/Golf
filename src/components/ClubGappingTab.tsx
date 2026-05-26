@@ -916,7 +916,7 @@ function buildRow(
     rangeTargetSide,
     displayVariationPct,
     displayTotal,
-    displayCarry: savedTarget.targetCarry ?? (usesLiveTotal ? liveCarry : null) ?? rangeCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig),
+    displayCarry: savedTarget.targetCarry ?? (usesLiveTotal ? liveCarry : null) ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? rangeCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
     totalMin: variationWindow?.min ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
