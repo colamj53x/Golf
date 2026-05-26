@@ -247,17 +247,24 @@ function getPowerLabel(power: string): string {
 
 function getShotLabel(profile: ShotProfile): string {
   if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
+  if (profile.shotType === 'bump') return 'Bump and Run';
 
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
-  const base = profile.shotType === 'bump' ? 'B&R' : shotName;
   const power = getPowerLabel(profile.power);
-  return power ? `${base} ${power}` : base;
+  return power ? `${shotName} ${power}` : shotName;
 }
 
-function getShotBadgeClass(profile: ShotProfile): string {
+function powerStrength(power: string): number {
+  if (power === '10pm') return 3;
+  if (power === '9pm') return 2;
+  if (power === '730pm') return 1;
+  return 0;
+}
+
+function getShotBadgeClass(profile: ShotProfile, isHardestBump = false): string {
   if (profile.shotType === 'punch') return '';
   if (profile.shotType !== 'bump' && profile.shotType !== 'pitch' && profile.shotType !== 'chip') return '';
-  if (profile.power === 'full' || profile.power === '10pm') {
+  if (profile.shotType === 'bump' && isHardestBump) {
     return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
   }
   return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
@@ -509,6 +516,79 @@ function getFullShotTargetMax(
   return getProfileTargetTotal(fullProfile);
 }
 
+function getFullShotTargetTotal(
+  clubId: string,
+  profiles: ShotProfileMap,
+  practiceConfigs: ClubPracticeConfig[],
+  courseShots: Shot[],
+): number | null {
+  const fullProfile = profiles[`${clubId}_full_full`];
+  const savedTotal = getProfileTargetTotal(fullProfile);
+  if (savedTotal !== null) return savedTotal;
+
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === clubId && Number.isFinite(shot.target));
+  const highIntentTargets = [...clubShots]
+    .map((shot) => shot.target)
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a);
+
+  if (highIntentTargets.length) {
+    const count = Math.max(1, Math.ceil(highIntentTargets.length * 0.25));
+    return mean(highIntentTargets.slice(0, count));
+  }
+
+  const fullConfig = practiceConfigs.find((config) => config.clubId === `${clubId}_full_full`)
+    ?? practiceConfigs.find((config) => config.clubId === clubId);
+  return getMetricTargetValue(fullConfig, 'total_distance');
+}
+
+function getRangeTargetTotalForProfile(
+  profileId: string,
+  practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
+): number | null {
+  const sessions = practiceSessions
+    .filter((session) => session.clubId === profileId)
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const sessionTotal = getRangeSideStats(sessions, shotsBySession).total;
+  if (sessionTotal !== null) return sessionTotal;
+
+  const config = practiceConfigs.find((item) => item.clubId === profileId);
+  return getMetricTargetValue(config, 'total_distance');
+}
+
+function getClosestBumpPower(
+  shot: Shot,
+  clubId: string,
+  fullTargetTotal: number | null,
+  practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
+): string | null {
+  if (fullTargetTotal === null || !Number.isFinite(shot.target)) return null;
+  if (shot.target >= fullTargetTotal * 0.5) return null;
+
+  const practicedBumpPowers = [...new Set(practiceSessions
+    .map((session) => parsePracticeConfigKey(session.clubId))
+    .filter((parsed) => parsed.club === clubId && parsed.shotType === 'bump')
+    .map((parsed) => parsed.power))];
+
+  const options = practicedBumpPowers
+    .map((power) => {
+      const profileId = `${clubId}_bump_${power}`;
+      return {
+        power,
+        target: getRangeTargetTotalForProfile(profileId, practiceSessions, practiceConfigs, shotsBySession),
+      };
+    })
+    .filter((option): option is { power: string; target: number } => option.target !== null);
+
+  if (!options.length) return null;
+
+  return options.sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0].power;
+}
+
 function isPunchShot(
   shot: Shot,
   fullTargetMax: number | null,
@@ -531,10 +611,16 @@ function matchesProfileShot(
   shot: Shot,
   profile: ShotProfile,
   fullTargetMax: number | null,
+  fullTargetTotal: number | null,
+  practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
 ): boolean {
   const punchShot = isPunchShot(shot, fullTargetMax);
   if (profile.shotType === 'punch') return punchShot;
-  if (profile.shotType === 'full' && isPunchClub(profile.clubId)) return !punchShot;
+  const bumpPower = getClosestBumpPower(shot, profile.clubId, fullTargetTotal, practiceSessions, practiceConfigs, shotsBySession);
+  if (profile.shotType === 'bump') return !punchShot && bumpPower === profile.power;
+  if (profile.shotType === 'full') return !punchShot && bumpPower === null;
   return profile.shotType === 'full';
 }
 
@@ -549,6 +635,7 @@ function buildRow(
   globalQualityCutoff: number,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
+  const fullTargetTotal = getFullShotTargetTotal(profile.clubId, profiles, practiceConfigs, courseShots);
   const savedTarget = getTargetSettings(profile, target);
   const qualityCutoff = globalQualityCutoff || savedTarget.targetQualityCutoff || DEFAULT_QUALITY_CUTOFF;
   const sessions = practiceSessions
@@ -572,7 +659,15 @@ function buildRow(
     ? rangeVariationPct({ min: rangeSideStats.totalMin, max: rangeSideStats.totalMax })
     : rangeTargetVariationPct;
   const intentWindow = getIntentDistanceWindow(savedTarget, rangeTotalWindow, rangeTotal, rangeLiveVariationPct);
-  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(
+    shot,
+    profile,
+    fullTargetMax,
+    fullTargetTotal,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+  ));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const shouldSplitByIntent = profile.targets.length > 1;
   const targetReferenceShots = shouldSplitByIntent
@@ -794,7 +889,16 @@ export function ClubGappingTab() {
               </TableHeader>
               <TableBody>
                 {groupedRows.map(([clubName, clubRows]) => (
-                  clubRows.map((row, index) => (
+                  clubRows.map((row, index) => {
+                    const strongestBumpPower = Math.max(
+                      ...clubRows
+                        .filter((clubRow) => clubRow.profile.shotType === 'bump')
+                        .map((clubRow) => powerStrength(clubRow.profile.power)),
+                      -1,
+                    );
+                    const isHardestBump = row.profile.shotType === 'bump' && powerStrength(row.profile.power) === strongestBumpPower;
+
+                    return (
                     <TableRow key={`${row.profile.id}-${row.target}`}>
                       <TableCell className="font-semibold">
                         {index === 0 ? clubName : ''}
@@ -815,7 +919,7 @@ export function ClubGappingTab() {
                       <TableCell>
                         <Badge
                           variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}
-                          className={getShotBadgeClass(row.profile)}
+                          className={getShotBadgeClass(row.profile, isHardestBump)}
                         >
                           {getShotLabel(row.profile)}
                         </Badge>
@@ -844,7 +948,8 @@ export function ClubGappingTab() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
