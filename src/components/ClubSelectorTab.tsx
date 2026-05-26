@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildClubGappingRows, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/components/ClubGappingTab';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
@@ -172,6 +172,12 @@ function slopeSideAdjustment(lie: LieOption): number {
   if (lie === 'uphill') return -5;
   if (lie === 'downhill') return 5;
   return 0;
+}
+
+function getSelectorShotContext(lie: LieOption): ShotContext {
+  if (lie === 'tee') return 'tee';
+  if (lie === 'roughRecovery') return 'roughRecovery';
+  return 'fairway';
 }
 
 function matchesTargetDestination(shot: Shot, target: TargetOption): boolean {
@@ -574,62 +580,49 @@ function buildPointer(result: ClubRecommendation, target: TargetOption, trouble:
 }
 
 function calculateRecommendations(
-  shots: Shot[],
+  gappingRows: GappingRow[],
   clubs: ClubConfig[],
-  practiceConfigs: ClubPracticeConfig[],
   targetDistance: number,
   minimumSafeDistance: number | null,
   lie: LieOption,
   target: TargetOption,
   trouble: TroubleOption[],
   mustCarry: boolean,
-  profiles: ShotProfile[],
 ): ClubRecommendation[] {
   if (!targetDistance || targetDistance <= 0) return [];
 
-  return profiles
-    .filter((profile) => profile.enabled && profile.showOnCourse && profile.targets.includes(target))
-    .map((primaryProfile) => {
+  return gappingRows
+    .filter((row) => row.target === target)
+    .filter((row) => row.displayTotal !== null)
+    .map((row) => {
+      const primaryProfile = row.profile;
       const club = clubs.find((item) => item.id === primaryProfile.clubId);
       if (!club || !canTargetDestination(club, target)) return null;
 
-      const mappedTotal = getMappedTotal(primaryProfile, target, practiceConfigs);
-      const mappedSide = getMappedSide(primaryProfile, target, practiceConfigs);
-      const fallbackDistance = mappedTotal ?? club.stockDistance;
+      const mappedTotal = row.displayTotal;
+      const mappedSide = Math.max(row.displaySideLeft ?? 0, row.displaySideRight ?? 0) || null;
+      const fallbackDistance = mappedTotal;
       const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
       const sideAdjustment = slopeSideAdjustment(lie);
-      const lieSample = isSlopeLie(lie) ? 'club' : 'lie';
       if (Math.abs(fallbackDistance - adjustedTargetDistance) > 45) return null;
 
       const distanceWindow = 10;
-      const intentWindow = 20;
       const minSafe = minimumSafeDistance && minimumSafeDistance > 0 ? minimumSafeDistance : null;
       const isSafeDistance = (shot: Shot) =>
         shot.total >= (minSafe ?? adjustedTargetDistance - distanceWindow) &&
         shot.total <= adjustedTargetDistance + distanceWindow;
       const isGoodDistance = (shot: Shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality) && isSafeDistance(shot);
 
-      const profileShots = getProfileSamples(shots, primaryProfile, mappedTotal, isSlopeLie(lie) ? undefined : lie);
-      const likelyTargetIntentShots = profileShots.filter((shot) =>
-        Math.abs(shot.target - adjustedTargetDistance) <= intentWindow &&
-        (target === 'fairway' || club.distanceToTargetEnabled)
-      );
-      const scenarioShots = isSlopeLie(lie)
-        ? []
-        : likelyTargetIntentShots.filter((shot) => matchesLie(shot, lie));
-      const lieShots = isSlopeLie(lie)
-        ? []
-        : profileShots.filter((shot) => matchesLie(shot, lie) && (target === 'fairway' || club.distanceToTargetEnabled));
-      const sample = scenarioShots.length >= 3 ? scenarioShots : likelyTargetIntentShots.length >= 3 ? likelyTargetIntentShots : lieShots.length >= 3 ? lieShots : profileShots;
-      const sampleLabel = scenarioShots.length >= 3 ? 'scenario' : likelyTargetIntentShots.length >= 3 ? 'distance' : lieShots.length >= 3 ? lieSample : 'club';
+      const sample = row.topQuartile.length ? row.topQuartile : row.sample;
+      const sampleLabel = row.intentShotCount > 0 ? 'mapping' : row.rangeShotCount > 0 ? 'range' : 'club';
 
-      const avgTotal = sample.length ? mean(sample.map((shot) => shot.total || 0)) : fallbackDistance;
-      const avgSide = sample.length ? mean(sample.map((shot) => (shot.side || 0) + sideAdjustment)) : sideAdjustment;
+      const avgTotal = mappedTotal;
+      const avgSide = (row.sideBias ?? 0) + sideAdjustment;
       const sideBand = Math.max(5, mappedSide ?? club.acceptableSideBand);
       const distanceBand = Math.max(6, club.acceptableDistanceBand);
       const goodShotPct = sample.length
         ? (sample.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality)).length / sample.length) * 100
-        : 45;
+        : row.recentTargetPct ?? 45;
 
       const leftRisk = sample.length ? (sample.filter((shot) => (shot.side + sideAdjustment) < -sideBand).length / sample.length) * 100 : lie === 'uphill' ? 35 : 20;
       const rightRisk = sample.length ? (sample.filter((shot) => (shot.side + sideAdjustment) > sideBand).length / sample.length) * 100 : lie === 'downhill' ? 35 : 20;
@@ -643,15 +636,10 @@ function calculateRecommendations(
       const hitCount = sample.filter((shot) => isSafeDistance(shot) && matchesTargetDestination(shot, target)).length;
       const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
       const goodDistanceCount = sample.filter(isGoodDistance).length;
-      const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : 0;
-      const goodShotDistanceAverage = sample.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality));
-      const goodAvgTotal = goodShotDistanceAverage.length
-        ? mean(goodShotDistanceAverage.map((shot) => shot.total || 0))
-        : fallbackDistance;
+      const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : row.recentTargetPct ?? 0;
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
-      const goodDistanceError = Math.abs(goodAvgTotal - adjustedTargetDistance);
-      const targetFit = clamp((100 - distanceError * (target === 'green' ? 3 : 2)) * 0.35 + (100 - goodDistanceError * 4) * 0.65);
+      const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
       const troublePenalty = trouble.reduce((total, side) => {
         if (side === 'left') return total + leftRisk;
         if (side === 'right') return total + rightRisk;
@@ -662,11 +650,12 @@ function calculateRecommendations(
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
       const liePenalty = lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
+      const mappingConfidence = row.recentTargetPct ?? row.rangeConfidence ?? goodShotPct;
       const confidence = Math.round(clamp(
-        hitPct * 0.34 +
-        targetFit * 0.24 +
+        mappingConfidence * 0.34 +
+        targetFit * 0.28 +
         goodDistancePct * 0.18 +
-        goodShotPct * 0.12 +
+        goodShotPct * 0.08 +
         (100 - Math.min(leftRisk + rightRisk, 100)) * 0.06 +
         (100 - Math.min(shortRisk + longRisk, 100)) * 0.06 -
         troublePenalty * 0.35 -
@@ -700,7 +689,7 @@ function calculateRecommendations(
         routine: primaryProfile.routine,
         confidence,
         targetFit: Math.round(targetFit),
-        sampleCount: sample.length,
+        sampleCount: row.intentShotCount || row.rangeShotCount || sample.length,
         sampleLabel,
         dataConfidence: getDataConfidence(sample.length),
         avgTotal: mappedTotal ?? avgTotal,
@@ -760,9 +749,19 @@ export function ClubSelectorTab() {
 
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
+  const selectorGappingRows = useMemo(() => buildClubGappingRows({
+    profiles: shotProfiles,
+    shots,
+    shotContext: getSelectorShotContext(lie),
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    shotCategoryOverrides,
+  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
   const recommendations = useMemo(
-    () => calculateRecommendations(shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, Object.values(shotProfiles)),
-    [shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, shotProfiles],
+    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry),
+    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
