@@ -73,8 +73,10 @@ interface GappingRow {
   displaySideLeft: number | null;
   displaySideRight: number | null;
   sideBias: number | null;
-  targetPct: number | null;
-  safePct: number | null;
+  overallTargetPct: number | null;
+  recentTargetPct: number | null;
+  overallSafePct: number | null;
+  recentSafePct: number | null;
   rangeConfidence: number | null;
   shotCount: number;
   intentShotCount: number;
@@ -554,7 +556,6 @@ function buildRow(
   const lastThreeIntentShots = shouldSplitByIntent
     ? lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow))
     : lastThreeClubShots;
-  const confidenceShots = lastThreeIntentShots.length ? lastThreeIntentShots : targetReferenceShots;
 
   return {
     profile,
@@ -580,8 +581,10 @@ function buildRow(
     displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
     displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
     sideBias: mean(sides) ?? rangeSideStats.mean,
-    targetPct: confidenceShots.length ? (confidenceShots.filter((shot) => matchesTarget(shot, target)).length / confidenceShots.length) * 100 : null,
-    safePct: confidenceShots.length ? (confidenceShots.filter(isSafeOutcome).length / confidenceShots.length) * 100 : null,
+    overallTargetPct: targetReferenceShots.length ? (targetReferenceShots.filter((shot) => matchesTarget(shot, target)).length / targetReferenceShots.length) * 100 : null,
+    recentTargetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
+    overallSafePct: targetReferenceShots.length ? (targetReferenceShots.filter(isSafeOutcome).length / targetReferenceShots.length) * 100 : null,
+    recentSafePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: targetReferenceShots.length,
     intentShotCount: targetReferenceShots.length,
@@ -726,8 +729,10 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Mean Side</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry Range</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Target %</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Safe %</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Overall T</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Recent T</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Overall Safe</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Recent Safe</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
                   <TableHead className="text-center whitespace-nowrap">Shots</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -753,10 +758,16 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.targetPct)}`} title={`Target ${fmt(row.targetPct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.overallTargetPct)}`} title={`Overall target ${fmt(row.overallTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.safePct)}`} title={`Safe ${fmt(row.safePct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Recent target ${fmt(row.recentTargetPct, '%')}`} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.overallSafePct)}`} title={`Overall safe ${fmt(row.overallSafePct, '%')}`} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Recent safe ${fmt(row.recentSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
@@ -784,7 +795,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={15} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
