@@ -726,7 +726,6 @@ function calculateRecommendations(
       if (Math.abs(avgSide) > sideBand) badges.push(avgSide > 0 ? 'right bias' : 'left bias');
       if (lie === 'uphill') badges.push('take more club', 'aim right');
       if (lie === 'downhill') badges.push('take less club', 'aim left');
-      if (sampleLabel !== 'scenario') badges.push(`${sampleLabel} data`);
 
       const result: ClubRecommendation = {
         clubId: club.id,
@@ -1096,9 +1095,6 @@ export function ClubSelectorTab() {
                   <Target className="h-5 w-5" />
                   Recommended Options
                 </CardTitle>
-                <CardDescription>
-                  Uses the Club Gapping mapped output, then adjusts for lie, trouble, and target fit.
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 {recommendations.length === 0 ? (
@@ -1117,8 +1113,9 @@ export function ClubSelectorTab() {
                           </div>
                         )}
                         <div className="overflow-hidden rounded-md border">
-                          <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                            {index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
+                          <div className={`flex items-center justify-between gap-3 px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                            <span>{index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}</span>
+                            <span>Fit {result.bestFitScore}/100</span>
                           </div>
                           <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-0">
                             <div>
@@ -1140,11 +1137,8 @@ export function ClubSelectorTab() {
                             <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
                           </div>
                           <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
-                            <Metric label="Best fit score" value={`${result.bestFitScore}/100`} />
                             <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
                             <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
-                          </div>
-                          <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-3">
                             <Metric label={`Within ${numericDistanceTolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
                           </div>
                           {result.badges.length > 0 && (
