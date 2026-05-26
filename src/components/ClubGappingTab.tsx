@@ -554,6 +554,43 @@ function profileFromPracticeKey(key: string): ShotProfile | null {
   };
 }
 
+function makeGappingProfile(clubId: string, shotType: string, power: string): ShotProfile {
+  return {
+    id: `${clubId}_${shotType}_${power}`,
+    clubId,
+    shotType,
+    power,
+    enabled: true,
+    showInPractice: true,
+    showOnCourse: true,
+    targets: ['green'],
+    technique: '',
+    routine: '',
+    targetTotal: null,
+    targetCarry: null,
+    targetSideLeft: null,
+    targetSideRight: null,
+    targetVariationPct: null,
+    targetQualityCutoff: null,
+    targetOverrides: {},
+  };
+}
+
+function ensureVisibleShortBucketProfiles(profileMap: ShotProfileMap, clubIds: string[], shotType: 'bump' | 'pitch' | 'chip') {
+  for (const clubId of clubIds) {
+    for (const power of ['full', '9pm']) {
+      const id = `${clubId}_${shotType}_${power}`;
+      const existing = profileMap[id] ?? makeGappingProfile(clubId, shotType, power);
+      profileMap[id] = {
+        ...existing,
+        enabled: true,
+        showOnCourse: true,
+        targets: existing.targets.length ? existing.targets : ['green'],
+      };
+    }
+  }
+}
+
 function getFullShotTargetMax(
   clubId: string,
   profiles: ShotProfileMap,
@@ -620,11 +657,21 @@ function getRangeSessionTotalForProfile(
   return getRangeSideStats(sessions, shotsBySession).total;
 }
 
-function getBumpTargets(fullTargetTotal: number | null): Array<{ power: string; target: number }> {
+function getBumpFirmAnchor(clubId: string, fullTargetTotal: number): number {
+  if (clubId === '8i') return 40;
+  return fullTargetTotal * 0.4;
+}
+
+function getBumpHalfMax(firmAnchor: number): number {
+  return firmAnchor * 0.875;
+}
+
+function getBumpTargets(clubId: string, fullTargetTotal: number | null): Array<{ power: string; target: number }> {
   if (fullTargetTotal === null) return [];
+  const firmAnchor = getBumpFirmAnchor(clubId, fullTargetTotal);
   return [
-    { power: 'full', target: fullTargetTotal * 0.4 },
-    { power: '9pm', target: fullTargetTotal * 0.2 },
+    { power: 'full', target: firmAnchor },
+    { power: '9pm', target: firmAnchor * 0.5 },
   ];
 }
 
@@ -634,12 +681,12 @@ function getClosestBumpPower(
   fullTargetTotal: number | null,
 ): string | null {
   if (fullTargetTotal === null || !Number.isFinite(shot.target)) return null;
-  const options = [
-    { power: 'full-swing', target: fullTargetTotal },
-    ...getBumpTargets(fullTargetTotal),
-  ];
-  const closest = options.sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0];
-  return closest.power === 'full-swing' ? null : closest.power;
+  const firmAnchor = getBumpFirmAnchor(clubId, fullTargetTotal);
+  const firmMin = firmAnchor * 0.8;
+  const firmMax = firmAnchor * 1.2;
+  if (shot.target >= firmMin && shot.target <= firmMax) return 'full';
+  if (shot.target < getBumpHalfMax(firmAnchor)) return '9pm';
+  return null;
 }
 
 function getPitchTargets(
@@ -748,7 +795,7 @@ function buildRow(
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
   const bumpTargetTotal = profile.shotType === 'bump'
-    ? getBumpTargets(fullTargetTotal).find((option) => option.power === profile.power)?.target ?? null
+    ? getBumpTargets(profile.clubId, fullTargetTotal).find((option) => option.power === profile.power)?.target ?? null
     : null;
   const rangeTargetTotal = profile.shotType === 'pitch'
     ? getPitchTargets(profile.clubId, practiceSessions, practiceConfigs, shotsBySession).find((option) => option.power === profile.power)?.target ?? null
@@ -889,6 +936,12 @@ export function ClubGappingTab() {
       const rangeProfile = profileFromPracticeKey(session.clubId);
       if (rangeProfile) profilesWithRangeSessions[session.clubId] = rangeProfile;
     }
+    const bumpClubIds = new Set(['8i', '9i']);
+    for (const session of practiceSessions) {
+      const parsed = parsePracticeConfigKey(session.clubId);
+      if (parsed.club && parsed.shotType === 'bump') bumpClubIds.add(parsed.club);
+    }
+    ensureVisibleShortBucketProfiles(profilesWithRangeSessions, [...bumpClubIds], 'bump');
 
     return Object.values(profilesWithRangeSessions)
       .filter((profile) => {
