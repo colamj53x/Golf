@@ -111,7 +111,12 @@ export function PuttingHome({ onSelect }: Props) {
               {techniqueSteps.map((step, index) => {
                 const Icon = step.icon;
                 return (
-                  <div key={step.title} className="flex gap-3 rounded-md border bg-muted/20 p-3">
+                  <div
+                    key={step.title}
+                    className={`flex gap-3 rounded-md border bg-muted/20 p-3 ${
+                      index === techniqueSteps.length - 1 ? 'sm:col-span-2' : ''
+                    }`}
+                  >
                     <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <div>
                       <p className="text-sm font-semibold">{index + 1}. {step.title}</p>
