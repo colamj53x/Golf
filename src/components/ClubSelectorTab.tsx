@@ -54,6 +54,7 @@ interface ClubRecommendation {
   technique: string;
   routine: string;
   confidence: number;
+  bestFitScore: number;
   targetFit: number;
   sampleCount: number;
   sampleLabel: string;
@@ -673,6 +674,20 @@ function calculateRecommendations(
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const mappingConfidence = row.recentTargetPct ?? row.rangeConfidence ?? goodShotPct;
       const isShortOfTarget = target === 'green' && avgTotal < adjustedTargetDistance - 5;
+      const carryFit = minimumSafeDistance && minimumSafeDistance > 0
+        ? avgCarry !== null && avgCarry >= minimumSafeDistance
+          ? 100
+          : 0
+        : 100;
+      const troubleFit = clamp(100 - troublePenalty);
+      const bestFitScore = Math.round(clamp(
+        targetFit * 0.35 +
+        (row.recentSafePct ?? 50) * 0.20 +
+        mappingConfidence * 0.15 +
+        (within5Pct ?? 0) * 0.15 +
+        troubleFit * 0.10 +
+        carryFit * 0.05
+      ));
       const confidence = Math.round(clamp(
         mappingConfidence * 0.34 +
         targetFit * 0.28 +
@@ -711,6 +726,7 @@ function calculateRecommendations(
         technique: primaryProfile.technique,
         routine: primaryProfile.routine,
         confidence,
+        bestFitScore,
         targetFit: Math.round(targetFit),
         sampleCount: row.intentShotCount || row.rangeShotCount || sample.length,
         sampleLabel,
@@ -742,8 +758,7 @@ function calculateRecommendations(
       const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
       const aDistance = Math.abs(a.avgTotal - adjustedTargetDistance);
       const bDistance = Math.abs(b.avgTotal - adjustedTargetDistance);
-      const confidenceDelta = b.confidence - a.confidence;
-      return aDistance - bDistance || confidenceDelta;
+      return b.bestFitScore - a.bestFitScore || aDistance - bDistance;
     })
     .slice(0, 10);
 }
@@ -1097,8 +1112,11 @@ export function ClubSelectorTab() {
                             <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
                           </div>
                           <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
+                            <Metric label="Best fit score" value={`${result.bestFitScore}/100`} />
                             <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
                             <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
+                          </div>
+                          <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-3">
                             <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
                           </div>
                           {result.badges.length > 0 && (
