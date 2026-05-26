@@ -64,7 +64,7 @@ interface ClubRecommendation {
   avgSide: number;
   shotConfidence: number | null;
   safetyConfidence: number | null;
-  within5Pct: number | null;
+  withinTolerancePct: number | null;
   isShortOfTarget: boolean;
   leftRisk: number;
   rightRisk: number;
@@ -185,6 +185,15 @@ function getSelectorShotContext(lie: LieOption): ShotContext {
   if (lie === 'tee') return 'tee';
   if (lie === 'roughRecovery') return 'roughRecovery';
   return 'fairway';
+}
+
+function uniqueShots(shots: Shot[]): Shot[] {
+  const seen = new Set<string>();
+  return shots.filter((shot) => {
+    if (seen.has(shot.id)) return false;
+    seen.add(shot.id);
+    return true;
+  });
 }
 
 function matchesTargetDestination(shot: Shot, target: TargetOption): boolean {
@@ -602,6 +611,7 @@ function calculateRecommendations(
   clubs: ClubConfig[],
   targetDistance: number,
   minimumSafeDistance: number | null,
+  tolerancePct: number,
   lie: LieOption,
   target: TargetOption,
   trouble: TroubleOption[],
@@ -656,9 +666,12 @@ function calculateRecommendations(
       const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
       const goodDistanceCount = sample.filter(isGoodDistance).length;
       const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : row.recentTargetPct ?? 0;
-      const within5Sample = row.sample;
-      const within5Count = within5Sample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= 5).length;
-      const within5Pct = within5Sample.length ? (within5Count / within5Sample.length) * 100 : null;
+      const toleranceDistance = adjustedTargetDistance * (tolerancePct / 100);
+      const withinToleranceSample = uniqueShots(gappingRows
+        .filter((otherRow) => otherRow.profile.id === row.profile.id)
+        .flatMap((otherRow) => otherRow.sample));
+      const withinToleranceCount = withinToleranceSample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= toleranceDistance).length;
+      const withinTolerancePct = withinToleranceSample.length ? (withinToleranceCount / withinToleranceSample.length) * 100 : null;
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
       const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
@@ -684,7 +697,7 @@ function calculateRecommendations(
         targetFit * 0.35 +
         (row.recentSafePct ?? 50) * 0.20 +
         mappingConfidence * 0.15 +
-        (within5Pct ?? 0) * 0.15 +
+        (withinTolerancePct ?? 0) * 0.15 +
         troubleFit * 0.10 +
         carryFit * 0.05
       ));
@@ -736,7 +749,7 @@ function calculateRecommendations(
         avgSide,
         shotConfidence: row.recentTargetPct,
         safetyConfidence: row.recentSafePct,
-        within5Pct,
+        withinTolerancePct,
         isShortOfTarget,
         leftRisk,
         rightRisk,
@@ -771,6 +784,7 @@ export function ClubSelectorTab() {
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [targetDistance, setTargetDistance] = useState('120');
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
+  const [distanceTolerancePct, setDistanceTolerancePct] = useState('5');
   const [lie, setLie] = useState<LieOption>('fairway');
   const [target, setTarget] = useState<TargetOption>('green');
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
@@ -791,6 +805,7 @@ export function ClubSelectorTab() {
 
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
+  const numericDistanceTolerancePct = Number(distanceTolerancePct) > 0 ? Number(distanceTolerancePct) : 5;
   const selectorGappingRows = useMemo(() => buildClubGappingRows({
     profiles: shotProfiles,
     shots,
@@ -802,8 +817,8 @@ export function ClubSelectorTab() {
     shotCategoryOverrides,
   }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
   const recommendations = useMemo(
-    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry),
-    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry],
+    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry),
+    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -992,6 +1007,19 @@ export function ClubSelectorTab() {
                         placeholder="Optional"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="distance-tolerance">Tolerance (%)</Label>
+                      <Input
+                        id="distance-tolerance"
+                        type="number"
+                        inputMode="decimal"
+                        min="1"
+                        max="25"
+                        step="0.5"
+                        value={distanceTolerancePct}
+                        onChange={(event) => setDistanceTolerancePct(event.target.value)}
+                      />
+                    </div>
                   </div>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <ButtonGroup label="Lie">
@@ -1117,7 +1145,7 @@ export function ClubSelectorTab() {
                             <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
                           </div>
                           <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-3">
-                            <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
+                            <Metric label={`Within ${numericDistanceTolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
                           </div>
                           {result.badges.length > 0 && (
                             <div className="flex flex-wrap gap-2 px-4 pb-4">
