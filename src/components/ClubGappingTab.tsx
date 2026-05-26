@@ -286,6 +286,15 @@ function isVisibleShortBucket(profile: ShotProfile): boolean {
   return isShortShot(profile) && (profile.power === 'full' || profile.power === '9pm');
 }
 
+function visibleProfileId(profileId: string): string {
+  const parsed = parsePracticeConfigKey(profileId);
+  if (!parsed.club || !parsed.shotType || !parsed.power) return profileId;
+  if ((parsed.shotType === 'bump' || parsed.shotType === 'pitch' || parsed.shotType === 'chip') && parsed.power !== 'full') {
+    return `${parsed.club}_${parsed.shotType}_9pm`;
+  }
+  return profileId;
+}
+
 function getShotBadgeClass(profile: ShotProfile, isHardestShortShot = false): string {
   if (profile.shotType === 'punch') return '';
   if (!isShortShot(profile)) return '';
@@ -700,7 +709,7 @@ function matchesProfileShot(
   shotCategoryOverrides: ShotCategoryOverrides,
 ): boolean {
   const override = shotCategoryOverrides[shot.id];
-  if (override) return override.profileId === profile.id;
+  if (override) return visibleProfileId(override.profileId) === profile.id;
 
   const punchShot = isPunchShot(shot, fullTargetMax);
   if (profile.shotType === 'punch') return punchShot;
@@ -902,7 +911,7 @@ export function ClubGappingTab() {
         gappingHcpTarget,
         shotCategoryOverrides,
       )))
-      .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
+      .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0) || (shotContext !== 'tee' && isVisibleShortBucket(row.profile) && row.displayTotal !== null));
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
 
   const groupedRows = useMemo(() => {
@@ -999,7 +1008,7 @@ export function ClubGappingTab() {
     setShotCategoryOverrides((prev) => ({
       ...prev,
       [shot.id]: {
-        profileId: nextRow.profile.id,
+        profileId: visibleProfileId(nextRow.profile.id),
         target: nextRow.target,
       },
     }));
