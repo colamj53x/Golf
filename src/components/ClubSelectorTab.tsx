@@ -18,8 +18,11 @@ import { ClubConfig, Shot } from '@/types/golf';
 import { ClubPracticeConfig } from '@/types/practice';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
-const WEDGE_IDS = ['pw', 'gw', 'sw', 'lw'];
 const WEDGE_SHOT_TYPES = ['chip', 'pitch', 'bump'];
+const MATRIX_CLUB_ORDER = ['8i', '9i', 'pw', 'gw', 'sw', 'lw'];
+const MATRIX_BUMP_CLUB_IDS = ['8i', '9i'];
+const MATRIX_PITCH_CLUB_IDS = ['pw', 'gw', 'sw'];
+const MATRIX_CHIP_CLUB_IDS = ['pw', 'gw'];
 const MATRIX_POWER_COLUMNS = [
   { id: 'full', label: 'Full' },
   { id: '9pm', label: 'Half' },
@@ -86,6 +89,11 @@ interface MatrixProfileResult {
   shotType: string;
   power: MatrixPower;
   cell: WedgeMatrixCell;
+}
+
+interface MatrixCombo {
+  clubId: string;
+  shotType: string;
 }
 
 const lieOptions: Array<{ value: LieOption; label: string }> = [
@@ -250,8 +258,8 @@ function getMappedSide(profile: ShotProfile, target: ProfileTarget, practiceConf
   return getPracticeMetricRange(getPracticeConfigForProfile(practiceConfigs, profile), 'avg_lateral_miss').max;
 }
 
-function isWedgeProfile(profile: ShotProfile): boolean {
-  return WEDGE_IDS.includes(profile.clubId) && WEDGE_SHOT_TYPES.includes(profile.shotType);
+function isMatrixShotProfile(profile: ShotProfile): boolean {
+  return WEDGE_SHOT_TYPES.includes(profile.shotType) && isMatrixPower(profile.power);
 }
 
 function isMatrixPower(power: string): power is MatrixPower {
@@ -259,7 +267,7 @@ function isMatrixPower(power: string): power is MatrixPower {
 }
 
 function getClubSortIndex(clubId: string): number {
-  const index = WEDGE_IDS.indexOf(clubId);
+  const index = MATRIX_CLUB_ORDER.indexOf(clubId);
   return index === -1 ? Number.POSITIVE_INFINITY : index;
 }
 
@@ -534,11 +542,35 @@ export function ClubSelectorTab() {
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
-    const configuredProfiles = Object.values(shotProfiles)
-      .filter((profile) => profile.enabled && profile.showOnCourse && isWedgeProfile(profile));
+    const matrixCombos = new Map<string, MatrixCombo>();
+    const addCombo = (clubId: string, shotType: string) => {
+      if (!clubId || !WEDGE_SHOT_TYPES.includes(shotType)) return;
+      matrixCombos.set(`${clubId}-${shotType}`, { clubId, shotType });
+    };
+
+    MATRIX_BUMP_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'bump'));
+    MATRIX_PITCH_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'pitch'));
+    MATRIX_CHIP_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'chip'));
+
+    for (const session of practiceSessions) {
+      const parsed = parsePracticeConfigKey(session.clubId);
+      addCombo(parsed.club, parsed.shotType);
+    }
+
+    for (const profile of Object.values(shotProfiles)) {
+      if (profile.enabled && profile.showOnCourse && isMatrixShotProfile(profile)) {
+        addCombo(profile.clubId, profile.shotType);
+      }
+    }
+
+    const configuredProfiles = [...matrixCombos.values()].flatMap((combo) =>
+      MATRIX_POWER_COLUMNS
+        .map((column) => shotProfiles[`${combo.clubId}_${combo.shotType}_${column.id}`])
+        .filter((profile): profile is ShotProfile => Boolean(profile))
+    );
     const sessionProfiles = practiceSessions
       .map((session) => parsePracticeConfigKey(session.clubId))
-      .filter((parsed) => WEDGE_IDS.includes(parsed.club) && WEDGE_SHOT_TYPES.includes(parsed.shotType) && isMatrixPower(parsed.power))
+      .filter((parsed) => WEDGE_SHOT_TYPES.includes(parsed.shotType) && isMatrixPower(parsed.power))
       .map((parsed) => shotProfiles[`${parsed.club}_${parsed.shotType}_${parsed.power}`])
       .filter((profile): profile is ShotProfile => Boolean(profile));
     const profileMap = new Map([...configuredProfiles, ...sessionProfiles].map((profile) => [profile.id, profile]));
@@ -604,6 +636,16 @@ export function ClubSelectorTab() {
       .filter((cell): cell is MatrixProfileResult => Boolean(cell));
 
     const rows = new Map<string, WedgeMatrixRow>();
+    for (const combo of matrixCombos.values()) {
+      const club = clubs.find((item) => item.id === combo.clubId);
+      rows.set(`${combo.clubId}-${combo.shotType}`, {
+        clubId: combo.clubId,
+        clubName: club?.clubName ?? combo.clubId.toUpperCase(),
+        shotType: combo.shotType,
+        cells: {},
+      });
+    }
+
     for (const item of cells) {
       const key = `${item.clubId}-${item.shotType}`;
       const row = rows.get(key) ?? {
@@ -672,7 +714,7 @@ export function ClubSelectorTab() {
                       <TableHead className="min-w-[110px]">Club</TableHead>
                       <TableHead className="min-w-[140px]">Shot</TableHead>
                       {MATRIX_POWER_COLUMNS.map((column) => (
-                        <TableHead key={column.id} className="min-w-[220px] text-center">
+                        <TableHead key={column.id} className="min-w-[180px] text-center">
                           {column.label}
                         </TableHead>
                       ))}
@@ -946,31 +988,31 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function MatrixCell({ cell }: { cell?: WedgeMatrixCell }) {
   if (!cell) {
-    return <div className="py-4 text-center text-sm text-muted-foreground">-</div>;
+    return <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">-</div>;
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-      <div>
-        <div className="text-xs text-muted-foreground">Carry</div>
-        <div className="font-medium">{formatDistance(cell.carry)}</div>
+    <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/20 p-2 text-xs">
+      <div className="min-w-0">
+        <div className="text-muted-foreground">Carry</div>
+        <div className="font-semibold">{formatDistance(cell.carry)}</div>
       </div>
-      <div>
-        <div className="text-xs text-muted-foreground">Total</div>
+      <div className="min-w-0">
+        <div className="text-muted-foreground">Total</div>
         <div className="font-semibold">{formatDistance(cell.total)}</div>
       </div>
-      <div>
-        <div className="text-xs text-muted-foreground">Bias</div>
-        <div className="font-medium">{fmtSigned(cell.bias)}</div>
+      <div className="min-w-0">
+        <div className="text-muted-foreground">Bias</div>
+        <div className="font-semibold">{fmtSigned(cell.bias)}</div>
       </div>
-      <div>
-        <div className="text-xs text-muted-foreground">Last 20 T</div>
-        <div className="flex items-center gap-2">
+      <div className="min-w-0">
+        <div className="text-muted-foreground">L20 T</div>
+        <div className="flex items-center gap-1.5">
           <span
-            className={`block h-4 w-4 rounded-full border ${getPercentDotClass(cell.last20TargetPct)}`}
+            className={`block h-3.5 w-3.5 shrink-0 rounded-full border ${getPercentDotClass(cell.last20TargetPct)}`}
             title={`Last 20 target ${fmtPct(cell.last20TargetPct)}`}
           />
-          <span className="font-medium">{fmtPct(cell.last20TargetPct)}</span>
+          <span className="font-semibold">{fmtPct(cell.last20TargetPct)}</span>
         </div>
       </div>
     </div>
