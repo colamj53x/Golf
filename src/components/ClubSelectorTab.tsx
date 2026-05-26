@@ -3,6 +3,7 @@ import type React from 'react';
 import { AlertCircle, ArrowDownUp, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
+import { ShotsBySession, usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,13 +12,19 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { buildClubGappingRows, loadShotCategoryOverrides } from '@/components/ClubGappingTab';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { ClubConfig, Shot } from '@/types/golf';
-import { ClubPracticeConfig } from '@/types/practice';
+import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
+const GAP_WEDGE_FULL_PITCH_TARGET = 70;
+const CHIP_TARGETS: Record<string, { full: number; half: number }> = {
+  pw: { full: 34, half: 18 },
+  gw: { full: 19, half: 10 },
+};
 const WEDGE_SHOT_TYPES = ['chip', 'pitch', 'bump'];
 const MATRIX_CLUB_ORDER = ['8i', '9i', 'pw', 'gw', 'sw', 'lw'];
 const MATRIX_BUMP_CLUB_IDS = ['8i', '9i'];
@@ -224,6 +231,47 @@ function getPracticeMetricRange(config: ClubPracticeConfig | undefined, metricId
   return { min: min ?? max, max: max ?? min };
 }
 
+function getPracticeMetricNumber(metrics: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/[^\d.-]/g, ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function getRangeSideStats(
+  sessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+): {
+  total: number | null;
+  carry: number | null;
+  mean: number | null;
+} {
+  const rangeShots = sessions.slice(0, 3)
+    .flatMap((session) => shotsBySession[session.id] ?? [])
+    .map((shot) => shot.metrics);
+
+  const totals = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['total', 'totalDistance', 'total_distance']))
+    .filter((value): value is number => value !== null);
+  const carries = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['carry']))
+    .filter((value): value is number => value !== null);
+  const sides = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['carrySide', 'carry_side', 'side', 'offline']))
+    .filter((value): value is number => value !== null);
+
+  return {
+    total: totals.length ? mean(totals) : null,
+    carry: carries.length ? mean(carries) : null,
+    mean: sides.length ? mean(sides) : null,
+  };
+}
+
 function getPracticeConfigForProfile(practiceConfigs: ClubPracticeConfig[], profile: ShotProfile): ClubPracticeConfig | undefined {
   return practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
@@ -243,6 +291,36 @@ function getExplicitMappedTotal(profile: ShotProfile, target: ProfileTarget): nu
 function getExplicitMappedCarry(profile: ShotProfile, target: ProfileTarget): number | null {
   const settings = getProfileTargetSettings(profile, target);
   return settings.targetCarry ?? null;
+}
+
+function getProfileTargetTotal(profile: ShotProfile | undefined): number | null {
+  if (!profile) return null;
+  return profile.targetOverrides.green?.targetTotal
+    ?? profile.targetOverrides.fairway?.targetTotal
+    ?? profile.targetTotal
+    ?? null;
+}
+
+function makeMatrixProfile(clubId: string, shotType: string, power: MatrixPower): ShotProfile {
+  return {
+    id: `${clubId}_${shotType}_${power}`,
+    clubId,
+    shotType,
+    power,
+    enabled: true,
+    showInPractice: true,
+    showOnCourse: true,
+    targets: ['green'],
+    technique: '',
+    routine: '',
+    targetTotal: null,
+    targetCarry: null,
+    targetSideLeft: null,
+    targetSideRight: null,
+    targetVariationPct: null,
+    targetQualityCutoff: null,
+    targetOverrides: {},
+  };
 }
 
 function getMappedCarry(profile: ShotProfile, target: ProfileTarget, practiceConfigs: ClubPracticeConfig[]): number | null {
@@ -316,6 +394,124 @@ function getMatrixProfileSamples(shots: Shot[], profile: ShotProfile, mappedTota
     getClubConfigId(shot.club) === profile.clubId &&
     matchesProfileDistance(shot, profile, mappedTotal)
   );
+}
+
+function getRangeSessionTotalForProfile(
+  profileId: string,
+  practiceSessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+): number | null {
+  const sessions = practiceSessions
+    .filter((session) => session.clubId === profileId)
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  return getRangeSideStats(sessions, shotsBySession).total;
+}
+
+function getMatrixFullShotTargetTotal(
+  clubId: string,
+  profiles: Record<string, ShotProfile>,
+  practiceConfigs: ClubPracticeConfig[],
+  courseShots: Shot[],
+  clubs: ClubConfig[],
+): number | null {
+  const savedTotal = getProfileTargetTotal(profiles[`${clubId}_full_full`]);
+  if (savedTotal !== null) return savedTotal;
+
+  const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === clubId && Number.isFinite(shot.target));
+  const highIntentTargets = clubShots
+    .map((shot) => shot.target)
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a);
+  if (highIntentTargets.length) {
+    const count = Math.max(1, Math.ceil(highIntentTargets.length * 0.25));
+    return mean(highIntentTargets.slice(0, count));
+  }
+
+  const fullConfig = practiceConfigs.find((config) => config.clubId === `${clubId}_full_full`)
+    ?? practiceConfigs.find((config) => config.clubId === clubId);
+  return getPracticeMetricTarget(fullConfig, 'total_distance')
+    ?? clubs.find((club) => club.id === clubId)?.stockDistance
+    ?? null;
+}
+
+function getBumpFirmAnchor(clubId: string, fullTargetTotal: number): number {
+  if (clubId === '8i') return 40;
+  return fullTargetTotal * 0.4;
+}
+
+function getBumpTargets(clubId: string, fullTargetTotal: number | null): Array<{ power: MatrixPower; target: number }> {
+  if (fullTargetTotal === null) return [];
+  const firmAnchor = getBumpFirmAnchor(clubId, fullTargetTotal);
+  return [
+    { power: 'full', target: firmAnchor },
+    { power: '9pm', target: firmAnchor * 0.5 },
+  ];
+}
+
+function getPitchTargets(
+  clubId: string,
+  practiceSessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+  clubs: ClubConfig[],
+): Array<{ power: MatrixPower; target: number }> {
+  const fallbackFullTarget = clubId === 'gw'
+    ? GAP_WEDGE_FULL_PITCH_TARGET
+    : clubs.find((club) => club.id === clubId)?.stockDistance ?? null;
+  const fullTarget = getRangeSessionTotalForProfile(`${clubId}_pitch_full`, practiceSessions, shotsBySession)
+    ?? getRangeSessionTotalForProfile(`${clubId}_full_full`, practiceSessions, shotsBySession)
+    ?? getRangeSessionTotalForProfile(clubId, practiceSessions, shotsBySession)
+    ?? fallbackFullTarget;
+  if (fullTarget === null) return [];
+
+  const halfTarget = mean([
+    getRangeSessionTotalForProfile(`${clubId}_pitch_9pm`, practiceSessions, shotsBySession),
+    getRangeSessionTotalForProfile(`${clubId}_pitch_730pm`, practiceSessions, shotsBySession),
+    getRangeSessionTotalForProfile(`${clubId}_pitch_10pm`, practiceSessions, shotsBySession),
+  ].filter((value): value is number => value !== null)) || fullTarget * 0.5;
+
+  return [
+    { power: 'full', target: fullTarget },
+    { power: '9pm', target: halfTarget },
+  ];
+}
+
+function getChipTargets(clubId: string): Array<{ power: MatrixPower; target: number }> {
+  const target = CHIP_TARGETS[clubId];
+  if (!target) return [];
+  return [
+    { power: 'full', target: target.full },
+    { power: '9pm', target: target.half },
+  ];
+}
+
+function getMatrixMappedTotal(
+  profile: ShotProfile,
+  profiles: Record<string, ShotProfile>,
+  practiceConfigs: ClubPracticeConfig[],
+  practiceSessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+  courseShots: Shot[],
+  clubs: ClubConfig[],
+): number | null {
+  const savedTotal = getExplicitMappedTotal(profile, 'green');
+  if (savedTotal !== null) return savedTotal;
+
+  if (profile.shotType === 'chip') {
+    return getChipTargets(profile.clubId).find((option) => option.power === profile.power)?.target ?? null;
+  }
+
+  if (profile.shotType === 'pitch') {
+    return getPitchTargets(profile.clubId, practiceSessions, shotsBySession, clubs)
+      .find((option) => option.power === profile.power)?.target ?? null;
+  }
+
+  if (profile.shotType === 'bump') {
+    const fullTargetTotal = getMatrixFullShotTargetTotal(profile.clubId, profiles, practiceConfigs, courseShots, clubs);
+    return getBumpTargets(profile.clubId, fullTargetTotal)
+      .find((option) => option.power === profile.power)?.target ?? null;
+  }
+
+  return getMappedTotal(profile, 'green', practiceConfigs);
 }
 
 function isSafeOutcome(shot: Shot): boolean {
@@ -521,9 +717,11 @@ function calculateRecommendations(
 }
 
 export function ClubSelectorTab() {
-  const { shots, clubs, isLoading } = useGolfData();
+  const { shots, clubs, isLoading, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [targetDistance, setTargetDistance] = useState('120');
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
@@ -542,110 +740,46 @@ export function ClubSelectorTab() {
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
-    const matrixCombos = new Map<string, MatrixCombo>();
-    const addCombo = (clubId: string, shotType: string) => {
-      if (!clubId || !WEDGE_SHOT_TYPES.includes(shotType)) return;
-      matrixCombos.set(`${clubId}-${shotType}`, { clubId, shotType });
-    };
-
-    MATRIX_BUMP_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'bump'));
-    MATRIX_PITCH_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'pitch'));
-    MATRIX_CHIP_CLUB_IDS.forEach((clubId) => addCombo(clubId, 'chip'));
-
-    for (const session of practiceSessions) {
-      const parsed = parsePracticeConfigKey(session.clubId);
-      addCombo(parsed.club, parsed.shotType);
-    }
-
-    for (const profile of Object.values(shotProfiles)) {
-      if (profile.enabled && profile.showOnCourse && isMatrixShotProfile(profile)) {
-        addCombo(profile.clubId, profile.shotType);
-      }
-    }
-
-    const configuredProfiles = [...matrixCombos.values()].flatMap((combo) =>
-      MATRIX_POWER_COLUMNS
-        .map((column) => shotProfiles[`${combo.clubId}_${combo.shotType}_${column.id}`])
-        .filter((profile): profile is ShotProfile => Boolean(profile))
-    );
-    const sessionProfiles = practiceSessions
-      .map((session) => parsePracticeConfigKey(session.clubId))
-      .filter((parsed) => WEDGE_SHOT_TYPES.includes(parsed.shotType) && isMatrixPower(parsed.power))
-      .map((parsed) => shotProfiles[`${parsed.club}_${parsed.shotType}_${parsed.power}`])
-      .filter((profile): profile is ShotProfile => Boolean(profile));
-    const profileMap = new Map([...configuredProfiles, ...sessionProfiles].map((profile) => [profile.id, profile]));
-    const cells = [...profileMap.values()]
-      .filter((profile) => isMatrixPower(profile.power))
-      .map<MatrixProfileResult | null>((profile) => {
-        const matrixPower = profile.power as MatrixPower;
+    const cells = buildClubGappingRows({
+      profiles: shotProfiles,
+      shots,
+      shotContext: 'fairway',
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      gappingHcpTarget,
+      shotCategoryOverrides: loadShotCategoryOverrides(),
+    })
+      .filter((row) => row.target === 'green')
+      .filter((row) => isMatrixShotProfile(row.profile))
+      .map<MatrixProfileResult>((row) => {
+        const profile = row.profile;
         const club = clubs.find((item) => item.id === profile.clubId);
-        const explicitTotal = getExplicitMappedTotal(profile, 'green');
-        const explicitCarry = getExplicitMappedCarry(profile, 'green');
-        const actualShots = getMatrixProfileSamples(shots, profile, explicitTotal);
-
-        const practice = practiceSessions.filter((session) => {
-          const parsed = parsePracticeConfigKey(session.clubId);
-          return parsed.club === profile.clubId && parsed.shotType === profile.shotType && parsed.power === profile.power;
-        });
-
-        const practiceCarry = practice
-          .map((session) => session.metrics.find((metric) => metric.metricId === 'carry'))
-          .filter(Boolean)
-          .map((metric) => metricAverage(metric!.valueMin, metric!.valueMax))
-          .filter((value): value is number => value !== null);
-        const practiceTotal = practice
-          .map((session) => session.metrics.find((metric) => metric.metricId === 'total_distance'))
-          .filter(Boolean)
-          .map((metric) => metricAverage(metric!.valueMin, metric!.valueMax))
-          .filter((value): value is number => value !== null);
-
-        const rangeCarry = practiceCarry.length ? mean(practiceCarry) : null;
-        const rangeTotal = practiceTotal.length ? mean(practiceTotal) : null;
-        const recentShots = [...actualShots]
-          .sort((a, b) => b.date.getTime() - a.date.getTime())
-          .slice(0, 20);
-        const last20TargetPct = recentShots.length
-          ? (recentShots.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality)).length / recentShots.length) * 100
-          : null;
-        const total = explicitTotal ?? rangeTotal ?? (actualShots.length ? mean(actualShots.map((shot) => shot.total || 0)) : null);
-        const carry = explicitCarry ?? rangeCarry;
-
-        if (total === null && carry === null && actualShots.length === 0 && practice.length === 0) return null;
-
         return {
           clubId: profile.clubId,
           clubName: club?.clubName ?? profile.clubId.toUpperCase(),
           shotType: profile.shotType,
-          power: matrixPower,
+          power: profile.power as MatrixPower,
           cell: {
             profileId: profile.id,
-            carry,
-            total,
-            bias: actualShots.length ? mean(actualShots.map((shot) => shot.side || 0)) : null,
-            last20TargetPct,
-            actualShots: actualShots.length,
-            rangeSessions: practice.length,
-            source: explicitTotal !== null || explicitCarry !== null
+            carry: row.displayCarry,
+            total: row.displayTotal,
+            bias: row.sideBias,
+            last20TargetPct: row.recentTargetPct,
+            actualShots: row.intentShotCount,
+            rangeSessions: row.rangeShotCount,
+            source: row.savedTarget.targetTotal !== undefined || row.savedTarget.targetCarry !== undefined
               ? 'gapping'
-              : practice.length
+              : row.rangeShotCount > 0
                 ? 'range'
-                : 'live',
+                : row.intentShotCount > 0
+                ? 'live'
+                : 'mapping',
           },
         };
-      })
-      .filter((cell): cell is MatrixProfileResult => Boolean(cell));
+      });
 
     const rows = new Map<string, WedgeMatrixRow>();
-    for (const combo of matrixCombos.values()) {
-      const club = clubs.find((item) => item.id === combo.clubId);
-      rows.set(`${combo.clubId}-${combo.shotType}`, {
-        clubId: combo.clubId,
-        clubName: club?.clubName ?? combo.clubId.toUpperCase(),
-        shotType: combo.shotType,
-        cells: {},
-      });
-    }
-
     for (const item of cells) {
       const key = `${item.clubId}-${item.shotType}`;
       const row = rows.get(key) ?? {
@@ -659,7 +793,7 @@ export function ClubSelectorTab() {
     }
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
-  }, [shots, clubs, practiceSessions, shotProfiles, matrixSort]);
+  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, matrixSort]);
 
   if (isLoading) {
     return (

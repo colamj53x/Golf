@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, Gauge, Pencil, RefreshCw, Signal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +17,7 @@ import { DEFAULT_CLUB_CONFIGS, Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { parsePracticeConfigKey, POWER_OPTIONS, PRACTICE_CLUBS, SHOT_TYPES } from '@/types/practiceClubs';
 
-type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
+export type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
 type ShotSortKey = 'quality' | 'distance' | 'alignment';
 
 const SHOT_CONTEXT_OPTIONS: Array<{ id: ShotContext; label: string }> = [
@@ -49,7 +50,7 @@ const SHOT_QUALITY_HANDICAP: Record<string, number> = {
 
 const DEFAULT_QUALITY_CUTOFF = 10;
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
-const SHOT_CATEGORY_OVERRIDES_KEY = 'golf_gapping_shot_category_overrides_v1';
+export const SHOT_CATEGORY_OVERRIDES_KEY = 'golf_gapping_shot_category_overrides_v1';
 const CHIP_TARGETS: Record<string, { full: number; half: number }> = {
   pw: { full: 34, half: 18 },
   gw: { full: 19, half: 10 },
@@ -60,9 +61,9 @@ type ShotCategoryOverride = {
   target: ProfileTarget;
 };
 
-type ShotCategoryOverrides = Record<string, ShotCategoryOverride>;
+export type ShotCategoryOverrides = Record<string, ShotCategoryOverride>;
 
-interface GappingRow {
+export interface GappingRow {
   profile: ShotProfile;
   target: ProfileTarget;
   sample: Shot[];
@@ -934,6 +935,74 @@ function buildRow(
   };
 }
 
+export function loadShotCategoryOverrides(): ShotCategoryOverrides {
+  try {
+    const raw = localStorage.getItem(SHOT_CATEGORY_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) as ShotCategoryOverrides : {};
+  } catch {
+    return {};
+  }
+}
+
+export function buildClubGappingRows({
+  profiles,
+  shots,
+  shotContext,
+  practiceSessions,
+  practiceConfigs,
+  shotsBySession,
+  gappingHcpTarget,
+  shotCategoryOverrides,
+}: {
+  profiles: ShotProfileMap;
+  shots: Shot[];
+  shotContext: ShotContext;
+  practiceSessions: PracticeSession[];
+  practiceConfigs: ClubPracticeConfig[];
+  shotsBySession: ShotsBySession;
+  gappingHcpTarget: number;
+  shotCategoryOverrides: ShotCategoryOverrides;
+}): GappingRow[] {
+  const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
+  const profilesWithRangeSessions = { ...profiles };
+  for (const session of practiceSessions) {
+    if (profilesWithRangeSessions[session.clubId]) continue;
+    const rangeProfile = profileFromPracticeKey(session.clubId);
+    if (rangeProfile) profilesWithRangeSessions[session.clubId] = rangeProfile;
+  }
+  const bumpClubIds = new Set(['8i', '9i']);
+  for (const session of practiceSessions) {
+    const parsed = parsePracticeConfigKey(session.clubId);
+    if (parsed.club && parsed.shotType === 'bump') bumpClubIds.add(parsed.club);
+  }
+  ensureVisibleShortBucketProfiles(profilesWithRangeSessions, [...bumpClubIds], 'bump');
+  ensureVisibleShortBucketProfiles(profilesWithRangeSessions, ['pw', 'gw', 'sw'], 'pitch');
+  ensureVisibleShortBucketProfiles(profilesWithRangeSessions, ['pw', 'gw'], 'chip');
+
+  return Object.values(profilesWithRangeSessions)
+    .filter((profile) => {
+      const hasRangePractice = shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions);
+      if (shotContext === 'tee') return profile.enabled && profile.showOnCourse;
+      return (profile.enabled && profile.showOnCourse && (profile.power === 'full' || isVisibleShortBucket(profile))) || hasRangePractice;
+    })
+    .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
+    .filter((profile) => !(['pw', 'gw', 'sw'].includes(profile.clubId) && profile.shotType === 'full'))
+    .filter((profile) => !isShortShot(profile) || isVisibleShortBucket(profile))
+    .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
+    .flatMap((profile) => profile.targets.map((target) => buildRow(
+      profile,
+      target,
+      contextShots,
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      profiles,
+      gappingHcpTarget,
+      shotCategoryOverrides,
+    )))
+    .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0) || (shotContext !== 'tee' && isVisibleShortBucket(row.profile) && row.displayTotal !== null));
+}
+
 export function ClubGappingTab() {
   const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
@@ -944,14 +1013,7 @@ export function ClubGappingTab() {
   const [editingRow, setEditingRow] = useState<GappingRow | null>(null);
   const [shotsRow, setShotsRow] = useState<GappingRow | null>(null);
   const [shotSort, setShotSort] = useState<ShotSortKey>('quality');
-  const [shotCategoryOverrides, setShotCategoryOverrides] = useState<ShotCategoryOverrides>(() => {
-    try {
-      const raw = localStorage.getItem(SHOT_CATEGORY_OVERRIDES_KEY);
-      return raw ? JSON.parse(raw) as ShotCategoryOverrides : {};
-    } catch {
-      return {};
-    }
-  });
+  const [shotCategoryOverrides, setShotCategoryOverrides] = useState<ShotCategoryOverrides>(() => loadShotCategoryOverrides());
   const [draft, setDraft] = useState({
     targetTotal: '',
     targetCarry: '',
@@ -966,44 +1028,16 @@ export function ClubGappingTab() {
   }, [shotCategoryOverrides]);
 
   const rows = useMemo(() => {
-    const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
-    const profilesWithRangeSessions = { ...profiles };
-    for (const session of practiceSessions) {
-      if (profilesWithRangeSessions[session.clubId]) continue;
-      const rangeProfile = profileFromPracticeKey(session.clubId);
-      if (rangeProfile) profilesWithRangeSessions[session.clubId] = rangeProfile;
-    }
-    const bumpClubIds = new Set(['8i', '9i']);
-    for (const session of practiceSessions) {
-      const parsed = parsePracticeConfigKey(session.clubId);
-      if (parsed.club && parsed.shotType === 'bump') bumpClubIds.add(parsed.club);
-    }
-    ensureVisibleShortBucketProfiles(profilesWithRangeSessions, [...bumpClubIds], 'bump');
-    ensureVisibleShortBucketProfiles(profilesWithRangeSessions, ['pw', 'gw', 'sw'], 'pitch');
-    ensureVisibleShortBucketProfiles(profilesWithRangeSessions, ['pw', 'gw'], 'chip');
-
-    return Object.values(profilesWithRangeSessions)
-      .filter((profile) => {
-        const hasRangePractice = shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions);
-        if (shotContext === 'tee') return profile.enabled && profile.showOnCourse;
-        return (profile.enabled && profile.showOnCourse && (profile.power === 'full' || isVisibleShortBucket(profile))) || hasRangePractice;
-      })
-      .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
-      .filter((profile) => !(['pw', 'gw', 'sw'].includes(profile.clubId) && profile.shotType === 'full'))
-      .filter((profile) => !isShortShot(profile) || isVisibleShortBucket(profile))
-      .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
-      .flatMap((profile) => profile.targets.map((target) => buildRow(
-        profile,
-        target,
-        contextShots,
-        practiceSessions,
-        practiceConfigs,
-        shotsBySession,
-        profiles,
-        gappingHcpTarget,
-        shotCategoryOverrides,
-      )))
-      .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0) || (shotContext !== 'tee' && isVisibleShortBucket(row.profile) && row.displayTotal !== null));
+    return buildClubGappingRows({
+      profiles,
+      shots,
+      shotContext,
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      gappingHcpTarget,
+      shotCategoryOverrides,
+    });
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
 
   const groupedRows = useMemo(() => {
