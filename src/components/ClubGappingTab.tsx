@@ -14,7 +14,7 @@ import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { ProfileTarget, ShotProfile, ShotProfileMap, ShotProfileTargetValues, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
-import { PRACTICE_CLUBS } from '@/types/practiceClubs';
+import { PRACTICE_CLUBS, parsePracticeConfigKey } from '@/types/practiceClubs';
 
 type ShotContext = 'tee' | 'fairway' | 'roughRecovery';
 type ShotSortKey = 'quality' | 'distance' | 'alignment';
@@ -443,6 +443,14 @@ function hasRangePracticeForProfile(profile: ShotProfile, practiceSessions: Prac
   return practiceSessions.some((session) => matchesPracticeProfile(session, profile));
 }
 
+function hasRangeConfigForProfile(profile: ShotProfile, practiceConfigs: ClubPracticeConfig[]): boolean {
+  return practiceConfigs.some((config) => {
+    if (config.clubId !== profile.id) return false;
+    const parsed = parsePracticeConfigKey(config.clubId);
+    return parsed.club === profile.clubId && parsed.shotType === profile.shotType && parsed.power === profile.power;
+  });
+}
+
 function getFullShotTargetMax(
   clubId: string,
   profiles: ShotProfileMap,
@@ -609,10 +617,9 @@ export function ClubGappingTab() {
   const rows = useMemo(() => {
     const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
     return Object.values(profiles)
-      .filter((profile) => profile.enabled && (profile.showOnCourse || (shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions))))
+      .filter((profile) => profile.enabled || (shotContext !== 'tee' && (hasRangePracticeForProfile(profile, practiceSessions) || hasRangeConfigForProfile(profile, practiceConfigs))))
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
-      .filter((profile) => profile.power === 'full')
-      .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
+      .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles, gappingHcpTarget)))
       .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
   }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget]);
