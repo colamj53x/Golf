@@ -261,9 +261,9 @@ function getPowerLabel(power: string): string {
 
 function getShotLabel(profile: ShotProfile): string {
   if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
-  if (profile.shotType === 'bump') return profile.power === 'full' ? 'Full Bump' : 'Half Bump';
-  if (profile.shotType === 'pitch') return profile.power === 'full' ? 'Pitch' : 'Half Pitch';
-  if (profile.shotType === 'chip') return profile.power === 'full' ? 'Full Chip' : 'Half Chip';
+  if (profile.shotType === 'bump') return 'Bump';
+  if (profile.shotType === 'pitch') return 'Pitch';
+  if (profile.shotType === 'chip') return 'Chip';
 
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
   const power = getPowerLabel(profile.power);
@@ -611,38 +611,26 @@ function getRangeSessionTotalForProfile(
   return getRangeSideStats(sessions, shotsBySession).total;
 }
 
+function getBumpTargets(fullTargetTotal: number | null): Array<{ power: string; target: number }> {
+  if (fullTargetTotal === null) return [];
+  return [
+    { power: 'full', target: fullTargetTotal * 0.4 },
+    { power: '9pm', target: fullTargetTotal * 0.2 },
+  ];
+}
+
 function getClosestBumpPower(
   shot: Shot,
   clubId: string,
   fullTargetTotal: number | null,
-  practiceSessions: PracticeSession[],
-  practiceConfigs: ClubPracticeConfig[],
-  shotsBySession: ShotsBySession,
 ): string | null {
   if (fullTargetTotal === null || !Number.isFinite(shot.target)) return null;
-  if (shot.target >= fullTargetTotal * 0.5) return null;
-
-  const bumpSessionTargets = practiceSessions
-    .map((session) => parsePracticeConfigKey(session.clubId))
-    .filter((parsed) => parsed.club === clubId && parsed.shotType === 'bump')
-    .map((parsed) => ({
-      power: parsed.power,
-      target: getRangeTargetTotalForProfile(`${clubId}_bump_${parsed.power}`, practiceSessions, practiceConfigs, shotsBySession),
-    }))
-    .filter((option): option is { power: string; target: number } => option.target !== null);
-
-  const fullTarget = bumpSessionTargets.find((option) => option.power === 'full')?.target;
-  const halfTarget = mean(bumpSessionTargets
-    .filter((option) => option.power !== 'full')
-    .map((option) => option.target));
   const options = [
-    fullTarget !== undefined ? { power: 'full', target: fullTarget } : null,
-    { power: '9pm', target: halfTarget ?? fullTargetTotal * 0.25 },
-  ].filter((option): option is { power: string; target: number } => option !== null);
-
-  if (!options.length) return null;
-
-  return options.sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0].power;
+    { power: 'full-swing', target: fullTargetTotal },
+    ...getBumpTargets(fullTargetTotal),
+  ];
+  const closest = options.sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0];
+  return closest.power === 'full-swing' ? null : closest.power;
 }
 
 function getPitchTargets(
@@ -724,7 +712,7 @@ function matchesProfileShot(
   if (profile.clubId === 'gw') {
     return false;
   }
-  const bumpPower = getClosestBumpPower(shot, profile.clubId, fullTargetTotal, practiceSessions, practiceConfigs, shotsBySession);
+  const bumpPower = getClosestBumpPower(shot, profile.clubId, fullTargetTotal);
   if (profile.shotType === 'bump') return !punchShot && bumpPower === profile.power;
   if (profile.shotType === 'full') return !punchShot && bumpPower === null;
   return profile.shotType === 'full';
@@ -750,8 +738,13 @@ function buildRow(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
+  const bumpTargetTotal = profile.shotType === 'bump'
+    ? getBumpTargets(fullTargetTotal).find((option) => option.power === profile.power)?.target ?? null
+    : null;
   const rangeTargetTotal = profile.shotType === 'pitch'
     ? getPitchTargets(profile.clubId, practiceSessions, practiceConfigs, shotsBySession).find((option) => option.power === profile.power)?.target ?? null
+    : profile.shotType === 'bump'
+      ? bumpTargetTotal
     : getMetricTargetValue(practiceConfig, 'total_distance');
   const rangeTargetCarry = getMetricTargetValue(practiceConfig, 'carry');
   const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
