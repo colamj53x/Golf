@@ -655,8 +655,9 @@ function calculateRecommendations(
       const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
       const goodDistanceCount = sample.filter(isGoodDistance).length;
       const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : row.recentTargetPct ?? 0;
-      const within5Count = sample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= 5).length;
-      const within5Pct = sample.length ? (within5Count / sample.length) * 100 : null;
+      const within5Sample = row.sample;
+      const within5Count = within5Sample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= 5).length;
+      const within5Pct = within5Sample.length ? (within5Count / within5Sample.length) * 100 : null;
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
       const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
