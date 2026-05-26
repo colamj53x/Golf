@@ -89,6 +89,7 @@ function defaultProfiles(): ShotProfileMap {
     makeProfile('pw', 'full', 'full', ['green']),
     makeProfile('gw', 'full', 'full', ['green']),
     makeProfile('sw', 'full', 'full', ['green']),
+    makeProfile('gw', 'pitch', 'full', ['green']),
     makeProfile('pw', 'pitch', '9pm', ['green']),
     makeProfile('pw', 'pitch', '730pm', ['green']),
     makeProfile('gw', 'pitch', '9pm', ['green']),

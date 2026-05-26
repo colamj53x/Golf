@@ -48,6 +48,7 @@ const SHOT_QUALITY_HANDICAP: Record<string, number> = {
 };
 
 const DEFAULT_QUALITY_CUTOFF = 10;
+const GAP_WEDGE_FULL_PITCH_TARGET = 70;
 
 interface GappingRow {
   profile: ShotProfile;
@@ -391,6 +392,9 @@ function matchesTargetIntent(
 }
 
 function matchesPracticeProfile(session: PracticeSession, profile: ShotProfile): boolean {
+  if (profile.clubId === 'gw' && profile.shotType === 'pitch' && profile.power === 'full') {
+    return session.clubId === profile.id || session.clubId === 'gw_full_full' || session.clubId === profile.clubId;
+  }
   if (profile.shotType !== 'full' || profile.power !== 'full') return session.clubId === profile.id;
   return session.clubId === profile.id || session.clubId === profile.clubId;
 }
@@ -563,6 +567,17 @@ function getRangeTargetTotalForProfile(
   return getMetricTargetValue(config, 'total_distance');
 }
 
+function getRangeSessionTotalForProfile(
+  profileId: string,
+  practiceSessions: PracticeSession[],
+  shotsBySession: ShotsBySession,
+): number | null {
+  const sessions = practiceSessions
+    .filter((session) => session.clubId === profileId)
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  return getRangeSideStats(sessions, shotsBySession).total;
+}
+
 function getClosestBumpPower(
   shot: Shot,
   clubId: string,
@@ -594,6 +609,41 @@ function getClosestBumpPower(
   return options.sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0].power;
 }
 
+function getGapWedgePitchTargets(
+  practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
+): Array<{ power: string; target: number }> {
+  const fullTarget = getRangeSessionTotalForProfile('gw_pitch_full', practiceSessions, shotsBySession)
+    ?? getRangeSessionTotalForProfile('gw_full_full', practiceSessions, shotsBySession)
+    ?? getRangeSessionTotalForProfile('gw', practiceSessions, shotsBySession)
+    ?? GAP_WEDGE_FULL_PITCH_TARGET;
+
+  return [
+    { power: 'full', target: fullTarget },
+    {
+      power: '9pm',
+      target: getRangeSessionTotalForProfile('gw_pitch_9pm', practiceSessions, shotsBySession) ?? fullTarget * 0.75,
+    },
+    {
+      power: '730pm',
+      target: getRangeSessionTotalForProfile('gw_pitch_730pm', practiceSessions, shotsBySession) ?? fullTarget * 0.5,
+    },
+  ];
+}
+
+function getClosestGapWedgePitchPower(
+  shot: Shot,
+  practiceSessions: PracticeSession[],
+  practiceConfigs: ClubPracticeConfig[],
+  shotsBySession: ShotsBySession,
+): string | null {
+  if (getClubConfigId(shot.club) !== 'gw' || !Number.isFinite(shot.target)) return null;
+
+  return getGapWedgePitchTargets(practiceSessions, practiceConfigs, shotsBySession)
+    .sort((a, b) => Math.abs(shot.target - a.target) - Math.abs(shot.target - b.target))[0]?.power ?? null;
+}
+
 function isPunchShot(
   shot: Shot,
   fullTargetMax: number | null,
@@ -623,6 +673,11 @@ function matchesProfileShot(
 ): boolean {
   const punchShot = isPunchShot(shot, fullTargetMax);
   if (profile.shotType === 'punch') return punchShot;
+  const gapWedgePitchPower = getClosestGapWedgePitchPower(shot, practiceSessions, practiceConfigs, shotsBySession);
+  if (profile.clubId === 'gw') {
+    if (profile.shotType === 'pitch') return !punchShot && gapWedgePitchPower === profile.power;
+    return false;
+  }
   const bumpPower = getClosestBumpPower(shot, profile.clubId, fullTargetTotal, practiceSessions, practiceConfigs, shotsBySession);
   if (profile.shotType === 'bump') return !punchShot && bumpPower === profile.power;
   if (profile.shotType === 'full') return !punchShot && bumpPower === null;
@@ -648,7 +703,9 @@ function buildRow(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   const practiceConfig = practiceConfigs.find((config) => config.clubId === profile.id)
     ?? practiceConfigs.find((config) => config.clubId === profile.clubId);
-  const rangeTargetTotal = getMetricTargetValue(practiceConfig, 'total_distance');
+  const rangeTargetTotal = profile.clubId === 'gw' && profile.shotType === 'pitch'
+    ? getGapWedgePitchTargets(practiceSessions, practiceConfigs, shotsBySession).find((option) => option.power === profile.power)?.target ?? null
+    : getMetricTargetValue(practiceConfig, 'total_distance');
   const rangeTargetCarry = getMetricTargetValue(practiceConfig, 'carry');
   const rangeTargetSide = getMetricTargetRange(practiceConfig, 'avg_lateral_miss').max;
   const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
@@ -775,6 +832,7 @@ export function ClubGappingTab() {
         return (profile.enabled && profile.showOnCourse && profile.power === 'full') || hasRangePractice;
       })
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
+      .filter((profile) => !(profile.clubId === 'gw' && profile.shotType === 'full'))
       .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
       .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles, gappingHcpTarget)))
       .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
