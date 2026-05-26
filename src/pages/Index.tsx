@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { DashboardTab } from '@/components/DashboardTab';
 import { AllClubsTab } from '@/components/AllClubsTab';
 import { SettingsTab } from '@/components/SettingsTab';
@@ -12,14 +11,59 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair, Gauge } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+
+const playingDataTabs = ['dashboard', 'all-clubs', 'upload'] as const;
+const mainTabs = ['playing-data', 'on-course', 'club-gapping', 'practice', 'reports', 'settings'] as const;
+
+type PlayingDataTab = typeof playingDataTabs[number];
+type MainTab = typeof mainTabs[number];
+
+const defaultPlayingDataTab: PlayingDataTab = 'dashboard';
+
+const isMainTab = (value: string): value is MainTab =>
+  mainTabs.includes(value as MainTab);
+
+const isPlayingDataTab = (value: string): value is PlayingDataTab =>
+  playingDataTabs.includes(value as PlayingDataTab);
+
+const getPathForTab = (tab: MainTab, playingDataTab: PlayingDataTab = defaultPlayingDataTab) =>
+  tab === 'playing-data' ? `/playing-data/${playingDataTab}` : `/${tab}`;
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState('playing-data');
-  const [playingDataTab, setPlayingDataTab] = useState('dashboard');
   const { signOut, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  const activeTab = pathParts[0] || 'playing-data';
+  const playingDataTab = pathParts[1] || defaultPlayingDataTab;
+
+  if (location.pathname === '/') {
+    return <Navigate to={getPathForTab('playing-data')} replace />;
+  }
+
+  if (!isMainTab(activeTab)) {
+    return <Navigate to={getPathForTab('playing-data')} replace />;
+  }
+
+  if (activeTab === 'playing-data' && !isPlayingDataTab(playingDataTab)) {
+    return <Navigate to={getPathForTab('playing-data')} replace />;
+  }
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleMainTabChange = (tab: string) => {
+    if (isMainTab(tab)) {
+      navigate(getPathForTab(tab, isPlayingDataTab(playingDataTab) ? playingDataTab : defaultPlayingDataTab));
+    }
+  };
+
+  const handlePlayingDataTabChange = (tab: string) => {
+    if (isPlayingDataTab(tab)) {
+      navigate(getPathForTab('playing-data', tab));
+    }
   };
 
   return (
@@ -52,7 +96,7 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleMainTabChange}>
           <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
             <TabsTrigger value="playing-data" className="shrink-0 gap-2">
               <Database className="h-4 w-4" />
@@ -81,7 +125,7 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="playing-data">
-            <Tabs value={playingDataTab} onValueChange={setPlayingDataTab} className="w-full">
+            <Tabs value={playingDataTab} onValueChange={handlePlayingDataTabChange} className="w-full">
               <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
                 <TabsTrigger value="dashboard" className="shrink-0">Dashboard</TabsTrigger>
                 <TabsTrigger value="all-clubs" className="shrink-0">All Clubs</TabsTrigger>
@@ -89,8 +133,7 @@ const Index = () => {
               </TabsList>
               <TabsContent value="dashboard">
                 <DashboardTab onOpenUpload={() => {
-                  setActiveTab('playing-data');
-                  setPlayingDataTab('upload');
+                  navigate(getPathForTab('playing-data', 'upload'));
                 }} />
               </TabsContent>
               <TabsContent value="all-clubs">
