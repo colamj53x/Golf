@@ -35,12 +35,10 @@ const MATRIX_POWER_COLUMNS = [
   { id: '9pm', label: 'Half' },
 ] as const;
 
-type LieOption = 'tee' | 'fairway' | 'roughRecovery' | 'sand' | 'uphill' | 'downhill';
+type LieOption = 'tee' | 'fairway' | 'roughRecovery' | 'uphill' | 'downhill';
 type TargetOption = 'green' | 'fairway';
 type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
-type ShotTypeFilter = 'any' | string;
-type PowerFilter = 'any' | string;
 type MatrixPower = typeof MATRIX_POWER_COLUMNS[number]['id'];
 type MatrixSortKey = 'club' | 'shot' | 'distance';
 type MatrixLieContext = Extract<ShotContext, 'fairway' | 'roughRecovery'>;
@@ -108,7 +106,6 @@ const lieOptions: Array<{ value: LieOption; label: string }> = [
   { value: 'tee', label: 'Tee' },
   { value: 'fairway', label: 'Fairway' },
   { value: 'roughRecovery', label: 'Rough / Recovery' },
-  { value: 'sand', label: 'Sand' },
   { value: 'uphill', label: 'Uphill Lie' },
   { value: 'downhill', label: 'Downhill Lie' },
 ];
@@ -123,16 +120,6 @@ const troubleOptions: Array<{ value: TroubleOption; label: string }> = [
   { value: 'right', label: 'Right' },
   { value: 'short', label: 'Short' },
   { value: 'long', label: 'Long' },
-];
-
-const shotTypeOptions: Array<{ value: ShotTypeFilter; label: string }> = [
-  { value: 'any', label: 'Any shot' },
-  ...SHOT_TYPES.map((type) => ({ value: type.id, label: type.name })),
-];
-
-const powerOptions: Array<{ value: PowerFilter; label: string }> = [
-  { value: 'any', label: 'Any strength' },
-  ...POWER_OPTIONS.map((power) => ({ value: power.id, label: power.name })),
 ];
 
 const matrixLieOptions: Array<{ value: MatrixLieContext; label: string }> = [
@@ -594,8 +581,6 @@ function calculateRecommendations(
   minimumSafeDistance: number | null,
   lie: LieOption,
   target: TargetOption,
-  shotType: ShotTypeFilter,
-  power: PowerFilter,
   trouble: TroubleOption[],
   mustCarry: boolean,
   profiles: ShotProfile[],
@@ -604,8 +589,6 @@ function calculateRecommendations(
 
   return profiles
     .filter((profile) => profile.enabled && profile.showOnCourse && profile.targets.includes(target))
-    .filter((profile) => shotType === 'any' || profile.shotType === shotType)
-    .filter((profile) => power === 'any' || profile.power === power)
     .map((primaryProfile) => {
       const club = clubs.find((item) => item.id === primaryProfile.clubId);
       if (!club || !canTargetDestination(club, target)) return null;
@@ -677,7 +660,7 @@ function calculateRecommendations(
       }, 0) / Math.max(1, trouble.length);
       const carryPenalty = mustCarry ? shortRisk * 0.7 : 0;
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
-      const liePenalty = lie === 'sand' || lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
+      const liePenalty = lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const confidence = Math.round(clamp(
         hitPct * 0.34 +
@@ -759,8 +742,6 @@ export function ClubSelectorTab() {
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
   const [target, setTarget] = useState<TargetOption>('green');
-  const [shotType, setShotType] = useState<ShotTypeFilter>('any');
-  const [power, setPower] = useState<PowerFilter>('any');
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
   const [mustCarry, setMustCarry] = useState(false);
   const [matrixSort, setMatrixSort] = useState<MatrixSortKey>('club');
@@ -780,8 +761,8 @@ export function ClubSelectorTab() {
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
   const recommendations = useMemo(
-    () => calculateRecommendations(shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, shotType, power, trouble, mustCarry, Object.values(shotProfiles)),
-    [shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, shotType, power, trouble, mustCarry, shotProfiles],
+    () => calculateRecommendations(shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, Object.values(shotProfiles)),
+    [shots, clubs, practiceConfigs, numericTarget, numericMinimumSafe, lie, target, trouble, mustCarry, shotProfiles],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -993,32 +974,6 @@ export function ClubSelectorTab() {
                           variant={target === option.value ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => setTarget(option.value)}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
-                    </ButtonGroup>
-                    <ButtonGroup label="Shot type">
-                      {shotTypeOptions.map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          variant={shotType === option.value ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setShotType(option.value)}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
-                    </ButtonGroup>
-                    <ButtonGroup label="Strength">
-                      {powerOptions.map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          variant={power === option.value ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setPower(option.value)}
                         >
                           {option.label}
                         </Button>
