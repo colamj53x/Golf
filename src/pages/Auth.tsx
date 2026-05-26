@@ -120,7 +120,7 @@ const Auth = () => {
               <Goal className="h-7 w-7 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Golf Stats Hub</CardTitle>
+          <CardTitle className="text-2xl">Nic&apos;s Golf Hub</CardTitle>
           <CardDescription>Track your rounds, practice, putting, and club trends</CardDescription>
         </CardHeader>
         <CardContent>

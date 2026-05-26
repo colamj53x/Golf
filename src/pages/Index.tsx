@@ -13,8 +13,8 @@ import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair, Gauge 
 import { useAuth } from '@/context/AuthContext';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
-const playingDataTabs = ['dashboard', 'all-clubs', 'upload'] as const;
-const mainTabs = ['playing-data', 'on-course', 'club-gapping', 'practice', 'reports', 'settings'] as const;
+const playingDataTabs = ['dashboard', 'all-clubs', 'upload', 'reports'] as const;
+const mainTabs = ['on-course', 'club-gapping', 'playing-data', 'practice', 'settings'] as const;
 
 type PlayingDataTab = typeof playingDataTabs[number];
 type MainTab = typeof mainTabs[number];
@@ -77,7 +77,7 @@ const Index = () => {
                 <Goal className="h-6 w-6 text-primary-foreground" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-foreground">Golf Stats Hub</h1>
+                <h1 className="text-xl font-bold text-foreground">Nic&apos;s Golf Hub</h1>
                 <p className="text-sm text-muted-foreground">Rounds, practice, putting, and club trends</p>
               </div>
             </div>
@@ -98,10 +98,6 @@ const Index = () => {
       <main className="container py-6">
         <Tabs value={activeTab} onValueChange={handleMainTabChange}>
           <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
-            <TabsTrigger value="playing-data" className="shrink-0 gap-2">
-              <Database className="h-4 w-4" />
-              Playing Data
-            </TabsTrigger>
             <TabsTrigger value="on-course" className="shrink-0 gap-2">
               <Crosshair className="h-4 w-4" />
               On Course
@@ -110,13 +106,13 @@ const Index = () => {
               <Gauge className="h-4 w-4" />
               Club Gapping
             </TabsTrigger>
+            <TabsTrigger value="playing-data" className="shrink-0 gap-2">
+              <Database className="h-4 w-4" />
+              Playing Data
+            </TabsTrigger>
             <TabsTrigger value="practice" className="shrink-0 gap-2">
               <Target className="h-4 w-4" />
               Practice
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="shrink-0 gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Reports
             </TabsTrigger>
             <TabsTrigger value="settings" className="shrink-0 gap-2">
               <Settings className="h-4 w-4" />
@@ -130,6 +126,10 @@ const Index = () => {
                 <TabsTrigger value="dashboard" className="shrink-0">Dashboard</TabsTrigger>
                 <TabsTrigger value="all-clubs" className="shrink-0">All Clubs</TabsTrigger>
                 <TabsTrigger value="upload" className="shrink-0">Upload</TabsTrigger>
+                <TabsTrigger value="reports" className="shrink-0 gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Reports
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard">
                 <DashboardTab onOpenUpload={() => {
@@ -141,6 +141,9 @@ const Index = () => {
               </TabsContent>
               <TabsContent value="upload">
                 <UploadTab />
+              </TabsContent>
+              <TabsContent value="reports">
+                <ReportsTab />
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -155,10 +158,6 @@ const Index = () => {
 
           <TabsContent value="practice">
             <PracticeTab />
-          </TabsContent>
-
-          <TabsContent value="reports">
-            <ReportsTab />
           </TabsContent>
 
           <TabsContent value="settings">

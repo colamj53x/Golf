@@ -1,4 +1,4 @@
-# Golf Stats Hub
+# Nic's Golf Hub
 
 A personal golf performance dashboard for tracking shot data, club trends, practice sessions, putting drills, and reports.
 
