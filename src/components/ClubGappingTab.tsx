@@ -554,6 +554,7 @@ function buildRow(
   const lastThreeIntentShots = shouldSplitByIntent
     ? lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow))
     : lastThreeClubShots;
+  const confidenceShots = lastThreeIntentShots.length ? lastThreeIntentShots : targetReferenceShots;
 
   return {
     profile,
@@ -579,8 +580,8 @@ function buildRow(
     displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
     displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
     sideBias: mean(sides) ?? rangeSideStats.mean,
-    targetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
-    safePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
+    targetPct: confidenceShots.length ? (confidenceShots.filter((shot) => matchesTarget(shot, target)).length / confidenceShots.length) * 100 : null,
+    safePct: confidenceShots.length ? (confidenceShots.filter(isSafeOutcome).length / confidenceShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: targetReferenceShots.length,
     intentShotCount: targetReferenceShots.length,
