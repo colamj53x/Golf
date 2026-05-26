@@ -51,6 +51,7 @@ const SHOT_QUALITY_HANDICAP: Record<string, number> = {
 const DEFAULT_QUALITY_CUTOFF = 10;
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
 export const SHOT_CATEGORY_OVERRIDES_KEY = 'golf_gapping_shot_category_overrides_v1';
+export const SHOT_CATEGORY_OVERRIDES_EVENT = 'golf-gapping-shot-category-overrides-change';
 const CHIP_TARGETS: Record<string, { full: number; half: number }> = {
   pw: { full: 34, half: 18 },
   gw: { full: 19, half: 10 },
@@ -1025,6 +1026,7 @@ export function ClubGappingTab() {
 
   useEffect(() => {
     localStorage.setItem(SHOT_CATEGORY_OVERRIDES_KEY, JSON.stringify(shotCategoryOverrides));
+    window.dispatchEvent(new Event(SHOT_CATEGORY_OVERRIDES_EVENT));
   }, [shotCategoryOverrides]);
 
   const rows = useMemo(() => {

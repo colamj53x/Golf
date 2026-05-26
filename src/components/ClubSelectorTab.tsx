@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import { AlertCircle, ArrowDownUp, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildClubGappingRows, loadShotCategoryOverrides } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/components/ClubGappingTab';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
@@ -43,6 +43,7 @@ type ShotTypeFilter = 'any' | string;
 type PowerFilter = 'any' | string;
 type MatrixPower = typeof MATRIX_POWER_COLUMNS[number]['id'];
 type MatrixSortKey = 'club' | 'shot' | 'distance';
+type MatrixLieContext = Extract<ShotContext, 'fairway' | 'roughRecovery'>;
 
 interface ClubRecommendation {
   clubId: string;
@@ -132,6 +133,11 @@ const shotTypeOptions: Array<{ value: ShotTypeFilter; label: string }> = [
 const powerOptions: Array<{ value: PowerFilter; label: string }> = [
   { value: 'any', label: 'Any strength' },
   ...POWER_OPTIONS.map((power) => ({ value: power.id, label: power.name })),
+];
+
+const matrixLieOptions: Array<{ value: MatrixLieContext; label: string }> = [
+  { value: 'fairway', label: 'Fairway' },
+  { value: 'roughRecovery', label: 'Rough' },
 ];
 
 function mean(values: number[]): number {
@@ -731,6 +737,18 @@ export function ClubSelectorTab() {
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
   const [mustCarry, setMustCarry] = useState(false);
   const [matrixSort, setMatrixSort] = useState<MatrixSortKey>('club');
+  const [matrixLieContext, setMatrixLieContext] = useState<MatrixLieContext>('fairway');
+  const [shotCategoryOverrides, setShotCategoryOverrides] = useState(() => loadShotCategoryOverrides());
+
+  useEffect(() => {
+    const refreshOverrides = () => setShotCategoryOverrides(loadShotCategoryOverrides());
+    window.addEventListener('storage', refreshOverrides);
+    window.addEventListener(SHOT_CATEGORY_OVERRIDES_EVENT, refreshOverrides);
+    return () => {
+      window.removeEventListener('storage', refreshOverrides);
+      window.removeEventListener(SHOT_CATEGORY_OVERRIDES_EVENT, refreshOverrides);
+    };
+  }, []);
 
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
@@ -743,12 +761,12 @@ export function ClubSelectorTab() {
     const cells = buildClubGappingRows({
       profiles: shotProfiles,
       shots,
-      shotContext: 'fairway',
+      shotContext: matrixLieContext,
       practiceSessions,
       practiceConfigs,
       shotsBySession,
       gappingHcpTarget,
-      shotCategoryOverrides: loadShotCategoryOverrides(),
+      shotCategoryOverrides,
     })
       .filter((row) => row.target === 'green')
       .filter((row) => isMatrixShotProfile(row.profile))
@@ -793,7 +811,7 @@ export function ClubSelectorTab() {
     }
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
-  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, matrixSort]);
+  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, shotCategoryOverrides, matrixLieContext, matrixSort]);
 
   if (isLoading) {
     return (
@@ -822,7 +840,19 @@ export function ClubSelectorTab() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Sort by</span>
+                <span className="text-sm font-medium text-muted-foreground">Lie</span>
+                {matrixLieOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    size="sm"
+                    variant={matrixLieContext === option.value ? 'default' : 'outline'}
+                    onClick={() => setMatrixLieContext(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+                <span className="ml-0 text-sm font-medium text-muted-foreground sm:ml-4">Sort by</span>
                 {[
                   { id: 'club', label: 'Club' },
                   { id: 'shot', label: 'Shot Type' },
