@@ -262,6 +262,7 @@ function getPowerLabel(power: string): string {
 function getShotLabel(profile: ShotProfile): string {
   if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
   if (profile.shotType === 'bump') return 'Bump';
+  if (profile.shotType === 'pitch') return profile.power === 'full' ? 'Full' : 'Half';
 
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
   const power = getPowerLabel(profile.power);
@@ -283,10 +284,10 @@ function isShortShot(profile: ShotProfile): boolean {
 function getShotBadgeClass(profile: ShotProfile, isHardestShortShot = false): string {
   if (profile.shotType === 'punch') return '';
   if (!isShortShot(profile)) return '';
-  if (profile.shotType === 'pitch' && profile.power === '9pm') {
+  if (profile.shotType === 'pitch' && profile.power === 'full') {
     return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
   }
-  if (profile.shotType === 'pitch' && profile.power === '730pm') {
+  if (profile.shotType === 'pitch') {
     return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
   }
   if (isHardestShortShot) {
@@ -637,17 +638,14 @@ function getGapWedgePitchTargets(
     ?? getRangeSessionTotalForProfile('gw_full_full', practiceSessions, shotsBySession)
     ?? getRangeSessionTotalForProfile('gw', practiceSessions, shotsBySession)
     ?? GAP_WEDGE_FULL_PITCH_TARGET;
+  const halfTarget = mean([
+    getRangeSessionTotalForProfile('gw_pitch_9pm', practiceSessions, shotsBySession),
+    getRangeSessionTotalForProfile('gw_pitch_730pm', practiceSessions, shotsBySession),
+  ].filter((value): value is number => value !== null)) ?? fullTarget * 0.5;
 
   return [
     { power: 'full', target: fullTarget },
-    {
-      power: '9pm',
-      target: getRangeSessionTotalForProfile('gw_pitch_9pm', practiceSessions, shotsBySession) ?? fullTarget * 0.75,
-    },
-    {
-      power: '730pm',
-      target: getRangeSessionTotalForProfile('gw_pitch_730pm', practiceSessions, shotsBySession) ?? fullTarget * 0.5,
-    },
+    { power: '9pm', target: halfTarget },
   ];
 }
 
@@ -873,6 +871,7 @@ export function ClubGappingTab() {
       })
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
       .filter((profile) => !(profile.clubId === 'gw' && profile.shotType === 'full'))
+      .filter((profile) => !(profile.clubId === 'gw' && profile.shotType === 'pitch' && profile.power === '730pm'))
       .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
       .flatMap((profile) => profile.targets.map((target) => buildRow(
         profile,
