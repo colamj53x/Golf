@@ -249,6 +249,8 @@ export const INDOOR_PRACTICE_SETS = [
   },
 ] as const;
 
+export type IndoorPracticeSetId = (typeof INDOOR_PRACTICE_SETS)[number]['id'];
+
 export const DRILL_METRIC_WEIGHTS: Record<string, Partial<Record<PuttingMetric, number>>> = {
   'Start-Line Gate': { startLineStrike: 1 },
   'Distance Ladder': { paceTouch: 1 },

@@ -1,10 +1,13 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Eye, Flag, Footprints, Home, ScanLine, TreePine } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, Eye, Flag, Footprints, ListChecks, Play, ScanLine, TreePine } from 'lucide-react';
 import { PuttingDashboard } from './PuttingDashboard';
+import { INDOOR_PRACTICE_SETS, IndoorPracticeSetId } from '@/lib/putting/drills';
 
 interface Props {
   onSelect: (category: 'indoor' | 'outdoor') => void;
+  onStartIndoorSet: (setId: IndoorPracticeSetId) => void;
 }
 
 const readSteps = [
@@ -58,7 +61,7 @@ const techniqueSteps = [
   },
 ];
 
-export function PuttingHome({ onSelect }: Props) {
+export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
   return (
     <div className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-2">
@@ -136,20 +139,59 @@ export function PuttingHome({ onSelect }: Props) {
 
       <PuttingDashboard />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card
-          className="cursor-pointer transition hover:border-primary hover:shadow-md"
-          onClick={() => onSelect('indoor')}
-        >
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
-            <Home className="h-12 w-12 text-primary" />
-            <h3 className="text-xl font-bold">Indoor</h3>
-            <p className="text-sm text-muted-foreground text-center">
-              Carpet putting drills - Start Line & Short Putt Control
-            </p>
-          </CardContent>
-        </Card>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Choose a Putting Set</h3>
+            <p className="text-sm text-muted-foreground">Pick the session shape before you start scoring.</p>
+          </div>
+          <Button variant="outline" onClick={() => onSelect('indoor')}>
+            Open Indoor Practice
+          </Button>
+        </div>
 
+        <div className="grid gap-4 xl:grid-cols-4">
+          {INDOOR_PRACTICE_SETS.map(set => (
+            <Card
+              key={set.id}
+              className="cursor-pointer transition hover:border-primary hover:shadow-md"
+              onClick={() => onStartIndoorSet(set.id)}
+            >
+              <CardContent className="flex h-full flex-col gap-4 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Badge variant={set.id === 'full' ? 'secondary' : 'outline'}>
+                      {set.id === 'full' ? 'Test' : set.id.replace('set-', 'Set ').toUpperCase()}
+                    </Badge>
+                    <h4 className="mt-3 text-lg font-bold leading-tight">{set.name.replace(/^Set [ABC] - /, '')}</h4>
+                  </div>
+                  <div className="rounded-md bg-primary/10 p-2 text-primary">
+                    <ListChecks className="h-5 w-5" />
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">{set.description}</p>
+                <div className="space-y-2">
+                  {set.drillNames.map((drillName, index) => (
+                    <div key={drillName} className="flex gap-2 text-sm">
+                      <span className="text-xs font-semibold text-muted-foreground">{index + 1}</span>
+                      <span>{drillName}</span>
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-auto w-full" onClick={(event) => {
+                  event.stopPropagation();
+                  onStartIndoorSet(set.id);
+                }}>
+                  <Play className="mr-2 h-4 w-4" />
+                  Start Set
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="cursor-not-allowed opacity-60">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
             <TreePine className="h-12 w-12 text-muted-foreground" />

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Minus, Plus, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { PuttingDrill, DrillResult } from '@/types/putting';
 import { computeDrillResult, summarizeSession, validateDrillCounts } from '@/lib/putting/scoring';
-import { INDOOR_PRACTICE_SETS } from '@/lib/putting/drills';
+import { INDOOR_PRACTICE_SETS, IndoorPracticeSetId } from '@/lib/putting/drills';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
@@ -28,11 +28,12 @@ interface SessionMeta {
 interface Props {
   drills: PuttingDrill[];
   category: 'indoor' | 'outdoor';
+  initialPracticeSetId?: IndoorPracticeSetId;
   onComplete: (sessionId: string) => void;
   onCancel: () => void;
 }
 
-export function PuttingSessionRunner({ drills, category, onComplete, onCancel }: Props) {
+export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 'set-a', onComplete, onCancel }: Props) {
   const { user } = useAuth();
   // step: -1 = setup screen, 0..n-1 = drill, n = result/save
   const [step, setStep] = useState(-1);
@@ -45,7 +46,7 @@ export function PuttingSessionRunner({ drills, category, onComplete, onCancel }:
     notes: '',
   });
   const [allCounts, setAllCounts] = useState<Record<string, Record<string, number>>>({});
-  const [practiceSetId, setPracticeSetId] = useState<(typeof INDOOR_PRACTICE_SETS)[number]['id']>('set-a');
+  const [practiceSetId, setPracticeSetId] = useState<IndoorPracticeSetId>(initialPracticeSetId);
   const [saving, setSaving] = useState(false);
 
   const sortedDrills = useMemo(() => [...drills].sort((a, b) => a.sort_order - b.sort_order), [drills]);

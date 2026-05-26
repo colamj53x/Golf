@@ -10,20 +10,22 @@ import { PuttingDrill, PuttingSessionRecord, DrillResult, LevelBand, ScoringInpu
 import { PuttingSessionRunner } from './PuttingSessionRunner';
 import { PuttingHistory } from './PuttingHistory';
 import { DrillBuilderDialog } from './DrillBuilderDialog';
-import { mergeLockedIndoorDrills } from '@/lib/putting/drills';
+import { IndoorPracticeSetId, mergeLockedIndoorDrills } from '@/lib/putting/drills';
 
 interface Props {
   onBack: () => void;
+  initialPracticeSetId?: IndoorPracticeSetId;
+  startInRun?: boolean;
 }
 
 type View = 'home' | 'run';
 
-export function PuttingIndoor({ onBack }: Props) {
+export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInRun = false }: Props) {
   const { user } = useAuth();
   const [drills, setDrills] = useState<PuttingDrill[]>([]);
   const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>(startInRun ? 'run' : 'home');
   const [builderOpen, setBuilderOpen] = useState(false);
 
   const loadDrills = useCallback(async () => {
@@ -101,6 +103,7 @@ export function PuttingIndoor({ onBack }: Props) {
         <PuttingSessionRunner
           drills={drills}
           category="indoor"
+          initialPracticeSetId={initialPracticeSetId}
           onComplete={() => {
             loadSessions();
             setView('home');

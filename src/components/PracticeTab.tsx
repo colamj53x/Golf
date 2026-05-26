@@ -8,11 +8,14 @@ import { PuttingHome } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { parsePracticeConfigKey } from '@/types/practiceClubs';
+import { IndoorPracticeSetId } from '@/lib/putting/drills';
 
 type PuttingView = 'home' | 'indoor' | 'outdoor';
 
 export function PracticeTab() {
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
+  const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
+  const [startPuttingSet, setStartPuttingSet] = useState(false);
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
   const { setSelectedClub, setSelectedShotType, setSelectedPower } = usePracticeData();
 
@@ -64,8 +67,29 @@ export function PracticeTab() {
       </TabsContent>
 
       <TabsContent value="putting">
-        {puttingView === 'home' && <PuttingHome onSelect={setPuttingView} />}
-        {puttingView === 'indoor' && <PuttingIndoor onBack={() => setPuttingView('home')} />}
+        {puttingView === 'home' && (
+          <PuttingHome
+            onSelect={(category) => {
+              setStartPuttingSet(false);
+              setPuttingView(category);
+            }}
+            onStartIndoorSet={(setId) => {
+              setPuttingSetId(setId);
+              setStartPuttingSet(true);
+              setPuttingView('indoor');
+            }}
+          />
+        )}
+        {puttingView === 'indoor' && (
+          <PuttingIndoor
+            initialPracticeSetId={puttingSetId}
+            startInRun={startPuttingSet}
+            onBack={() => {
+              setStartPuttingSet(false);
+              setPuttingView('home');
+            }}
+          />
+        )}
       </TabsContent>
     </Tabs>
   );
