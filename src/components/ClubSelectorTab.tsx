@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type React from 'react';
-import { AlertCircle, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
+import { AlertCircle, ArrowDownUp, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +19,11 @@ import { ClubPracticeConfig } from '@/types/practice';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
 const WEDGE_IDS = ['pw', 'gw', 'sw', 'lw'];
-const WEDGE_SHOT_TYPES = ['full', 'pitch', 'chip', 'bump'];
-const WEDGE_POWERS = ['full', '10pm', '9pm', '730pm'];
+const WEDGE_SHOT_TYPES = ['chip', 'pitch', 'bump'];
+const MATRIX_POWER_COLUMNS = [
+  { id: 'full', label: 'Full' },
+  { id: '9pm', label: 'Half' },
+] as const;
 
 type LieOption = 'tee' | 'fairway' | 'rough' | 'sand' | 'recovery' | 'awkward';
 type TargetOption = 'green' | 'fairway';
@@ -28,6 +31,8 @@ type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
 type ShotTypeFilter = 'any' | string;
 type PowerFilter = 'any' | string;
+type MatrixPower = typeof MATRIX_POWER_COLUMNS[number]['id'];
+type MatrixSortKey = 'club' | 'shot' | 'distance';
 
 interface ClubRecommendation {
   clubId: string;
@@ -57,22 +62,30 @@ interface ClubRecommendation {
   pointer: string;
 }
 
+interface WedgeMatrixCell {
+  profileId: string;
+  carry: number | null;
+  total: number | null;
+  bias: number | null;
+  last20TargetPct: number | null;
+  actualShots: number;
+  rangeSessions: number;
+  source: string;
+}
+
 interface WedgeMatrixRow {
   clubId: string;
   clubName: string;
-  profileId: string;
   shotType: string;
-  strength: string;
-  actualCarry: number | null;
-  actualTotal: number | null;
-  sideBias: number | null;
-  safePct: number | null;
-  actualShots: number;
-  rangeCarry: number | null;
-  rangeTotal: number | null;
-  rangeSessions: number;
-  confidence: number;
-  source: string;
+  cells: Partial<Record<typeof MATRIX_POWER_COLUMNS[number]['id'], WedgeMatrixCell>>;
+}
+
+interface MatrixProfileResult {
+  clubId: string;
+  clubName: string;
+  shotType: string;
+  power: MatrixPower;
+  cell: WedgeMatrixCell;
 }
 
 const lieOptions: Array<{ value: LieOption; label: string }> = [
@@ -214,6 +227,16 @@ function getMappedTotal(profile: ShotProfile, target: ProfileTarget, practiceCon
   return getPracticeMetricTarget(getPracticeConfigForProfile(practiceConfigs, profile), 'total_distance');
 }
 
+function getExplicitMappedTotal(profile: ShotProfile, target: ProfileTarget): number | null {
+  const settings = getProfileTargetSettings(profile, target);
+  return settings.targetTotal ?? null;
+}
+
+function getExplicitMappedCarry(profile: ShotProfile, target: ProfileTarget): number | null {
+  const settings = getProfileTargetSettings(profile, target);
+  return settings.targetCarry ?? null;
+}
+
 function getMappedCarry(profile: ShotProfile, target: ProfileTarget, practiceConfigs: ClubPracticeConfig[]): number | null {
   const settings = getProfileTargetSettings(profile, target);
   if (settings.targetCarry !== null && settings.targetCarry !== undefined) return settings.targetCarry;
@@ -231,11 +254,37 @@ function isWedgeProfile(profile: ShotProfile): boolean {
   return WEDGE_IDS.includes(profile.clubId) && WEDGE_SHOT_TYPES.includes(profile.shotType);
 }
 
-function profileSortIndex(profile: ShotProfile): number {
-  const clubIndex = WEDGE_IDS.includes(profile.clubId) ? WEDGE_IDS.indexOf(profile.clubId) : 99;
-  const shotIndex = WEDGE_SHOT_TYPES.includes(profile.shotType) ? WEDGE_SHOT_TYPES.indexOf(profile.shotType) : 99;
-  const powerIndex = WEDGE_POWERS.includes(profile.power) ? WEDGE_POWERS.indexOf(profile.power) : 99;
-  return clubIndex * 100 + shotIndex * 10 + powerIndex;
+function isMatrixPower(power: string): power is MatrixPower {
+  return MATRIX_POWER_COLUMNS.some((column) => column.id === power);
+}
+
+function getClubSortIndex(clubId: string): number {
+  const index = WEDGE_IDS.indexOf(clubId);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+}
+
+function getShotSortIndex(shotType: string): number {
+  const index = WEDGE_SHOT_TYPES.indexOf(shotType);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+}
+
+function getMatrixRowDistance(row: WedgeMatrixRow): number {
+  const full = row.cells.full?.total;
+  const half = row.cells['9pm']?.total;
+  const values = [full, half].filter((value): value is number => value !== null && value !== undefined);
+  return values.length ? Math.max(...values) : Number.NEGATIVE_INFINITY;
+}
+
+function compareMatrixRows(a: WedgeMatrixRow, b: WedgeMatrixRow, sortKey: MatrixSortKey): number {
+  const byClub = getClubSortIndex(a.clubId) - getClubSortIndex(b.clubId)
+    || a.clubName.localeCompare(b.clubName);
+  const byShot = getShotSortIndex(a.shotType) - getShotSortIndex(b.shotType)
+    || getShotTypeLabel(a.shotType).localeCompare(getShotTypeLabel(b.shotType));
+  const byDistance = getMatrixRowDistance(b) - getMatrixRowDistance(a);
+
+  if (sortKey === 'club') return byClub || byShot || byDistance;
+  if (sortKey === 'shot') return byShot || byDistance || byClub;
+  return byDistance || byClub || byShot;
 }
 
 function matchesProfileDistance(shot: Shot, profile: ShotProfile, mappedTotal: number | null): boolean {
@@ -253,6 +302,14 @@ function getProfileSamples(shots: Shot[], profile: ShotProfile, mappedTotal: num
   return clubShots.filter((shot) => matchesProfileDistance(shot, profile, mappedTotal));
 }
 
+function getMatrixProfileSamples(shots: Shot[], profile: ShotProfile, mappedTotal: number | null): Shot[] {
+  if (mappedTotal === null) return [];
+  return shots.filter((shot) =>
+    getClubConfigId(shot.club) === profile.clubId &&
+    matchesProfileDistance(shot, profile, mappedTotal)
+  );
+}
+
 function isSafeOutcome(shot: Shot): boolean {
   const endLie = shot.endLie.toLowerCase();
   return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
@@ -267,6 +324,13 @@ function getConfidenceClass(score: number): string {
   if (score >= 60) return 'bg-amber-500 text-white';
   if (score >= 45) return 'border-amber-500 text-amber-700';
   return 'border-red-500 text-red-700';
+}
+
+function getPercentDotClass(value: number | null): string {
+  if (value === null) return 'border-muted bg-background';
+  if (value >= 65) return 'border-green-600 bg-green-600';
+  if (value >= 40) return 'border-amber-500 bg-amber-500';
+  return 'border-red-600 bg-red-600';
 }
 
 function getSampleBadge(confidence: DataConfidence, count: number) {
@@ -460,6 +524,7 @@ export function ClubSelectorTab() {
   const [power, setPower] = useState<PowerFilter>('any');
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
   const [mustCarry, setMustCarry] = useState(false);
+  const [matrixSort, setMatrixSort] = useState<MatrixSortKey>('club');
 
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
@@ -473,17 +538,19 @@ export function ClubSelectorTab() {
       .filter((profile) => profile.enabled && profile.showOnCourse && isWedgeProfile(profile));
     const sessionProfiles = practiceSessions
       .map((session) => parsePracticeConfigKey(session.clubId))
-      .filter((parsed) => WEDGE_IDS.includes(parsed.club) && WEDGE_SHOT_TYPES.includes(parsed.shotType))
+      .filter((parsed) => WEDGE_IDS.includes(parsed.club) && WEDGE_SHOT_TYPES.includes(parsed.shotType) && isMatrixPower(parsed.power))
       .map((parsed) => shotProfiles[`${parsed.club}_${parsed.shotType}_${parsed.power}`])
       .filter((profile): profile is ShotProfile => Boolean(profile));
     const profileMap = new Map([...configuredProfiles, ...sessionProfiles].map((profile) => [profile.id, profile]));
-
-    return [...profileMap.values()]
-      .sort((a, b) => profileSortIndex(a) - profileSortIndex(b))
-      .map((profile) => {
+    const cells = [...profileMap.values()]
+      .filter((profile) => isMatrixPower(profile.power))
+      .map<MatrixProfileResult | null>((profile) => {
+        const matrixPower = profile.power as MatrixPower;
         const club = clubs.find((item) => item.id === profile.clubId);
-        const mappedTotal = getMappedTotal(profile, 'green', practiceConfigs);
-        const actualShots = getProfileSamples(shots, profile, mappedTotal);
+        const explicitTotal = getExplicitMappedTotal(profile, 'green');
+        const explicitCarry = getExplicitMappedCarry(profile, 'green');
+        const actualShots = getMatrixProfileSamples(shots, profile, explicitTotal);
+
         const practice = practiceSessions.filter((session) => {
           const parsed = parsePracticeConfigKey(session.clubId);
           return parsed.club === profile.clubId && parsed.shotType === profile.shotType && parsed.power === profile.power;
@@ -500,40 +567,57 @@ export function ClubSelectorTab() {
           .map((metric) => metricAverage(metric!.valueMin, metric!.valueMax))
           .filter((value): value is number => value !== null);
 
-        const actualTotal = actualShots.length ? mean(actualShots.map((shot) => shot.total || 0)) : null;
-        const actualCarry = null;
-        const sideBias = actualShots.length ? mean(actualShots.map((shot) => shot.side || 0)) : null;
-        const safePct = actualShots.length ? (actualShots.filter(isSafeOutcome).length / actualShots.length) * 100 : null;
         const rangeCarry = practiceCarry.length ? mean(practiceCarry) : null;
-        const rangeTotal = practiceTotal.length ? mean(practiceTotal) : getMappedTotal(profile, 'green', practiceConfigs) ?? rangeCarry;
-        const confidence = Math.round(clamp(
-          (actualShots.length ? 45 : 0) +
-          (practice.length || mappedTotal ? 35 : 0) +
-          Math.min(actualShots.length, 10) * 1.5 +
-          Math.min(practice.length, 5) * 1.5,
-          0,
-          100,
-        ));
+        const rangeTotal = practiceTotal.length ? mean(practiceTotal) : null;
+        const recentShots = [...actualShots]
+          .sort((a, b) => b.date.getTime() - a.date.getTime())
+          .slice(0, 20);
+        const last20TargetPct = recentShots.length
+          ? (recentShots.filter((shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality)).length / recentShots.length) * 100
+          : null;
+        const total = explicitTotal ?? rangeTotal ?? (actualShots.length ? mean(actualShots.map((shot) => shot.total || 0)) : null);
+        const carry = explicitCarry ?? rangeCarry;
+
+        if (total === null && carry === null && actualShots.length === 0 && practice.length === 0) return null;
 
         return {
           clubId: profile.clubId,
           clubName: club?.clubName ?? profile.clubId.toUpperCase(),
-          profileId: profile.id,
-          shotType: getShotTypeLabel(profile.shotType),
-          strength: getPowerLabel(profile.power),
-          actualCarry,
-          actualTotal,
-          sideBias,
-          safePct,
-          actualShots: actualShots.length,
-          rangeCarry: rangeCarry ?? getMappedCarry(profile, 'green', practiceConfigs),
-          rangeTotal,
-          rangeSessions: practice.length,
-          confidence,
-          source: actualShots.length && (practice.length || mappedTotal) ? 'actual + mapping' : actualShots.length ? 'actual' : practice.length ? 'range' : 'mapping',
+          shotType: profile.shotType,
+          power: matrixPower,
+          cell: {
+            profileId: profile.id,
+            carry,
+            total,
+            bias: actualShots.length ? mean(actualShots.map((shot) => shot.side || 0)) : null,
+            last20TargetPct,
+            actualShots: actualShots.length,
+            rangeSessions: practice.length,
+            source: explicitTotal !== null || explicitCarry !== null
+              ? 'gapping'
+              : practice.length
+                ? 'range'
+                : 'live',
+          },
         };
-      });
-  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles]);
+      })
+      .filter((cell): cell is MatrixProfileResult => Boolean(cell));
+
+    const rows = new Map<string, WedgeMatrixRow>();
+    for (const item of cells) {
+      const key = `${item.clubId}-${item.shotType}`;
+      const row = rows.get(key) ?? {
+        clubId: item.clubId,
+        clubName: item.clubName,
+        shotType: item.shotType,
+        cells: {},
+      };
+      row.cells[item.power] = item.cell;
+      rows.set(key, row);
+    }
+
+    return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
+  }, [shots, clubs, practiceSessions, shotProfiles, matrixSort]);
 
   if (isLoading) {
     return (
@@ -557,49 +641,53 @@ export function ClubSelectorTab() {
             <CardHeader>
               <CardTitle>Wedge Matrix</CardTitle>
               <CardDescription>
-                Mapped wedge, pitch, chip, and bump-and-run numbers by club and strength.
+                Chip, pitch, and bump-and-run numbers from the same shot mapping used by Club Gapping.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Sort by</span>
+                {[
+                  { id: 'club', label: 'Club' },
+                  { id: 'shot', label: 'Shot Type' },
+                  { id: 'distance', label: 'Distance' },
+                ].map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={matrixSort === option.id ? 'default' : 'outline'}
+                    className="gap-2"
+                    onClick={() => setMatrixSort(option.id as MatrixSortKey)}
+                  >
+                    <ArrowDownUp className="h-4 w-4" />
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
               <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Club</TableHead>
-                      <TableHead>Shot</TableHead>
-                      <TableHead>Strength</TableHead>
-                      <TableHead className="text-right">Carry</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Live Total</TableHead>
-                      <TableHead className="text-right">Side</TableHead>
-                      <TableHead className="text-right">Safe</TableHead>
-                      <TableHead className="text-right">Confidence</TableHead>
-                      <TableHead>Source</TableHead>
+                      <TableHead className="min-w-[110px]">Club</TableHead>
+                      <TableHead className="min-w-[140px]">Shot</TableHead>
+                      {MATRIX_POWER_COLUMNS.map((column) => (
+                        <TableHead key={column.id} className="min-w-[220px] text-center">
+                          {column.label}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {wedgeMatrix.map((row) => (
-                      <TableRow key={row.profileId}>
+                      <TableRow key={`${row.clubId}-${row.shotType}`}>
                         <TableCell className="font-medium">{row.clubName}</TableCell>
-                        <TableCell>{row.shotType}</TableCell>
-                        <TableCell>{row.strength}</TableCell>
-                        <TableCell className="text-right">{formatDistance(row.rangeCarry ?? row.actualCarry)}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatDistance(row.rangeTotal ?? row.actualTotal)}</TableCell>
-                        <TableCell className="text-right">{formatDistance(row.actualTotal)}</TableCell>
-                        <TableCell className="text-right">{fmtSigned(row.sideBias)}</TableCell>
-                        <TableCell className="text-right">{fmtPct(row.safePct)}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={row.confidence >= 60 ? 'default' : 'outline'} className={getConfidenceClass(row.confidence)}>
-                            {row.confidence}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">
-                            {row.source}
-                            {row.actualShots > 0 && ` · ${row.actualShots} actual`}
-                            {row.rangeSessions > 0 && ` · ${row.rangeSessions} range`}
-                          </span>
-                        </TableCell>
+                        <TableCell>{getShotTypeLabel(row.shotType)}</TableCell>
+                        {MATRIX_POWER_COLUMNS.map((column) => (
+                          <TableCell key={column.id} className="align-top">
+                            <MatrixCell cell={row.cells[column.id]} />
+                          </TableCell>
+                        ))}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -852,6 +940,39 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-md bg-muted/50 px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="font-medium">{value}</div>
+    </div>
+  );
+}
+
+function MatrixCell({ cell }: { cell?: WedgeMatrixCell }) {
+  if (!cell) {
+    return <div className="py-4 text-center text-sm text-muted-foreground">-</div>;
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <div>
+        <div className="text-xs text-muted-foreground">Carry</div>
+        <div className="font-medium">{formatDistance(cell.carry)}</div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">Total</div>
+        <div className="font-semibold">{formatDistance(cell.total)}</div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">Bias</div>
+        <div className="font-medium">{fmtSigned(cell.bias)}</div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">Last 20 T</div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`block h-4 w-4 rounded-full border ${getPercentDotClass(cell.last20TargetPct)}`}
+            title={`Last 20 target ${fmtPct(cell.last20TargetPct)}`}
+          />
+          <span className="font-medium">{fmtPct(cell.last20TargetPct)}</span>
+        </div>
+      </div>
     </div>
   );
 }
