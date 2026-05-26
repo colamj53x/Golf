@@ -261,16 +261,21 @@ function getShotLabel(profile: ShotProfile): string {
 }
 
 function powerStrength(power: string): number {
+  if (power === 'full') return 4;
   if (power === '10pm') return 3;
   if (power === '9pm') return 2;
   if (power === '730pm') return 1;
   return 0;
 }
 
-function getShotBadgeClass(profile: ShotProfile, isHardestBump = false): string {
+function isShortShot(profile: ShotProfile): boolean {
+  return profile.shotType === 'bump' || profile.shotType === 'pitch' || profile.shotType === 'chip';
+}
+
+function getShotBadgeClass(profile: ShotProfile, isHardestShortShot = false): string {
   if (profile.shotType === 'punch') return '';
-  if (profile.shotType !== 'bump' && profile.shotType !== 'pitch' && profile.shotType !== 'chip') return '';
-  if (profile.shotType === 'bump' && isHardestBump) {
+  if (!isShortShot(profile)) return '';
+  if (isHardestShortShot) {
     return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
   }
   return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
@@ -964,13 +969,13 @@ export function ClubGappingTab() {
               <TableBody>
                 {groupedRows.map(([clubName, clubRows]) => (
                   clubRows.map((row, index) => {
-                    const strongestBumpPower = Math.max(
+                    const strongestShortShotPower = Math.max(
                       ...clubRows
-                        .filter((clubRow) => clubRow.profile.shotType === 'bump')
+                        .filter((clubRow) => clubRow.profile.shotType === row.profile.shotType && isShortShot(clubRow.profile))
                         .map((clubRow) => powerStrength(clubRow.profile.power)),
                       -1,
                     );
-                    const isHardestBump = row.profile.shotType === 'bump' && powerStrength(row.profile.power) === strongestBumpPower;
+                    const isHardestShortShot = isShortShot(row.profile) && powerStrength(row.profile.power) === strongestShortShotPower;
 
                     return (
                     <TableRow key={`${row.profile.id}-${row.target}`}>
@@ -993,7 +998,7 @@ export function ClubGappingTab() {
                       <TableCell>
                         <Badge
                           variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}
-                          className={getShotBadgeClass(row.profile, isHardestBump)}
+                          className={getShotBadgeClass(row.profile, isHardestShortShot)}
                         >
                           {getShotLabel(row.profile)}
                         </Badge>
