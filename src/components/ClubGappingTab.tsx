@@ -520,7 +520,10 @@ function buildRow(
   const intentWindow = getIntentDistanceWindow(savedTarget, rangeTotalWindow, rangeTotal, rangeLiveVariationPct);
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
-  const targetReferenceShots = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow)));
+  const shouldSplitByIntent = profile.targets.length > 1;
+  const targetReferenceShots = shouldSplitByIntent
+    ? withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow)))
+    : cleanedClubShots;
   const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
   const top = referenceShots;
   const totals = top.map((shot) => shot.total);
@@ -548,7 +551,9 @@ function buildRow(
     .sort()
     .slice(-3);
   const lastThreeClubShots = clubShots.filter((shot) => uniqueDates.includes(getShotDateKey(shot.date)));
-  const lastThreeIntentShots = lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow));
+  const lastThreeIntentShots = shouldSplitByIntent
+    ? lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow))
+    : lastThreeClubShots;
 
   return {
     profile,
