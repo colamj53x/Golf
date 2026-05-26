@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Eye, Flag, Footprints, Plus, Play, ScanLine, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
@@ -16,6 +16,57 @@ interface Props {
 }
 
 type View = 'home' | 'run';
+
+const readSteps = [
+  {
+    title: 'Read from behind',
+    detail: 'See the whole putt. Call the slope and break: uphill, downhill, flat; left, right, straight.',
+    icon: Eye,
+  },
+  {
+    title: 'Check the low side',
+    detail: 'Walk downhill side, feel the slope, then choose small, medium, or big break.',
+    icon: Footprints,
+  },
+  {
+    title: 'Read the finish',
+    detail: 'Look at the last 1-2m near the hole and pick the entry point.',
+    icon: Flag,
+  },
+  {
+    title: 'Build the line',
+    detail: 'Choose soft, normal, or firm. Trace the curve back, then pick the start spot.',
+    icon: ScanLine,
+  },
+];
+
+const techniqueSteps = [
+  {
+    title: 'Face first',
+    detail: 'Aim the putter face at your start spot before anything else.',
+    icon: ScanLine,
+  },
+  {
+    title: 'Set around the face',
+    detail: 'Ball slightly forward. Eyes over or just inside. Weight balanced, slightly lead side.',
+    icon: Footprints,
+  },
+  {
+    title: 'Feel the distance',
+    detail: 'Look at the hole. Make 1-2 practice strokes that match the putt length.',
+    icon: Eye,
+  },
+  {
+    title: 'Roll it',
+    detail: 'Pick one dimple on the back of the ball and brush slightly up through it.',
+    icon: CheckCircle2,
+  },
+  {
+    title: 'Finish to my front foot',
+    detail: 'Hold a low, stable finish with the face looking down the start line.',
+    icon: Flag,
+  },
+];
 
 export function PuttingIndoor({ onBack }: Props) {
   const { user } = useAuth();
@@ -129,6 +180,78 @@ export function PuttingIndoor({ onBack }: Props) {
           </div>
         </CardHeader>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">Read</Badge>
+              <CardTitle className="text-lg">Pre-Shot Routine</CardTitle>
+            </div>
+            <CardDescription>Start it there. Roll it at that speed.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3">
+              {readSteps.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <div key={step.title} className="flex gap-3 rounded-md border bg-muted/20 p-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">{index + 1}</span>
+                        <h3 className="font-semibold leading-tight">{step.title}</h3>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{step.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start spot guide</p>
+              <div className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+                <div><span className="font-medium">Short:</span> 10-20cm ahead</div>
+                <div><span className="font-medium">Medium:</span> 20-50cm ahead</div>
+                <div><span className="font-medium">Long:</span> 50cm-1m ahead</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">Technique</Badge>
+              <CardTitle className="text-lg">Setup & Stroke</CardTitle>
+            </div>
+            <CardDescription>Face first. Feel it. Roll it. Finish.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3">
+              {techniqueSteps.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <div key={step.title} className="flex gap-3 rounded-md border bg-muted/20 p-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">{index + 1}</span>
+                        <h3 className="font-semibold leading-tight">{step.title}</h3>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{step.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
