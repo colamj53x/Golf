@@ -249,9 +249,18 @@ function getShotLabel(profile: ShotProfile): string {
   if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
 
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
-  const base = profile.shotType === 'bump' ? 'Bump and Run' : shotName;
+  const base = profile.shotType === 'bump' ? 'B&R' : shotName;
   const power = getPowerLabel(profile.power);
   return power ? `${base} ${power}` : base;
+}
+
+function getShotBadgeClass(profile: ShotProfile): string {
+  if (profile.shotType === 'punch') return '';
+  if (profile.shotType !== 'bump' && profile.shotType !== 'pitch' && profile.shotType !== 'chip') return '';
+  if (profile.power === 'full' || profile.power === '10pm') {
+    return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
+  }
+  return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
 }
 
 function fmtSideRange(left: number | null, right: number | null): string {
@@ -804,7 +813,12 @@ export function ClubGappingTab() {
                         </Button>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}>{getShotLabel(row.profile)}</Badge>
+                        <Badge
+                          variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}
+                          className={getShotBadgeClass(row.profile)}
+                        >
+                          {getShotLabel(row.profile)}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
