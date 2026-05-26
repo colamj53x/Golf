@@ -401,17 +401,40 @@ function getPracticeMetricNumber(metrics: Record<string, unknown>, keys: string[
 function getRangeSideStats(
   sessions: PracticeSession[],
   shotsBySession: ShotsBySession,
-): { left: number | null; right: number | null; mean: number | null } {
-  const sides = sessions.slice(0, 3)
+): {
+  total: number | null;
+  totalMin: number | null;
+  totalMax: number | null;
+  carry: number | null;
+  carryMin: number | null;
+  carryMax: number | null;
+  left: number | null;
+  right: number | null;
+  mean: number | null;
+} {
+  const rangeShots = sessions.slice(0, 3)
     .flatMap((session) => shotsBySession[session.id] ?? [])
-    .map((shot) => getPracticeMetricNumber(shot.metrics, ['carrySide', 'carry_side', 'side', 'offline']))
+    .map((shot) => shot.metrics);
+
+  const totals = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['total', 'totalDistance', 'total_distance']))
+    .filter((value): value is number => value !== null);
+  const carries = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['carry']))
+    .filter((value): value is number => value !== null);
+  const sides = rangeShots
+    .map((metrics) => getPracticeMetricNumber(metrics, ['carrySide', 'carry_side', 'side', 'offline']))
     .filter((value): value is number => value !== null);
 
-  if (sides.length === 0) return { left: null, right: null, mean: null };
-
   return {
-    left: Math.abs(Math.min(0, ...sides)),
-    right: Math.max(0, ...sides),
+    total: mean(totals),
+    totalMin: totals.length ? Math.min(...totals) : null,
+    totalMax: totals.length ? Math.max(...totals) : null,
+    carry: mean(carries),
+    carryMin: carries.length ? Math.min(...carries) : null,
+    carryMax: carries.length ? Math.max(...carries) : null,
+    left: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
+    right: sides.length ? Math.max(0, ...sides) : null,
     mean: mean(sides),
   };
 }
@@ -485,7 +508,16 @@ function buildRow(
   const rangeTargetTotalWindow = getMetricTargetRange(practiceConfig, 'total_distance');
   const rangeTargetVariationPct = rangeVariationPct(rangeTargetTotalWindow);
   const rangeSideStats = getRangeSideStats(sessions, shotsBySession);
-  const intentWindow = getIntentDistanceWindow(savedTarget, rangeTargetTotalWindow, rangeTargetTotal, rangeTargetVariationPct);
+  const rangeTotal = rangeSideStats.total ?? rangeTargetTotal;
+  const rangeCarry = rangeSideStats.carry ?? rangeTargetCarry;
+  const rangeTotalWindow = {
+    min: rangeSideStats.totalMin ?? rangeTargetTotalWindow.min,
+    max: rangeSideStats.totalMax ?? rangeTargetTotalWindow.max,
+  };
+  const rangeLiveVariationPct = rangeSideStats.totalMin !== null && rangeSideStats.totalMax !== null
+    ? rangeVariationPct({ min: rangeSideStats.totalMin, max: rangeSideStats.totalMax })
+    : rangeTargetVariationPct;
+  const intentWindow = getIntentDistanceWindow(savedTarget, rangeTotalWindow, rangeTotal, rangeLiveVariationPct);
   const clubShots = courseShots.filter((shot) => getClubConfigId(shot.club) === profile.clubId && matchesProfileShot(shot, profile, fullTargetMax));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const targetReferenceShots = withoutDistanceOutliers(cleanedClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow)));
@@ -496,9 +528,9 @@ function buildRow(
   const sides = top.map((shot) => shot.side);
   const liveTotal = mean(totals);
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
-  const displayTotal = savedTarget.targetTotal ?? liveTotal ?? rangeTargetTotal;
+  const displayTotal = savedTarget.targetTotal ?? liveTotal ?? rangeTotal;
   const liveVariationPct = variationPct(variationTotals, liveTotal);
-  const displayVariationPct = savedTarget.targetVariationPct ?? liveVariationPct ?? rangeTargetVariationPct;
+  const displayVariationPct = savedTarget.targetVariationPct ?? liveVariationPct ?? rangeLiveVariationPct;
   const variationWindow = displayTotal !== null && displayVariationPct !== null
     ? {
         min: displayTotal * (1 - displayVariationPct / 100),
@@ -506,7 +538,9 @@ function buildRow(
       }
     : null;
   const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
-  const displayCarryWindow = getRangeCarryWindow(displayTotal, practiceConfig);
+  const displayCarryWindow = rangeSideStats.carryMin !== null && rangeSideStats.carryMax !== null
+    ? { min: rangeSideStats.carryMin, max: rangeSideStats.carryMax }
+    : getRangeCarryWindow(displayTotal, practiceConfig);
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
   const rangeOnly = referenceShots.length === 0 && rangeShotCount > 0;
 
@@ -524,17 +558,17 @@ function buildRow(
     liveTotal,
     liveCarry,
     liveVariationPct,
-    rangeTargetVariationPct,
-    rangeTargetTotal,
-    rangeTargetCarry,
+    rangeTargetVariationPct: rangeLiveVariationPct,
+    rangeTargetTotal: rangeTotal,
+    rangeTargetCarry: rangeCarry,
     rangeTargetSide,
     displayVariationPct,
     displayTotal,
-    displayCarry: savedTarget.targetCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? liveCarry ?? rangeTargetCarry,
+    displayCarry: savedTarget.targetCarry ?? liveCarry ?? rangeCarry ?? getRangeCarryEstimate(displayTotal, practiceConfig),
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
-    totalMin: variationWindow?.min ?? (rangeOnly ? rangeTargetTotalWindow.min : estimatedVerticalWindow.min),
-    totalMax: variationWindow?.max ?? (rangeOnly ? rangeTargetTotalWindow.max : estimatedVerticalWindow.max),
+    totalMin: variationWindow?.min ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
+    totalMax: variationWindow?.max ?? (rangeOnly ? rangeTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
