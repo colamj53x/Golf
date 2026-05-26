@@ -12,7 +12,7 @@ import { usePracticeShotsBySessions, ShotsBySession } from '@/hooks/usePracticeS
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { ProfileTarget, ShotProfile, ShotProfileMap, ShotProfileTargetValues, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { Shot } from '@/types/golf';
+import { DEFAULT_CLUB_CONFIGS, Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
 import { parsePracticeConfigKey, POWER_OPTIONS, PRACTICE_CLUBS, SHOT_TYPES } from '@/types/practiceClubs';
 
@@ -695,7 +695,9 @@ function getPitchTargets(
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
 ): Array<{ power: string; target: number }> {
-  const fallbackFullTarget = clubId === 'gw' ? GAP_WEDGE_FULL_PITCH_TARGET : null;
+  const fallbackFullTarget = clubId === 'gw'
+    ? GAP_WEDGE_FULL_PITCH_TARGET
+    : DEFAULT_CLUB_CONFIGS.find((club) => club.id === clubId)?.stockDistance ?? null;
   const fullTarget = getRangeSessionTotalForProfile(`${clubId}_pitch_full`, practiceSessions, shotsBySession)
     ?? getRangeSessionTotalForProfile(`${clubId}_full_full`, practiceSessions, shotsBySession)
     ?? getRangeSessionTotalForProfile(clubId, practiceSessions, shotsBySession)
@@ -942,6 +944,7 @@ export function ClubGappingTab() {
       if (parsed.club && parsed.shotType === 'bump') bumpClubIds.add(parsed.club);
     }
     ensureVisibleShortBucketProfiles(profilesWithRangeSessions, [...bumpClubIds], 'bump');
+    ensureVisibleShortBucketProfiles(profilesWithRangeSessions, ['pw', 'gw', 'sw'], 'pitch');
 
     return Object.values(profilesWithRangeSessions)
       .filter((profile) => {
