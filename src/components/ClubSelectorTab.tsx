@@ -1066,44 +1066,51 @@ export function ClubSelectorTab() {
                 ) : (
                   <div className="space-y-3">
                     {recommendations.slice(0, 4).map((result, index) => (
-                      <div key={result.profileId} className="overflow-hidden rounded-md border">
-                        <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                          {index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
-                        </div>
-                        <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-0">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-lg font-semibold">{result.clubName}</span>
-                              <Badge variant="outline">{result.shotLabel}</Badge>
-                              {result.isShortOfTarget && <Badge variant="outline" className="border-amber-500 text-amber-700">Short</Badge>}
-                            </div>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {result.isShortOfTarget
-                                ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(numericTarget)}.`
-                                : result.pointer}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid gap-2 p-4 pb-0 text-sm sm:grid-cols-3">
-                          <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
-                          <Metric label="Avg carry" value={formatDistance(result.avgCarry)} />
-                          <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
-                        </div>
-                        <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
-                          <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
-                          <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
-                          <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
-                        </div>
-                        {result.badges.length > 0 && (
-                          <div className="flex flex-wrap gap-2 px-4 pb-4">
-                            {result.badges.map((badge) => (
-                              <Badge key={badge} variant="outline" className="gap-1">
-                                <ShieldAlert className="h-3 w-3" />
-                                {badge}
-                              </Badge>
-                            ))}
+                      <div key={result.profileId} className="space-y-3">
+                        {index === 1 && (
+                          <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                            Other Options
                           </div>
                         )}
+                        <div className="overflow-hidden rounded-md border">
+                          <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                            {index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
+                          </div>
+                          <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-0">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-lg font-semibold">{result.clubName}</span>
+                                <Badge variant="outline">{result.shotLabel}</Badge>
+                                {result.isShortOfTarget && <Badge variant="outline" className="border-amber-500 text-amber-700">Short</Badge>}
+                              </div>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {result.isShortOfTarget
+                                  ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(numericTarget)}.`
+                                  : result.pointer}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 p-4 pb-0 text-sm sm:grid-cols-3">
+                            <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
+                            <Metric label="Avg carry" value={formatDistance(result.avgCarry)} />
+                            <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
+                          </div>
+                          <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
+                            <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
+                            <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
+                            <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
+                          </div>
+                          {result.badges.length > 0 && (
+                            <div className="flex flex-wrap gap-2 px-4 pb-4">
+                              {result.badges.map((badge) => (
+                                <Badge key={badge} variant="outline" className="gap-1">
+                                  <ShieldAlert className="h-3 w-3" />
+                                  {badge}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
