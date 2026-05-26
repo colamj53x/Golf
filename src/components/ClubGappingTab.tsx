@@ -549,13 +549,9 @@ function buildRow(
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
   const rangeOnly = referenceShots.length === 0 && rangeShotCount > 0;
 
-  const uniqueDates = [...new Set(courseShots.map((shot) => getShotDateKey(shot.date)))]
-    .sort()
-    .slice(-3);
-  const lastThreeClubShots = clubShots.filter((shot) => uniqueDates.includes(getShotDateKey(shot.date)));
-  const lastThreeIntentShots = shouldSplitByIntent
-    ? lastThreeClubShots.filter((shot) => matchesTargetIntent(shot, target, intentWindow))
-    : lastThreeClubShots;
+  const recentIntentShots = [...targetReferenceShots]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 20);
 
   return {
     profile,
@@ -582,9 +578,9 @@ function buildRow(
     displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
     sideBias: mean(sides) ?? rangeSideStats.mean,
     overallTargetPct: targetReferenceShots.length ? (targetReferenceShots.filter((shot) => matchesTarget(shot, target)).length / targetReferenceShots.length) * 100 : null,
-    recentTargetPct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter((shot) => matchesTarget(shot, target)).length / lastThreeIntentShots.length) * 100 : null,
+    recentTargetPct: recentIntentShots.length ? (recentIntentShots.filter((shot) => matchesTarget(shot, target)).length / recentIntentShots.length) * 100 : null,
     overallSafePct: targetReferenceShots.length ? (targetReferenceShots.filter(isSafeOutcome).length / targetReferenceShots.length) * 100 : null,
-    recentSafePct: lastThreeIntentShots.length ? (lastThreeIntentShots.filter(isSafeOutcome).length / lastThreeIntentShots.length) * 100 : null,
+    recentSafePct: recentIntentShots.length ? (recentIntentShots.filter(isSafeOutcome).length / recentIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: targetReferenceShots.length,
     intentShotCount: targetReferenceShots.length,
@@ -730,9 +726,9 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry Range</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Overall T</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Recent T</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Last 20 T</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Overall Safe</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Recent Safe</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Last 20 Safe</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
                   <TableHead className="text-center whitespace-nowrap">Shots</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -761,13 +757,13 @@ export function ClubGappingTab() {
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.overallTargetPct)}`} title={`Overall target ${fmt(row.overallTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Recent target ${fmt(row.recentTargetPct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Last 20 target ${fmt(row.recentTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.overallSafePct)}`} title={`Overall safe ${fmt(row.overallSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Recent safe ${fmt(row.recentSafePct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Last 20 safe ${fmt(row.recentSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
