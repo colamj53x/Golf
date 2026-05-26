@@ -237,6 +237,11 @@ function getClubName(profile: ShotProfile): string {
   return PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
 }
 
+function clubSortIndex(clubId: string): number {
+  const index = PRACTICE_CLUBS.findIndex((club) => club.id === clubId);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+}
+
 function getPowerLabel(power: string): string {
   if (power === 'full') return '';
   if (power === '730pm') return '7.30';
@@ -247,7 +252,7 @@ function getPowerLabel(power: string): string {
 
 function getShotLabel(profile: ShotProfile): string {
   if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
-  if (profile.shotType === 'bump') return 'Bump and Run';
+  if (profile.shotType === 'bump') return 'Bump';
 
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
   const power = getPowerLabel(profile.power);
@@ -777,7 +782,18 @@ export function ClubGappingTab() {
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
-    for (const row of rows) {
+    const sortedRows = [...rows].sort((a, b) => {
+      const clubDelta = clubSortIndex(a.profile.clubId) - clubSortIndex(b.profile.clubId);
+      if (clubDelta !== 0) return clubDelta;
+
+      const aDistance = a.displayTotal ?? Number.NEGATIVE_INFINITY;
+      const bDistance = b.displayTotal ?? Number.NEGATIVE_INFINITY;
+      if (aDistance !== bDistance) return bDistance - aDistance;
+
+      return getShotLabel(a.profile).localeCompare(getShotLabel(b.profile));
+    });
+
+    for (const row of sortedRows) {
       const clubName = getClubName(row.profile);
       groups.set(clubName, [...(groups.get(clubName) ?? []), row]);
     }
