@@ -50,6 +50,7 @@ interface ClubRecommendation {
   profileName: string;
   shotType: string;
   strength: string;
+  shotLabel: string;
   technique: string;
   routine: string;
   confidence: number;
@@ -58,7 +59,12 @@ interface ClubRecommendation {
   sampleLabel: string;
   dataConfidence: DataConfidence;
   avgTotal: number;
+  avgCarry: number | null;
   avgSide: number;
+  shotConfidence: number | null;
+  safetyConfidence: number | null;
+  within5Pct: number | null;
+  isShortOfTarget: boolean;
   leftRisk: number;
   rightRisk: number;
   shortRisk: number;
@@ -204,6 +210,17 @@ function getShotTypeLabel(shotType: string): string {
 
 function getPowerLabel(power: string): string {
   return POWER_OPTIONS.find((item) => item.id === power)?.name ?? power;
+}
+
+function getSelectorShotLabel(profile: ShotProfile): string {
+  if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
+  const shot = getShotTypeLabel(profile.shotType);
+  const power = profile.power === 'full'
+    ? 'Full'
+    : profile.power === '9pm'
+      ? 'Half'
+      : getPowerLabel(profile.power);
+  return `${shot} / ${power}`;
 }
 
 function metricAverage(valueMin: number | null, valueMax: number | null): number | null {
@@ -617,6 +634,7 @@ function calculateRecommendations(
       const sampleLabel = row.intentShotCount > 0 ? 'mapping' : row.rangeShotCount > 0 ? 'range' : 'club';
 
       const avgTotal = mappedTotal;
+      const avgCarry = row.displayCarry;
       const avgSide = (row.sideBias ?? 0) + sideAdjustment;
       const sideBand = Math.max(5, mappedSide ?? club.acceptableSideBand);
       const distanceBand = Math.max(6, club.acceptableDistanceBand);
@@ -637,6 +655,8 @@ function calculateRecommendations(
       const hitPct = sample.length ? (hitCount / sample.length) * 100 : 0;
       const goodDistanceCount = sample.filter(isGoodDistance).length;
       const goodDistancePct = sample.length ? (goodDistanceCount / sample.length) * 100 : row.recentTargetPct ?? 0;
+      const within5Count = sample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= 5).length;
+      const within5Pct = sample.length ? (within5Count / sample.length) * 100 : null;
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
       const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
@@ -651,6 +671,7 @@ function calculateRecommendations(
       const liePenalty = lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const mappingConfidence = row.recentTargetPct ?? row.rangeConfidence ?? goodShotPct;
+      const isShortOfTarget = target === 'green' && avgTotal < adjustedTargetDistance - 5;
       const confidence = Math.round(clamp(
         mappingConfidence * 0.34 +
         targetFit * 0.28 +
@@ -685,6 +706,7 @@ function calculateRecommendations(
         profileName: getShortProfileName(primaryProfile),
         shotType: getShotTypeLabel(primaryProfile.shotType),
         strength: getPowerLabel(primaryProfile.power),
+        shotLabel: getSelectorShotLabel(primaryProfile),
         technique: primaryProfile.technique,
         routine: primaryProfile.routine,
         confidence,
@@ -693,7 +715,12 @@ function calculateRecommendations(
         sampleLabel,
         dataConfidence: getDataConfidence(sample.length),
         avgTotal: mappedTotal ?? avgTotal,
+        avgCarry,
         avgSide,
+        shotConfidence: row.recentTargetPct,
+        safetyConfidence: row.recentSafePct,
+        within5Pct,
+        isShortOfTarget,
         leftRisk,
         rightRisk,
         shortRisk,
@@ -1020,92 +1047,70 @@ export function ClubSelectorTab() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-              <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Recommended Options
-            </CardTitle>
-            <CardDescription>
-              Uses exact scenario data where possible, then lie or club history when sample size is thin.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recommendations.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground">
-                <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-50" />
-                <p>No useful option found for this distance.</p>
-                <p className="mt-1 text-sm">Try a different target distance or add more shot data.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recommendations.slice(0, 4).map((result, index) => (
-                  <div key={result.profileId} className="rounded-md border p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-semibold">{result.clubName}</span>
-                          <Badge variant="outline">{result.profileName}</Badge>
-                          {index === 0 && <Badge>Best</Badge>}
-                          <Badge variant={result.confidence >= 60 ? 'default' : 'outline'} className={getConfidenceClass(result.confidence)}>
-                            {result.confidence}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{result.pointer}</p>
-                      </div>
-                      {getSampleBadge(result.dataConfidence, result.sampleCount)}
-                    </div>
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
-                      <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
-                      <Metric label="Shot" value={result.shotType} />
-                      <Metric label="Strength" value={result.strength} />
-                      <Metric label={`${target} hits`} value={`${Math.round(result.hitPct)}% (${result.hitCount})`} />
-                    </div>
-                    <div className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
-                      <Metric label="Good distance" value={`${Math.round(result.goodDistancePct)}%`} />
-                      <Metric label="Bias" value={`${Math.round(Math.abs(result.avgSide))}m ${result.avgSide > 0 ? 'R' : result.avgSide < 0 ? 'L' : ''}`} />
-                      <Metric label="Data" value={result.sampleLabel} />
-                    </div>
-                    {result.badges.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {result.badges.map((badge) => (
-                          <Badge key={badge} variant="outline" className="gap-1">
-                            <ShieldAlert className="h-3 w-3" />
-                            {badge}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {(result.technique || result.routine) && (
-                      <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-                        {result.technique && <Metric label="Technique" value={result.technique} />}
-                        {result.routine && <Metric label="Routine" value={result.routine} />}
-                      </div>
-                    )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Recommended Options
+                </CardTitle>
+                <CardDescription>
+                  Uses the Club Gapping mapped output, then adjusts for lie, trouble, and target fit.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recommendations.length === 0 ? (
+                  <div className="py-10 text-center text-muted-foreground">
+                    <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-50" />
+                    <p>No useful option found for this distance.</p>
+                    <p className="mt-1 text-sm">Try a different target distance or add more mapping data.</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wind className="h-5 w-5" />
-              Generic Technique Pointers
-            </CardTitle>
-            <CardDescription>Placeholder cues until shot-specific technique rules are added.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <Pointer title="Normal approach" text="Choose the club first, then make the stock swing. Avoid inventing a new shot on the course." />
-            <Pointer title="Must carry" text="Favour enough club. A committed three-quarter swing beats a forced perfect number." />
-            <Pointer title="Trouble left/right" text="Aim for the centre of the safe half and keep the finish balanced." />
-            <Pointer title="Wedge" text="Match the shot type and strength to the mapped number, then land it on the known spot." />
-          </CardContent>
-        </Card>
-            </div>
+                ) : (
+                  <div className="space-y-3">
+                    {recommendations.slice(0, 4).map((result, index) => (
+                      <div key={result.profileId} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {index === 0 ? 'Best' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-lg font-semibold">{result.clubName}</span>
+                              <Badge variant="outline">{result.shotLabel}</Badge>
+                              {result.isShortOfTarget && <Badge variant="outline" className="border-amber-500 text-amber-700">Short</Badge>}
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {result.isShortOfTarget
+                                ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(numericTarget)}.`
+                                : result.pointer}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                          <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
+                          <Metric label="Avg carry" value={formatDistance(result.avgCarry)} />
+                          <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
+                        </div>
+                        <div className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+                          <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
+                          <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
+                          <Metric label="Within 5m" value={fmtPct(result.within5Pct)} />
+                        </div>
+                        {result.badges.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {result.badges.map((badge) => (
+                              <Badge key={badge} variant="outline" className="gap-1">
+                                <ShieldAlert className="h-3 w-3" />
+                                {badge}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -1127,6 +1132,18 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-md bg-muted/50 px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="font-medium">{value}</div>
+    </div>
+  );
+}
+
+function ConfidenceMetric({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="rounded-md bg-muted/50 px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-2 font-medium">
+        <span className={`block h-3.5 w-3.5 shrink-0 rounded-full border ${getPercentDotClass(value)}`} />
+        {fmtPct(value)}
+      </div>
     </div>
   );
 }
