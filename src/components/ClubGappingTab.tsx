@@ -493,10 +493,11 @@ function buildRow(
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
   profiles: ShotProfileMap,
+  globalQualityCutoff: number,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
   const savedTarget = getTargetSettings(profile, target);
-  const qualityCutoff = savedTarget.targetQualityCutoff ?? DEFAULT_QUALITY_CUTOFF;
+  const qualityCutoff = globalQualityCutoff || savedTarget.targetQualityCutoff || DEFAULT_QUALITY_CUTOFF;
   const sessions = practiceSessions
     .filter((session) => matchesPracticeProfile(session, profile))
     .sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -575,8 +576,8 @@ function buildRow(
     displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
     displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
     sideBias: mean(sides) ?? rangeSideStats.mean,
-    recentTargetPct: recentIntentShots.length ? (recentIntentShots.filter((shot) => shotHandicap(shot) <= qualityCutoff && matchesTarget(shot, target)).length / recentIntentShots.length) * 100 : null,
-    recentSafePct: recentIntentShots.length ? (recentIntentShots.filter((shot) => shotHandicap(shot) <= qualityCutoff && isSafeOutcome(shot)).length / recentIntentShots.length) * 100 : null,
+    recentTargetPct: recentIntentShots.length ? (recentIntentShots.filter((shot) => shotHandicap(shot) <= qualityCutoff).length / recentIntentShots.length) * 100 : null,
+    recentSafePct: recentIntentShots.length ? (recentIntentShots.filter(isSafeOutcome).length / recentIntentShots.length) * 100 : null,
     rangeConfidence: getRangeTargetPct(sessions, practiceConfig, shotsBySession),
     shotCount: targetReferenceShots.length,
     intentShotCount: targetReferenceShots.length,
@@ -587,7 +588,7 @@ function buildRow(
 }
 
 export function ClubGappingTab() {
-  const { shots } = useGolfData();
+  const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
@@ -612,9 +613,9 @@ export function ClubGappingTab() {
       .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
       .filter((profile) => profile.power === 'full')
       .filter((profile) => shotContext !== 'tee' || profile.shotType === 'full')
-      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles)))
+      .flatMap((profile) => profile.targets.map((target) => buildRow(profile, target, contextShots, practiceSessions, practiceConfigs, shotsBySession, profiles, gappingHcpTarget)))
       .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0));
-  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession]);
+  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
@@ -761,10 +762,10 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Last 20 target at ${row.qualityCutoff} hcp or better ${fmt(row.recentTargetPct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Last 20 at ${row.qualityCutoff} hcp or better ${fmt(row.recentTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Last 20 safe at ${row.qualityCutoff} hcp or better ${fmt(row.recentSafePct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Last 20 safe outcomes ${fmt(row.recentSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />

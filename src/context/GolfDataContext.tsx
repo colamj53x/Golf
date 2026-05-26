@@ -21,6 +21,8 @@ interface GolfDataContextType {
   setDistanceToTargetTolerance: React.Dispatch<React.SetStateAction<number>>;
   lowTargetExclusionThreshold: number;
   setLowTargetExclusionThreshold: React.Dispatch<React.SetStateAction<number>>;
+  gappingHcpTarget: number;
+  setGappingHcpTarget: React.Dispatch<React.SetStateAction<number>>;
   refreshShots: () => Promise<void>;
 }
 
@@ -43,6 +45,11 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('golf-low-target-threshold');
     return saved ? parseFloat(saved) : 10;
   });
+
+  const [gappingHcpTarget, setGappingHcpTarget] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-gapping-hcp-target');
+    return saved ? parseFloat(saved) : 10;
+  });
   
   const [shots, setShots] = useState<Shot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +65,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('golf-low-target-threshold', lowTargetExclusionThreshold.toString());
   }, [lowTargetExclusionThreshold]);
+
+  useEffect(() => {
+    localStorage.setItem('golf-gapping-hcp-target', gappingHcpTarget.toString());
+  }, [gappingHcpTarget]);
 
   const loadShots = useCallback(async () => {
     if (!user) {
@@ -161,6 +172,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setDistanceToTargetTolerance,
       lowTargetExclusionThreshold,
       setLowTargetExclusionThreshold,
+      gappingHcpTarget,
+      setGappingHcpTarget,
       refreshShots
     }}>
       {children}

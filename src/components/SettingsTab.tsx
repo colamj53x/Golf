@@ -46,10 +46,11 @@ const DEFAULT_NEW_CLUB: Omit<ClubConfig, 'id'> = {
 };
 
 export function SettingsTab() {
-  const { clubs, setClubs, deleteClub, distanceToTargetTolerance, setDistanceToTargetTolerance, lowTargetExclusionThreshold, setLowTargetExclusionThreshold } = useGolfData();
+  const { clubs, setClubs, deleteClub, distanceToTargetTolerance, setDistanceToTargetTolerance, lowTargetExclusionThreshold, setLowTargetExclusionThreshold, gappingHcpTarget, setGappingHcpTarget } = useGolfData();
   const [editingClubs, setEditingClubs] = useState<ClubConfig[]>(clubs);
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
+  const [editingGappingHcpTarget, setEditingGappingHcpTarget] = useState(gappingHcpTarget);
   const [isEditing, setIsEditing] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newClub, setNewClub] = useState<Omit<ClubConfig, 'id'>>(DEFAULT_NEW_CLUB);
@@ -64,6 +65,7 @@ export function SettingsTab() {
     setClubs(editingClubs);
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
+    setGappingHcpTarget(editingGappingHcpTarget);
     setIsEditing(false);
     toast.success('Settings saved successfully');
   };
@@ -94,6 +96,7 @@ export function SettingsTab() {
     setEditingClubs(clubs);
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
+    setEditingGappingHcpTarget(gappingHcpTarget);
     setIsEditing(false);
     toast.info('Changes reverted');
   };
@@ -136,6 +139,28 @@ export function SettingsTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Label htmlFor="gappingHcpTarget" className="whitespace-nowrap min-w-[200px]">
+              Club Gapping HCP Target
+            </Label>
+            <Select
+              value={editingGappingHcpTarget.toString()}
+              onValueChange={(value) => setEditingGappingHcpTarget(Number(value))}
+              disabled={!isEditing}
+            >
+              <SelectTrigger id="gappingHcpTarget" className="h-8 w-28 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[5, 10, 15, 20, 25].map(value => (
+                  <SelectItem key={value} value={value.toString()}>{value} HCP</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">
+              Sets the quality target for Club Gapping samples and Last 20 T
+            </span>
+          </div>
           <div className="flex items-center gap-4">
             <Label htmlFor="tolerance" className="whitespace-nowrap min-w-[200px]">
               Distance-to-Target Tolerance (m)
