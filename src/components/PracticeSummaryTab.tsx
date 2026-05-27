@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
-import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, parsePracticeConfigKey } from '@/types/practiceClubs';
+import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { cn } from '@/lib/utils';
@@ -16,9 +16,7 @@ const CLUB_ORDER: Record<string, number> = Object.fromEntries(
 const SHOT_ORDER: Record<string, number> = Object.fromEntries(
   SHOT_TYPES.map((s, i) => [s.id, i]),
 );
-const POWER_ORDER: Record<string, number> = Object.fromEntries(
-  POWER_OPTIONS.map((p, i) => [p.id, i]),
-);
+const POWER_ORDER: Record<string, number> = { full: 0, half: 1 };
 
 interface SummaryRow {
   configKey: string;
@@ -49,20 +47,22 @@ type SortKey =
   | 'cons';
 
 function names(configKey: string) {
-  const { club, shotType, power } = parsePracticeConfigKey(configKey);
+  const { club, shotType } = parsePracticeConfigKey(configKey);
   return {
     club: PRACTICE_CLUBS.find(c => c.id === club)?.name ?? club,
     shot: SHOT_TYPES.find(s => s.id === shotType)?.name ?? shotType,
-    power: POWER_OPTIONS.find(p => p.id === power)?.name ?? power,
   };
+}
+
+function visibleConfigKey(configKey: string): string {
+  const { club, shotType, power } = parsePracticeConfigKey(configKey);
+  if (!club || !shotType || !power) return configKey;
+  return `${club}_${shotType}_${power === 'full' ? 'full' : 'half'}`;
 }
 
 function getPowerLabel(power: string): string {
   if (power === 'full') return 'Full';
-  if (power === '730pm') return '7.30';
-  if (power === '9pm') return '9';
-  if (power === '10pm') return '10';
-  return POWER_OPTIONS.find((option) => option.id === power)?.name.replace(/pm$/i, '') ?? power;
+  return 'Half';
 }
 
 function getShotLabel(shotType: string): string {
@@ -75,10 +75,7 @@ function getShotLabel(shotType: string): string {
 
 function powerBadgeClass(power: string): string {
   if (power === 'full') return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
-  if (power === '10pm') return 'border-lime-600 bg-lime-50 text-lime-800 hover:bg-lime-50';
-  if (power === '9pm') return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
-  if (power === '730pm') return 'border-orange-500 bg-orange-50 text-orange-800 hover:bg-orange-50';
-  return '';
+  return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
 }
 
 function shotBadgeClass(shotType: string): string {
@@ -139,13 +136,14 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     const profileByConfig = new Map<string, ShotProfile>();
     for (const profile of Object.values(profiles)) {
       if (profile.enabled && profile.showInPractice) {
-        profileByConfig.set(profile.id, profile);
+        profileByConfig.set(visibleConfigKey(profile.id), profile);
       }
     }
 
     const byConfig = new Map<string, PracticeSession[]>();
     for (const s of practiceSessions) {
-      const key = s.clubId.includes('_') ? s.clubId : `${s.clubId}_full_full`;
+      const rawKey = s.clubId.includes('_') ? s.clubId : `${s.clubId}_full_full`;
+      const key = visibleConfigKey(rawKey);
       (byConfig.get(key) ?? byConfig.set(key, []).get(key)!).push(s);
     }
     const allConfigKeys = new Set<string>([
