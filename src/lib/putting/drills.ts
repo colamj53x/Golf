@@ -293,6 +293,6 @@ export const DRILL_METRIC_WEIGHTS: Record<string, Partial<Record<PuttingMetric, 
 
 export function mergeLockedIndoorDrills(remoteDrills: PuttingDrill[]): PuttingDrill[] {
   const lockedIds = new Set(LOCKED_INDOOR_DRILLS.map(drill => drill.id));
-  const unlockedRemote = remoteDrills.filter(drill => !lockedIds.has(drill.id));
+  const unlockedRemote = remoteDrills.filter(drill => !drill.is_builtin && !lockedIds.has(drill.id));
   return [...LOCKED_INDOOR_DRILLS, ...unlockedRemote].sort((a, b) => a.sort_order - b.sort_order);
 }

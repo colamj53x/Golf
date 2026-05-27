@@ -6,9 +6,8 @@ import { ArrowLeft, Plus, Play, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { PuttingDrill, PuttingSessionRecord, DrillResult, LevelBand, ScoringInput } from '@/types/putting';
+import { PuttingDrill, LevelBand, ScoringInput } from '@/types/putting';
 import { PuttingSessionRunner } from './PuttingSessionRunner';
-import { PuttingHistory } from './PuttingHistory';
 import { DrillBuilderDialog } from './DrillBuilderDialog';
 import { IndoorPracticeSetId, mergeLockedIndoorDrills } from '@/lib/putting/drills';
 
@@ -23,7 +22,6 @@ type View = 'home' | 'run';
 export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInRun = false }: Props) {
   const { user } = useAuth();
   const [drills, setDrills] = useState<PuttingDrill[]>([]);
-  const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>(startInRun ? 'run' : 'home');
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -53,29 +51,9 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInR
     setDrills(mergeLockedIndoorDrills(remoteDrills));
   }, [user]);
 
-  const loadSessions = useCallback(async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('putting_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('category', 'indoor')
-      .order('session_date', { ascending: false })
-      .limit(1000);
-    if (error) {
-      toast.error('Failed to load sessions');
-      return;
-    }
-    setSessions((data ?? []).map(s => ({
-      ...s,
-      category: s.category as 'indoor' | 'outdoor',
-      drill_results: s.drill_results as unknown as DrillResult[],
-    })));
-  }, [user]);
-
   useEffect(() => {
-    Promise.all([loadDrills(), loadSessions()]).finally(() => setLoading(false));
-  }, [loadDrills, loadSessions]);
+    loadDrills().finally(() => setLoading(false));
+  }, [loadDrills]);
 
   const handleDeleteDrill = async (id: string) => {
     if (!confirm('Delete this custom drill?')) return;
@@ -105,7 +83,6 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInR
           category="indoor"
           initialPracticeSetId={initialPracticeSetId}
           onComplete={() => {
-            loadSessions();
             setView('home');
           }}
           onCancel={() => setView('home')}
@@ -173,8 +150,6 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInR
           </div>
         </CardContent>
       </Card>
-
-      <PuttingHistory sessions={sessions} onChanged={loadSessions} />
 
       <DrillBuilderDialog
         open={builderOpen}

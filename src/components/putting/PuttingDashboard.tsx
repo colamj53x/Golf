@@ -110,7 +110,7 @@ function levelFor(score: number | null): { label: string; className: string; pro
   if (score >= 90) {
     return {
       label: 'Elite',
-      className: 'border-emerald-900/30 bg-emerald-950 text-emerald-50',
+      className: 'border-emerald-700/30 bg-emerald-50 ring-1 ring-amber-300/40',
       progressClass: '[&>div]:bg-amber-400',
     };
   }
@@ -211,10 +211,16 @@ function SummaryCard({
   );
 }
 
-export function PuttingDashboard() {
+interface PuttingDashboardProps {
+  sessions?: PuttingSessionRecord[];
+  loading?: boolean;
+}
+
+export function PuttingDashboard({ sessions: providedSessions, loading: providedLoading }: PuttingDashboardProps = {}) {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const shouldLoadSessions = providedSessions === undefined;
 
   const loadSessions = useCallback(async () => {
     if (!user) {
@@ -240,11 +246,14 @@ export function PuttingDashboard() {
   }, [user]);
 
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    if (shouldLoadSessions) loadSessions();
+  }, [loadSessions, shouldLoadSessions]);
+
+  const activeSessions = providedSessions ?? sessions;
+  const isLoading = providedLoading ?? loading;
 
   const dashboard = useMemo(() => {
-    const sorted = [...sessions].sort((a, b) => b.session_date.localeCompare(a.session_date));
+    const sorted = [...activeSessions].sort((a, b) => b.session_date.localeCompare(a.session_date));
     const latestSession = sorted[0] ?? null;
     const sessionSamples = sorted
       .map(session => {
@@ -309,9 +318,9 @@ export function PuttingDashboard() {
       drillStats,
       scoredSessions: sorted.length,
     };
-  }, [sessions]);
+  }, [activeSessions]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">Loading putting dashboard...</CardContent>

@@ -16,6 +16,12 @@ interface Props {
   onChanged: () => void;
 }
 
+function sessionPercent(session: PuttingSessionRecord): number {
+  return session.max_total > 0
+    ? Math.round((Number(session.total_score) / Number(session.max_total)) * 100)
+    : 0;
+}
+
 export function PuttingHistory({ sessions, onChanged }: Props) {
   const { user } = useAuth();
   const chartData = useMemo(() => {
@@ -23,7 +29,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
       .sort((a, b) => a.session_date.localeCompare(b.session_date))
       .map(s => ({
         date: format(new Date(s.session_date), 'MMM d'),
-        score: Number(s.total_score),
+        score: sessionPercent(s),
       }));
   }, [sessions]);
 
@@ -31,7 +37,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
     const map = new Map<string, { weekStart: string; count: number; total: number; best: number }>();
     for (const s of sessions) {
       const ws = format(startOfWeek(new Date(s.session_date), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      const score = Number(s.total_score);
+      const score = sessionPercent(s);
       const existing = map.get(ws);
       if (existing) {
         existing.count += 1;
@@ -64,7 +70,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
     return (
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
-          No sessions yet. Start your first one above.
+          No sessions yet. Start one from the Drills page.
         </CardContent>
       </Card>
     );
@@ -75,7 +81,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Score Trend</CardTitle>
-          <CardDescription>Total score over time</CardDescription>
+          <CardDescription>Session percentage over time</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-64">
@@ -83,7 +89,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis domain={[0, 100]} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke="hsl(var(--muted-foreground))" fontSize={12} />
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                 <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
@@ -102,7 +108,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
               <TableRow>
                 <TableHead>Week starting</TableHead>
                 <TableHead className="text-right">Sessions</TableHead>
-                <TableHead className="text-right">Avg score</TableHead>
+                <TableHead className="text-right">Avg</TableHead>
                 <TableHead className="text-right">Best</TableHead>
               </TableRow>
             </TableHeader>
@@ -111,8 +117,8 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
                 <TableRow key={w.weekStart}>
                   <TableCell>{format(new Date(w.weekStart), 'PP')}</TableCell>
                   <TableCell className="text-right">{w.count}</TableCell>
-                  <TableCell className="text-right">{Math.round(w.total / w.count)}</TableCell>
-                  <TableCell className="text-right font-semibold">{w.best}</TableCell>
+                  <TableCell className="text-right">{Math.round(w.total / w.count)}%</TableCell>
+                  <TableCell className="text-right font-semibold">{w.best}%</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -140,7 +146,7 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <div className="font-mono text-lg font-bold">{s.total_score}</div>
-                    <div className="text-xs text-muted-foreground">/ {s.max_total}</div>
+                    <div className="text-xs text-muted-foreground">/ {s.max_total} · {sessionPercent(s)}%</div>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
                     <Trash2 className="h-4 w-4" />

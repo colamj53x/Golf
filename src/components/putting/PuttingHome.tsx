@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Eye, Flag, Footprints, ListChecks, Play, ScanLine, TreePine } from 'lucide-react';
-import { PuttingDashboard } from './PuttingDashboard';
+import { BarChart3, CheckCircle2, ClipboardList, Eye, Flag, Footprints, ListChecks, Play, ScanLine, TreePine } from 'lucide-react';
+import { PuttingTracking } from './PuttingTracking';
 import { INDOOR_PRACTICE_SETS, IndoorPracticeSetId } from '@/lib/putting/drills';
+import { cn } from '@/lib/utils';
 
 interface Props {
   onSelect: (category: 'indoor' | 'outdoor') => void;
   onStartIndoorSet: (setId: IndoorPracticeSetId) => void;
 }
+
+type PuttingSection = 'tracking' | 'drills';
 
 const readSteps = [
   {
@@ -62,9 +66,64 @@ const techniqueSteps = [
 ];
 
 export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
+  const [section, setSection] = useState<PuttingSection>('tracking');
+
+  const sectionButtonClass = (value: PuttingSection) =>
+    cn(
+      'inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
+      section === value
+        ? 'bg-background text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground',
+    );
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Putting</h3>
+          <p className="text-sm text-muted-foreground">Keep reporting separate from the drills and cue cards.</p>
+        </div>
+        <div className="inline-flex rounded-md bg-muted/70 p-1">
+          <button
+            type="button"
+            className={sectionButtonClass('tracking')}
+            onClick={() => setSection('tracking')}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Tracking
+          </button>
+          <button
+            type="button"
+            className={sectionButtonClass('drills')}
+            onClick={() => setSection('drills')}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Drills
+          </button>
+        </div>
+      </div>
+
+      {section === 'tracking' ? (
+        <PuttingTracking />
+      ) : (
+        <div className="space-y-5">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+              <div>
+                <Badge variant="secondary">Practice Builder</Badge>
+                <h3 className="mt-2 text-xl font-bold">Drills & Cue Cards</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Use this area to start sessions, review the routine, and choose the drill set.
+                </p>
+              </div>
+              <Button onClick={() => onStartIndoorSet('set-a')}>
+                <Play className="mr-2 h-4 w-4" />
+                Start Session
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardContent className="space-y-4 p-5">
             <div className="flex items-start justify-between gap-3">
@@ -135,9 +194,7 @@ export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
             </p>
           </CardContent>
         </Card>
-      </div>
-
-      <PuttingDashboard />
+          </div>
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -192,14 +249,20 @@ export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="cursor-not-allowed opacity-60">
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
-            <TreePine className="h-12 w-12 text-muted-foreground" />
-            <h3 className="text-xl font-bold">Outdoor</h3>
-            <p className="text-sm text-muted-foreground text-center">Coming soon</p>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+            <TreePine className="h-12 w-12 text-primary/60" />
+            <div>
+              <h3 className="text-xl font-bold">Outdoor Putting</h3>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Next section for green-read, pace, and conversion drills outside.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
+        </div>
+      )}
     </div>
   );
 }
