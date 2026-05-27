@@ -3,10 +3,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PuttingHome } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
+import { DriverPracticeView } from '@/components/DriverPracticeView';
 import { IndoorPracticeSetId } from '@/lib/putting/drills';
 import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
 
 type PuttingView = 'home' | 'indoor' | 'outdoor';
+type FullSwingView = 'home' | 'driver';
 
 const fullSwingTiles = [
   {
@@ -19,6 +21,7 @@ const fullSwingTiles = [
     description: 'Driver is the first club ready for your drill instructions.',
     icon: Dumbbell,
     detail: 'Driver',
+    view: 'driver' as FullSwingView,
   },
   {
     title: 'Combines',
@@ -28,6 +31,7 @@ const fullSwingTiles = [
 ];
 
 export function PracticeTab() {
+  const [fullSwingView, setFullSwingView] = useState<FullSwingView>('home');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
   const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
   const [startPuttingSet, setStartPuttingSet] = useState(false);
@@ -48,29 +52,42 @@ export function PracticeTab() {
       </div>
 
       <TabsContent value="full-swing">
-        <div className="grid gap-4 md:grid-cols-3">
-          {fullSwingTiles.map((tile) => {
-            const Icon = tile.icon;
-            return (
-              <Card key={tile.title} className="h-full transition-colors hover:border-primary/40">
-                <CardHeader className="space-y-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg">{tile.title}</CardTitle>
-                    {tile.detail && (
-                      <p className="text-sm font-medium text-primary">{tile.detail}</p>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{tile.description}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        {fullSwingView === 'home' && (
+          <div className="grid gap-4 md:grid-cols-3">
+            {fullSwingTiles.map((tile) => {
+              const Icon = tile.icon;
+              return (
+                <Card
+                  key={tile.title}
+                  className={`h-full transition-colors hover:border-primary/40 ${
+                    tile.view ? 'cursor-pointer' : ''
+                  }`}
+                  onClick={() => {
+                    if (tile.view) setFullSwingView(tile.view);
+                  }}
+                >
+                  <CardHeader className="space-y-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">{tile.title}</CardTitle>
+                      {tile.detail && (
+                        <p className="text-sm font-medium text-primary">{tile.detail}</p>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">{tile.description}</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+        {fullSwingView === 'driver' && (
+          <DriverPracticeView onBack={() => setFullSwingView('home')} />
+        )}
       </TabsContent>
 
       <TabsContent value="putting">
