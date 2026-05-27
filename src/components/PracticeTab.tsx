@@ -16,6 +16,14 @@ import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
 type PuttingView = 'home' | 'indoor' | 'outdoor';
 type FullSwingView = 'home' | 'driver';
 
+const secondaryNavItems = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'logs', label: 'Logs' },
+  { value: 'plan', label: 'Plan' },
+  { value: 'drills', label: 'Drill Bank' },
+  { value: 'types', label: 'Types' },
+];
+
 const fullSwingTiles = [
   {
     title: 'Technique',
@@ -52,66 +60,45 @@ export function PracticeTab() {
     setFullSwingTab('logs');
   };
 
+  const secondaryNavClass = (value: string) =>
+    `h-10 shrink-0 border-b-2 px-1.5 text-sm font-medium transition-colors sm:px-3 ${
+      fullSwingTab === value
+        ? 'border-primary text-foreground'
+        : 'border-transparent text-muted-foreground hover:text-foreground'
+    }`;
+
   return (
     <Tabs defaultValue="full-swing" className="w-full space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Practice</h2>
-        </div>
-        <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-md bg-muted/70 p-1 sm:w-auto">
-          <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
-          <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
-        </TabsList>
-      </div>
+      <h2 className="text-xl font-semibold text-foreground">Practice</h2>
 
       <TabsContent value="full-swing">
-        <Tabs value={fullSwingTab} onValueChange={setFullSwingTab} className="w-full">
-          <TabsList className="mb-5 h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0 text-muted-foreground">
-            <TabsTrigger
-              value="summary"
-              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
-            >
-              Summary
-            </TabsTrigger>
-            <TabsTrigger
-              value="logs"
-              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
-            >
-              Logs
-            </TabsTrigger>
-            <TabsTrigger
-              value="plan"
-              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
-            >
-              Plan
-            </TabsTrigger>
-            <TabsTrigger
-              value="drills"
-              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
-            >
-              Drill Bank
-            </TabsTrigger>
-            <TabsTrigger
-              value="types"
-              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
-            >
-              Types
-            </TabsTrigger>
+        <div className="mb-5 flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b">
+          <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
+            <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
+            <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
           </TabsList>
+          <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto" role="tablist" aria-label="Full swing practice views">
+            {secondaryNavItems.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={fullSwingTab === item.value}
+                className={secondaryNavClass(item.value)}
+                onClick={() => setFullSwingTab(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <TabsContent value="summary">
-            <PracticeSummaryTab onOpenLog={openLog} />
-          </TabsContent>
-          <TabsContent value="logs">
-            <PracticeDashboardTab />
-          </TabsContent>
-          <TabsContent value="plan">
-            <PracticePlanTab />
-          </TabsContent>
-          <TabsContent value="drills">
-            <DrillBankTab />
-          </TabsContent>
-          <TabsContent value="types">
+        {fullSwingTab === 'summary' && <PracticeSummaryTab onOpenLog={openLog} />}
+        {fullSwingTab === 'logs' && <PracticeDashboardTab />}
+        {fullSwingTab === 'plan' && <PracticePlanTab />}
+        {fullSwingTab === 'drills' && <DrillBankTab />}
+        {fullSwingTab === 'types' && (
+          <>
             {fullSwingView === 'home' && (
               <div className="grid gap-4 md:grid-cols-3">
                 {fullSwingTiles.map((tile) => {
@@ -148,11 +135,17 @@ export function PracticeTab() {
             {fullSwingView === 'driver' && (
               <DriverPracticeView onBack={() => setFullSwingView('home')} />
             )}
-          </TabsContent>
-        </Tabs>
+          </>
+        )}
       </TabsContent>
 
       <TabsContent value="putting">
+        <div className="mb-5 flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b pb-2">
+          <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
+            <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
+            <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
+          </TabsList>
+        </div>
         {puttingView === 'home' && (
           <PuttingHome
             onSelect={(category) => {

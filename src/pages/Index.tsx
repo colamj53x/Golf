@@ -71,51 +71,51 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container py-4">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="space-y-3">
+            <div className="flex min-w-0 items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary">
                   <Goal className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-xl font-bold text-foreground">Nic&apos;s Golf Hub</h1>
-                  <p className="text-sm text-muted-foreground">Rounds, practice, putting, and club trends</p>
+                  <h1 className="truncate text-xl font-bold text-foreground">Nic&apos;s Golf Hub</h1>
+                  <p className="truncate text-sm text-muted-foreground">Rounds, practice, putting, and club trends</p>
                 </div>
               </div>
-              <Tabs value={activeTab} onValueChange={handleMainTabChange} className="min-w-0">
-                <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
-                  <TabsTrigger value="on-course" className="shrink-0 gap-2">
-                    <Crosshair className="h-4 w-4" />
-                    On Course
-                  </TabsTrigger>
-                  <TabsTrigger value="club-gapping" className="shrink-0 gap-2">
-                    <Gauge className="h-4 w-4" />
-                    Club Gapping
-                  </TabsTrigger>
-                  <TabsTrigger value="playing-data" className="shrink-0 gap-2">
-                    <Database className="h-4 w-4" />
-                    Playing Data
-                  </TabsTrigger>
-                  <TabsTrigger value="practice" className="shrink-0 gap-2">
-                    <Target className="h-4 w-4" />
-                    Practice
-                  </TabsTrigger>
-                  <TabsTrigger value="settings" className="shrink-0 gap-2">
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="flex min-w-0 shrink-0 items-center gap-3">
+                <span className="hidden max-w-[260px] truncate text-sm text-muted-foreground sm:inline">
+                  {user?.email}
+                </span>
+                <Button variant="outline" size="sm" onClick={handleSignOut} className="shrink-0">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-4">
-              <span className="truncate text-sm text-muted-foreground">
-                {user?.email}
-              </span>
-              <Button variant="outline" size="sm" onClick={handleSignOut} className="shrink-0">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
+            <Tabs value={activeTab} onValueChange={handleMainTabChange} className="min-w-0">
+              <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
+                <TabsTrigger value="on-course" className="shrink-0 gap-2">
+                  <Crosshair className="h-4 w-4" />
+                  On Course
+                </TabsTrigger>
+                <TabsTrigger value="club-gapping" className="shrink-0 gap-2">
+                  <Gauge className="h-4 w-4" />
+                  Club Gapping
+                </TabsTrigger>
+                <TabsTrigger value="playing-data" className="shrink-0 gap-2">
+                  <Database className="h-4 w-4" />
+                  Playing Data
+                </TabsTrigger>
+                <TabsTrigger value="practice" className="shrink-0 gap-2">
+                  <Target className="h-4 w-4" />
+                  Practice
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="shrink-0 gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </div>
       </header>
