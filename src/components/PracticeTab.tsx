@@ -1,31 +1,36 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PracticeDashboardTab } from '@/components/PracticeDashboardTab';
-import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
-import { PracticePlanTab } from '@/components/PracticePlanTab';
-import { DrillBankTab } from '@/components/DrillBankTab';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PuttingHome } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
-import { usePracticeData } from '@/context/PracticeDataContext';
-import { parsePracticeConfigKey } from '@/types/practiceClubs';
 import { IndoorPracticeSetId } from '@/lib/putting/drills';
+import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
 
 type PuttingView = 'home' | 'indoor' | 'outdoor';
+
+const fullSwingTiles = [
+  {
+    title: 'Technique',
+    description: 'Setup, movement, and swing feels will live here.',
+    icon: Wand2,
+  },
+  {
+    title: 'Club',
+    description: 'Driver is the first club ready for your drill instructions.',
+    icon: Dumbbell,
+    detail: 'Driver',
+  },
+  {
+    title: 'Combines',
+    description: 'Multi-club practice sets will live here once defined.',
+    icon: Layers3,
+  },
+];
 
 export function PracticeTab() {
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
   const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
   const [startPuttingSet, setStartPuttingSet] = useState(false);
-  const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
-  const { setSelectedClub, setSelectedShotType, setSelectedPower } = usePracticeData();
-
-  const openLog = (configKey: string) => {
-    const { club, shotType, power } = parsePracticeConfigKey(configKey);
-    setSelectedClub(club);
-    setSelectedShotType(shotType);
-    setSelectedPower(power);
-    setFullSwingTab('logs');
-  };
 
   return (
     <Tabs defaultValue="full-swing" className="w-full space-y-6">
@@ -33,7 +38,7 @@ export function PracticeTab() {
         <div className="space-y-1">
           <h2 className="text-xl font-semibold text-foreground">Practice</h2>
           <p className="text-sm text-muted-foreground">
-            Review full-swing sessions, practice plans, drills, and putting work.
+            Build focused practice blocks for full swing and putting.
           </p>
         </div>
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
@@ -43,27 +48,29 @@ export function PracticeTab() {
       </div>
 
       <TabsContent value="full-swing">
-        <Tabs value={fullSwingTab} onValueChange={setFullSwingTab} className="w-full">
-          <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
-            <TabsTrigger value="summary" className="shrink-0">Summary</TabsTrigger>
-            <TabsTrigger value="logs" className="shrink-0">Practice Logs</TabsTrigger>
-            <TabsTrigger value="plan" className="shrink-0">Practice Plan</TabsTrigger>
-            <TabsTrigger value="drills" className="shrink-0">Drill Bank</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="summary">
-            <PracticeSummaryTab onOpenLog={openLog} />
-          </TabsContent>
-          <TabsContent value="logs">
-            <PracticeDashboardTab />
-          </TabsContent>
-          <TabsContent value="plan">
-            <PracticePlanTab />
-          </TabsContent>
-          <TabsContent value="drills">
-            <DrillBankTab />
-          </TabsContent>
-        </Tabs>
+        <div className="grid gap-4 md:grid-cols-3">
+          {fullSwingTiles.map((tile) => {
+            const Icon = tile.icon;
+            return (
+              <Card key={tile.title} className="h-full transition-colors hover:border-primary/40">
+                <CardHeader className="space-y-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">{tile.title}</CardTitle>
+                    {tile.detail && (
+                      <p className="text-sm font-medium text-primary">{tile.detail}</p>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{tile.description}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </TabsContent>
 
       <TabsContent value="putting">
