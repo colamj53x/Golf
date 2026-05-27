@@ -3,11 +3,13 @@ import { format } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
-import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { ProfileTarget, ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
 import { cn } from '@/lib/utils';
 
 const CLUB_ORDER: Record<string, number> = Object.fromEntries(
@@ -24,8 +26,8 @@ interface SummaryRow {
   clubName: string;
   shotName: string;
   shotType: string;
-  powerName: string;
   powerId: string;
+  target: ProfileTarget;
   description: string;
   lastPracticed: Date | null;
   carryAvg: number | null;
@@ -40,7 +42,7 @@ interface SummaryRow {
 type SortKey =
   | 'club'
   | 'shot'
-  | 'power'
+  | 'target'
   | 'last'
   | 'carry'
   | 'total'
@@ -60,11 +62,6 @@ function visibleConfigKey(configKey: string): string {
   return `${club}_${shotType}_${power === 'full' ? 'full' : 'half'}`;
 }
 
-function getPowerLabel(power: string): string {
-  if (power === 'full') return 'Full';
-  return 'Half';
-}
-
 function getShotLabel(shotType: string): string {
   if (shotType === 'full') return 'Full';
   if (shotType === 'bump') return 'Bump';
@@ -78,17 +75,17 @@ function powerBadgeClass(power: string): string {
   return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
 }
 
-function shotBadgeClass(shotType: string): string {
-  if (shotType === 'punch') return '';
-  if (shotType === 'pitch' || shotType === 'chip' || shotType === 'bump') {
-    return 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/5';
-  }
-  return '';
+function targetLabel(target: ProfileTarget): string {
+  return target === 'fairway' ? 'Fairway' : 'Green';
 }
 
 function profileDescription(profile: ShotProfile | undefined): string {
   if (!profile) return '';
   return profile.technique || profile.routine || '';
+}
+
+function rowKey(configKey: string, target: ProfileTarget): string {
+  return `${visibleConfigKey(configKey)}__${target}`;
 }
 
 function mean(vals: number[]): number | null {
@@ -126,53 +123,88 @@ function clubOrderCompare(a: SummaryRow, b: SummaryRow): number {
 }
 
 export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: string) => void } = {}) {
-  const { practiceSessions } = usePracticeData();
+  const { shots, gappingHcpTarget } = useGolfData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const [sortKey, setSortKey] = useState<SortKey>('club');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
 
-  // Group sessions by configKey & collect session ids for shot fetch
-  const { groupedRows, sessionIds } = useMemo(() => {
-    const profileByConfig = new Map<string, ShotProfile>();
-    for (const profile of Object.values(profiles)) {
-      if (profile.enabled && profile.showInPractice) {
-        profileByConfig.set(visibleConfigKey(profile.id), profile);
+  const gappingOptions = useMemo(() => {
+    const options = new Map<string, { configKey: string; profile: ShotProfile; target: ProfileTarget }>();
+    const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
+    const shotCategoryOverrides = loadShotCategoryOverrides();
+
+    for (const shotContext of contexts) {
+      const rows = buildClubGappingRows({
+        profiles,
+        shots,
+        shotContext,
+        practiceSessions,
+        practiceConfigs,
+        shotsBySession,
+        gappingHcpTarget,
+        shotCategoryOverrides,
+      });
+
+      for (const row of rows) {
+        const configKey = visibleConfigKey(row.profile.id);
+        const key = rowKey(configKey, row.target);
+        if (!options.has(key)) {
+          options.set(key, { configKey, profile: row.profile, target: row.target });
+        }
       }
     }
 
+    return options;
+  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+
+  // Group practice log sessions by visible gapping key. Values still come from logs only.
+  const groupedRows = useMemo(() => {
     const byConfig = new Map<string, PracticeSession[]>();
     for (const s of practiceSessions) {
       const rawKey = s.clubId.includes('_') ? s.clubId : `${s.clubId}_full_full`;
       const key = visibleConfigKey(rawKey);
       (byConfig.get(key) ?? byConfig.set(key, []).get(key)!).push(s);
     }
-    const allConfigKeys = new Set<string>([
-      ...profileByConfig.keys(),
-      ...byConfig.keys(),
-    ]);
-    const ids: string[] = [];
+
+    const allOptions = new Map(gappingOptions);
+    for (const configKey of byConfig.keys()) {
+      const parsed = parsePracticeConfigKey(configKey);
+      if (!parsed.club || !parsed.shotType || !parsed.power) continue;
+      const fallbackProfile = profiles[`${parsed.club}_${parsed.shotType}_${parsed.power === 'full' ? 'full' : '9pm'}`]
+        ?? profiles[`${parsed.club}_${parsed.shotType}_full`];
+      const target = fallbackProfile?.targets[0] ?? 'green';
+      const key = rowKey(configKey, target);
+      if (fallbackProfile && !allOptions.has(key)) {
+        allOptions.set(key, { configKey, profile: fallbackProfile, target });
+      }
+    }
+
     const grouped: Array<{
       configKey: string;
       profile: ShotProfile | undefined;
+      target: ProfileTarget;
       recentSessions: PracticeSession[];
       allSessions: PracticeSession[];
     }> = [];
-    for (const configKey of allConfigKeys) {
+
+    for (const option of allOptions.values()) {
+      const configKey = option.configKey;
       const sessions = byConfig.get(configKey) ?? [];
       const sorted = [...sessions].sort((a, b) => b.date.getTime() - a.date.getTime());
       const recent = sorted.slice(0, 3);
       grouped.push({
         configKey,
-        profile: profileByConfig.get(configKey),
+        profile: option.profile,
+        target: option.target,
         recentSessions: recent,
         allSessions: sorted,
       });
-      recent.forEach(s => ids.push(s.id));
     }
-    return { groupedRows: grouped, sessionIds: ids };
-  }, [practiceSessions, profiles]);
-
-  const { shotsBySession } = usePracticeShotsBySessions(sessionIds);
+    return grouped;
+  }, [gappingOptions, practiceSessions, profiles]);
 
   // Build full rows with computed metrics
   const rows = useMemo<SummaryRow[]>(() => {
@@ -254,8 +286,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         clubName: n.club,
         shotName: getShotLabel(shotType),
         shotType,
-        powerName: getPowerLabel(power),
         powerId: power,
+        target: g.target,
         description: profileDescription(g.profile),
         lastPracticed: g.recentSessions[0]?.date ?? null,
         carryAvg,
@@ -282,10 +314,10 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           return dir === 'asc'
             ? a.shotName.localeCompare(b.shotName)
             : b.shotName.localeCompare(a.shotName);
-        case 'power':
+        case 'target':
           return dir === 'asc'
-            ? a.powerName.localeCompare(b.powerName)
-            : b.powerName.localeCompare(a.powerName);
+            ? a.target.localeCompare(b.target)
+            : b.target.localeCompare(a.target);
         case 'last':
           return nullsLast(
             a.lastPracticed?.getTime() ?? null,
@@ -371,7 +403,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
-                  <SortHeader label="Power" sKey="power" />
+                  <SortHeader label="Target" sKey="target" />
                   <SortHeader label="Last" sKey="last" />
                   <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
                   <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
@@ -389,7 +421,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                     sortKey === 'club' && prev !== undefined && prev.clubId !== row.clubId;
 
                   return (
-                    <Fragment key={row.configKey}>
+                    <Fragment key={rowKey(row.configKey, row.target)}>
                       {showGap && (
                         <tr aria-hidden="true">
                           <td colSpan={7} className="h-3" />
@@ -412,8 +444,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                         <td className="py-2 pr-3">
                           <div className="flex flex-col gap-1">
                             <Badge
-                              variant={row.shotType === 'punch' ? 'default' : 'outline'}
-                              className={cn('w-fit', shotBadgeClass(row.shotType))}
+                              variant="outline"
+                              className={cn('w-fit', powerBadgeClass(row.powerId))}
                             >
                               {row.shotName}
                             </Badge>
@@ -425,8 +457,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                           </div>
                         </td>
                         <td className="py-2 pr-3">
-                          <Badge variant="outline" className={cn('w-fit', powerBadgeClass(row.powerId))}>
-                            {row.powerName}
+                          <Badge variant="outline" className="w-fit">
+                            {targetLabel(row.target)}
                           </Badge>
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
