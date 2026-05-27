@@ -18,6 +18,7 @@ interface ScoreSample {
 
 interface SummaryStats {
   currentForm: number | null;
+  formCount: number;
   latest: number | null;
   best: ScoreSample | null;
   count: number;
@@ -25,7 +26,7 @@ interface SummaryStats {
 }
 
 interface TrendState {
-  label: 'Getting better' | 'Same' | 'Getting worse' | 'Building baseline';
+  label: 'Getting better' | 'Same' | 'Getting worse' | 'Need 10 for trend';
   icon: typeof TrendingUp;
   className: string;
 }
@@ -37,7 +38,7 @@ const metricIcons: Record<PuttingMetric, typeof Goal> = {
 };
 
 const baselineTrend: TrendState = {
-  label: 'Building baseline',
+  label: 'Need 10 for trend',
   icon: Clock3,
   className: 'text-muted-foreground',
 };
@@ -83,12 +84,14 @@ function trendFrom(values: number[]): TrendState {
 
 function summaryFrom(samples: ScoreSample[], latest: number | null): SummaryStats {
   const values = samples.map(sample => sample.percent);
+  const formValues = values.slice(0, 10);
   const best = samples.length
     ? samples.reduce((bestSoFar, sample) => (sample.percent > bestSoFar.percent ? sample : bestSoFar), samples[0])
     : null;
 
   return {
-    currentForm: values.length >= 10 ? average(values.slice(0, 10)) : null,
+    currentForm: formValues.length ? average(formValues) : null,
+    formCount: formValues.length,
     latest,
     best,
     count: values.length,
@@ -99,7 +102,7 @@ function summaryFrom(samples: ScoreSample[], latest: number | null): SummaryStat
 function levelFor(score: number | null): { label: string; className: string; progressClass: string } {
   if (score === null) {
     return {
-      label: 'Building baseline',
+      label: 'No data',
       className: 'border-border bg-muted/20',
       progressClass: '[&>div]:bg-muted-foreground',
     };
@@ -133,11 +136,19 @@ function levelFor(score: number | null): { label: string; className: string; pro
 }
 
 function scoreText(score: number | null): string {
-  return score === null ? 'Building baseline' : `${score}%`;
+  return score === null ? 'No data' : `${score}%`;
 }
 
 function latestText(score: number | null): string {
   return score === null ? 'Not scored' : `${score}%`;
+}
+
+function currentFormLabel(stats: SummaryStats, unit: 'session' | 'result'): string {
+  if (stats.formCount === 0) return 'No scored data yet';
+  const plural = stats.formCount === 1 ? unit : `${unit}s`;
+  return stats.formCount >= 10
+    ? `Last 10 ${unit}s`
+    : `Last ${stats.formCount} scored ${plural}`;
 }
 
 function bestText(best: ScoreSample | null): string {
@@ -179,7 +190,7 @@ function SummaryCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail || currentFormLabel(stats, 'result')}</p>
         </div>
         <Icon className="h-5 w-5 shrink-0 text-primary" />
       </div>
@@ -355,7 +366,7 @@ export function PuttingDashboard() {
             <div>
               <p className="text-sm font-medium text-muted-foreground">Current Form</p>
               <div className="mt-2 text-5xl font-bold">{scoreText(dashboard.overall.currentForm)}</div>
-              <p className="mt-2 text-sm text-muted-foreground">Last 10 sessions</p>
+              <p className="mt-2 text-sm text-muted-foreground">{currentFormLabel(dashboard.overall, 'session')}</p>
               <Badge variant="outline" className="mt-3">{overallLevel.label}</Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -387,7 +398,7 @@ export function PuttingDashboard() {
               title={summary.label}
               stats={summary.stats}
               icon={metricIcons[summary.metric]}
-              detail={`${summary.stats.count} scored result${summary.stats.count === 1 ? '' : 's'}`}
+              detail={currentFormLabel(summary.stats, 'result')}
             />
           ))}
         </div>
@@ -404,7 +415,7 @@ export function PuttingDashboard() {
                 title={drillName}
                 stats={stats}
                 icon={Goal}
-                detail={`${stats.count} scored result${stats.count === 1 ? '' : 's'}`}
+                detail={currentFormLabel(stats, 'result')}
                 latestValue={latestRaw}
               />
             ))}
