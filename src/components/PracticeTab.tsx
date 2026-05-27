@@ -53,28 +53,50 @@ export function PracticeTab() {
   };
 
   return (
-    <Tabs defaultValue="full-swing" className="w-full space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
+    <Tabs defaultValue="full-swing" className="w-full space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <h2 className="text-xl font-semibold text-foreground">Practice</h2>
-          <p className="text-sm text-muted-foreground">
-            Build focused practice blocks for full swing and putting.
-          </p>
         </div>
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-          <TabsTrigger value="full-swing" className="shrink-0">Full Swing</TabsTrigger>
-          <TabsTrigger value="putting" className="shrink-0">Putting</TabsTrigger>
+        <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-md bg-muted/70 p-1 sm:w-auto">
+          <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
+          <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
         </TabsList>
       </div>
 
       <TabsContent value="full-swing">
         <Tabs value={fullSwingTab} onValueChange={setFullSwingTab} className="w-full">
-          <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
-            <TabsTrigger value="summary" className="shrink-0">Summary</TabsTrigger>
-            <TabsTrigger value="logs" className="shrink-0">Practice Logs</TabsTrigger>
-            <TabsTrigger value="plan" className="shrink-0">Practice Plan</TabsTrigger>
-            <TabsTrigger value="drills" className="shrink-0">Drill Bank</TabsTrigger>
-            <TabsTrigger value="types" className="shrink-0">Practice Types</TabsTrigger>
+          <TabsList className="mb-5 h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0 text-muted-foreground">
+            <TabsTrigger
+              value="summary"
+              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
+            >
+              Summary
+            </TabsTrigger>
+            <TabsTrigger
+              value="logs"
+              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
+            >
+              Logs
+            </TabsTrigger>
+            <TabsTrigger
+              value="plan"
+              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
+            >
+              Plan
+            </TabsTrigger>
+            <TabsTrigger
+              value="drills"
+              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
+            >
+              Drill Bank
+            </TabsTrigger>
+            <TabsTrigger
+              value="types"
+              className="h-10 shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1.5 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-3"
+            >
+              Types
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="summary">
