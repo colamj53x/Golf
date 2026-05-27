@@ -2,10 +2,12 @@ import { useMemo, useState, Fragment } from 'react';
 import { format } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
+import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { cn } from '@/lib/utils';
 
 const CLUB_ORDER: Record<string, number> = Object.fromEntries(
@@ -23,7 +25,10 @@ interface SummaryRow {
   clubId: string;
   clubName: string;
   shotName: string;
+  shotType: string;
   powerName: string;
+  powerId: string;
+  description: string;
   lastPracticed: Date | null;
   carryAvg: number | null;
   carryBest: number | null;
@@ -50,6 +55,43 @@ function names(configKey: string) {
     shot: SHOT_TYPES.find(s => s.id === shotType)?.name ?? shotType,
     power: POWER_OPTIONS.find(p => p.id === power)?.name ?? power,
   };
+}
+
+function getPowerLabel(power: string): string {
+  if (power === 'full') return 'Full';
+  if (power === '730pm') return '7.30';
+  if (power === '9pm') return '9';
+  if (power === '10pm') return '10';
+  return POWER_OPTIONS.find((option) => option.id === power)?.name.replace(/pm$/i, '') ?? power;
+}
+
+function getShotLabel(shotType: string): string {
+  if (shotType === 'full') return 'Full';
+  if (shotType === 'bump') return 'Bump';
+  if (shotType === 'pitch') return 'Pitch';
+  if (shotType === 'chip') return 'Chip';
+  return SHOT_TYPES.find((shot) => shot.id === shotType)?.name ?? shotType;
+}
+
+function powerBadgeClass(power: string): string {
+  if (power === 'full') return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
+  if (power === '10pm') return 'border-lime-600 bg-lime-50 text-lime-800 hover:bg-lime-50';
+  if (power === '9pm') return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
+  if (power === '730pm') return 'border-orange-500 bg-orange-50 text-orange-800 hover:bg-orange-50';
+  return '';
+}
+
+function shotBadgeClass(shotType: string): string {
+  if (shotType === 'punch') return '';
+  if (shotType === 'pitch' || shotType === 'chip' || shotType === 'bump') {
+    return 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/5';
+  }
+  return '';
+}
+
+function profileDescription(profile: ShotProfile | undefined): string {
+  if (!profile) return '';
+  return profile.technique || profile.routine || '';
 }
 
 function mean(vals: number[]): number | null {
@@ -88,30 +130,49 @@ function clubOrderCompare(a: SummaryRow, b: SummaryRow): number {
 
 export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: string) => void } = {}) {
   const { practiceSessions } = usePracticeData();
+  const profiles = useShotProfiles();
   const [sortKey, setSortKey] = useState<SortKey>('club');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   // Group sessions by configKey & collect session ids for shot fetch
   const { groupedRows, sessionIds } = useMemo(() => {
+    const profileByConfig = new Map<string, ShotProfile>();
+    for (const profile of Object.values(profiles)) {
+      if (profile.enabled && profile.showInPractice) {
+        profileByConfig.set(profile.id, profile);
+      }
+    }
+
     const byConfig = new Map<string, PracticeSession[]>();
     for (const s of practiceSessions) {
       const key = s.clubId.includes('_') ? s.clubId : `${s.clubId}_full_full`;
       (byConfig.get(key) ?? byConfig.set(key, []).get(key)!).push(s);
     }
+    const allConfigKeys = new Set<string>([
+      ...profileByConfig.keys(),
+      ...byConfig.keys(),
+    ]);
     const ids: string[] = [];
     const grouped: Array<{
       configKey: string;
+      profile: ShotProfile | undefined;
       recentSessions: PracticeSession[];
       allSessions: PracticeSession[];
     }> = [];
-    for (const [configKey, sessions] of byConfig) {
+    for (const configKey of allConfigKeys) {
+      const sessions = byConfig.get(configKey) ?? [];
       const sorted = [...sessions].sort((a, b) => b.date.getTime() - a.date.getTime());
       const recent = sorted.slice(0, 3);
-      grouped.push({ configKey, recentSessions: recent, allSessions: sorted });
+      grouped.push({
+        configKey,
+        profile: profileByConfig.get(configKey),
+        recentSessions: recent,
+        allSessions: sorted,
+      });
       recent.forEach(s => ids.push(s.id));
     }
     return { groupedRows: grouped, sessionIds: ids };
-  }, [practiceSessions]);
+  }, [practiceSessions, profiles]);
 
   const { shotsBySession } = usePracticeShotsBySessions(sessionIds);
 
@@ -188,13 +249,16 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         ? last3.reduce((a, s) => a + (s.consistency?.overallScore ?? 0), 0) / last3.length
         : null;
       const n = names(g.configKey);
-      const { club } = parsePracticeConfigKey(g.configKey);
+      const { club, shotType, power } = parsePracticeConfigKey(g.configKey);
       return {
         configKey: g.configKey,
         clubId: club,
         clubName: n.club,
-        shotName: n.shot,
-        powerName: n.power,
+        shotName: getShotLabel(shotType),
+        shotType,
+        powerName: getPowerLabel(power),
+        powerId: power,
+        description: profileDescription(g.profile),
         lastPracticed: g.recentSessions[0]?.date ?? null,
         carryAvg,
         carryBest,
@@ -296,13 +360,12 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       <CardHeader>
         <CardTitle>Practice Summary</CardTitle>
         <CardDescription>
-          One line per club / shot / power. Click any column to sort. Carry and total are means of the
-          last 3 sessions; best is your top single shot.
+          One line per gapping shot option. Values come from practice logs only; empty options show as no data.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {sortedRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No practice sessions logged yet.</p>
+          <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-separate border-spacing-0">
@@ -348,10 +411,28 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             row.clubName
                           )}
                         </td>
-                        <td className="py-2 pr-3 text-muted-foreground">{row.shotName}</td>
-                        <td className="py-2 pr-3 text-muted-foreground">{row.powerName}</td>
+                        <td className="py-2 pr-3">
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={row.shotType === 'punch' ? 'default' : 'outline'}
+                              className={cn('w-fit', shotBadgeClass(row.shotType))}
+                            >
+                              {row.shotName}
+                            </Badge>
+                            {row.description && (
+                              <span className="max-w-[280px] text-xs text-muted-foreground">
+                                {row.description}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Badge variant="outline" className={cn('w-fit', powerBadgeClass(row.powerId))}>
+                            {row.powerName}
+                          </Badge>
+                        </td>
                         <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
-                          {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : '—'}
+                          {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                         </td>
                         <td className="py-2 pr-3 text-right whitespace-nowrap tabular-nums">
                           <div>{fmt(row.carryAvg)}</div>
