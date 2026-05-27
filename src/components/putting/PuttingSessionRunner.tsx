@@ -57,7 +57,12 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
   const activeDrills = useMemo(() => {
     if (category !== 'indoor') return sortedDrills;
     const drillNames = new Set(selectedSet.drillNames);
-    return sortedDrills.filter(drill => drillNames.has(drill.name));
+    const usedNames = new Set<string>();
+    return sortedDrills.filter(drill => {
+      if (!drillNames.has(drill.name) || usedNames.has(drill.name)) return false;
+      usedNames.add(drill.name);
+      return true;
+    });
   }, [category, selectedSet, sortedDrills]);
 
   const currentDrill = step >= 0 && step < activeDrills.length ? activeDrills[step] : null;
@@ -304,6 +309,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
         {currentDrill.setup && (
           <div className="rounded-md bg-muted p-3 text-sm">
             <strong>Setup:</strong> {currentDrill.setup}
+          </div>
+        )}
+        {currentDrill.recommendation && (
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+            <strong>Cue:</strong> {currentDrill.recommendation}
           </div>
         )}
 
