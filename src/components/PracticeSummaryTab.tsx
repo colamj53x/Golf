@@ -8,7 +8,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
-import { ProfileTarget, ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,6 @@ interface SummaryRow {
   shotName: string;
   shotType: string;
   powerId: string;
-  target: ProfileTarget;
   description: string;
   lastPracticed: Date | null;
   carryAvg: number | null;
@@ -42,7 +41,6 @@ interface SummaryRow {
 type SortKey =
   | 'club'
   | 'shot'
-  | 'target'
   | 'last'
   | 'carry'
   | 'total'
@@ -75,17 +73,9 @@ function powerBadgeClass(power: string): string {
   return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
 }
 
-function targetLabel(target: ProfileTarget): string {
-  return target === 'fairway' ? 'Fairway' : 'Green';
-}
-
 function profileDescription(profile: ShotProfile | undefined): string {
   if (!profile) return '';
   return profile.technique || profile.routine || '';
-}
-
-function rowKey(configKey: string, target: ProfileTarget): string {
-  return `${visibleConfigKey(configKey)}__${target}`;
 }
 
 function mean(vals: number[]): number | null {
@@ -132,7 +122,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
 
   const gappingOptions = useMemo(() => {
-    const options = new Map<string, { configKey: string; profile: ShotProfile; target: ProfileTarget }>();
+    const options = new Map<string, { configKey: string; profile: ShotProfile }>();
     const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
     const shotCategoryOverrides = loadShotCategoryOverrides();
 
@@ -150,9 +140,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
 
       for (const row of rows) {
         const configKey = visibleConfigKey(row.profile.id);
-        const key = rowKey(configKey, row.target);
-        if (!options.has(key)) {
-          options.set(key, { configKey, profile: row.profile, target: row.target });
+        if (!options.has(configKey)) {
+          options.set(configKey, { configKey, profile: row.profile });
         }
       }
     }
@@ -175,17 +164,14 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       if (!parsed.club || !parsed.shotType || !parsed.power) continue;
       const fallbackProfile = profiles[`${parsed.club}_${parsed.shotType}_${parsed.power === 'full' ? 'full' : '9pm'}`]
         ?? profiles[`${parsed.club}_${parsed.shotType}_full`];
-      const target = fallbackProfile?.targets[0] ?? 'green';
-      const key = rowKey(configKey, target);
-      if (fallbackProfile && !allOptions.has(key)) {
-        allOptions.set(key, { configKey, profile: fallbackProfile, target });
+      if (fallbackProfile && !allOptions.has(configKey)) {
+        allOptions.set(configKey, { configKey, profile: fallbackProfile });
       }
     }
 
     const grouped: Array<{
       configKey: string;
       profile: ShotProfile | undefined;
-      target: ProfileTarget;
       recentSessions: PracticeSession[];
       allSessions: PracticeSession[];
     }> = [];
@@ -198,7 +184,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       grouped.push({
         configKey,
         profile: option.profile,
-        target: option.target,
         recentSessions: recent,
         allSessions: sorted,
       });
@@ -287,7 +272,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         shotName: getShotLabel(shotType),
         shotType,
         powerId: power,
-        target: g.target,
         description: profileDescription(g.profile),
         lastPracticed: g.recentSessions[0]?.date ?? null,
         carryAvg,
@@ -314,10 +298,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           return dir === 'asc'
             ? a.shotName.localeCompare(b.shotName)
             : b.shotName.localeCompare(a.shotName);
-        case 'target':
-          return dir === 'asc'
-            ? a.target.localeCompare(b.target)
-            : b.target.localeCompare(a.target);
         case 'last':
           return nullsLast(
             a.lastPracticed?.getTime() ?? null,
@@ -403,14 +383,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
-                  <SortHeader label="Target" sKey="target" />
                   <SortHeader label="Last" sKey="last" />
                   <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
                   <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
                   <SortHeader label="Cons (All / Last / L3)" sKey="cons" align="right" />
                 </tr>
                 <tr>
-                  <th colSpan={7} className="border-b border-border p-0" />
+                  <th colSpan={6} className="border-b border-border p-0" />
                 </tr>
               </thead>
               <tbody>
@@ -421,10 +400,10 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                     sortKey === 'club' && prev !== undefined && prev.clubId !== row.clubId;
 
                   return (
-                    <Fragment key={rowKey(row.configKey, row.target)}>
+                    <Fragment key={row.configKey}>
                       {showGap && (
                         <tr aria-hidden="true">
-                          <td colSpan={7} className="h-3" />
+                          <td colSpan={6} className="h-3" />
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
@@ -455,11 +434,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="py-2 pr-3">
-                          <Badge variant="outline" className="w-fit">
-                            {targetLabel(row.target)}
-                          </Badge>
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
                           {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
