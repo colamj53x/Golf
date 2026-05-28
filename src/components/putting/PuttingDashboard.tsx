@@ -169,6 +169,14 @@ function TrendBadge({ trend }: { trend: TrendState }) {
   );
 }
 
+function levelDotClass(score: number | null): string {
+  if (score === null) return 'bg-muted-foreground/40';
+  if (score >= 90) return 'bg-amber-400';
+  if (score >= 80) return 'bg-green-600';
+  if (score >= 60) return 'bg-amber-500';
+  return 'bg-red-600';
+}
+
 function SummaryCard({
   title,
   stats,
@@ -206,6 +214,67 @@ function SummaryCard({
         <div className="flex justify-between gap-3"><span>Latest</span><span className="font-medium text-foreground">{latestValue ?? latestText(stats.latest)}</span></div>
         <div className="flex justify-between gap-3"><span>Best</span><span className="font-medium text-foreground">{bestText(stats.best)}</span></div>
         <div className="flex justify-between gap-3"><span>Scored</span><span className="font-medium text-foreground">{stats.count}</span></div>
+      </div>
+    </div>
+  );
+}
+
+function DrillPerformanceList({
+  drillStats,
+}: {
+  drillStats: Array<{
+    drillName: string;
+    stats: SummaryStats;
+    latestRaw: string;
+  }>;
+}) {
+  const ordered = [...drillStats].sort((a, b) => {
+    const aScored = a.stats.count > 0 ? 0 : 1;
+    const bScored = b.stats.count > 0 ? 0 : 1;
+    if (aScored !== bScored) return aScored - bScored;
+    if (a.stats.count !== b.stats.count) return b.stats.count - a.stats.count;
+    return (b.stats.currentForm ?? -1) - (a.stats.currentForm ?? -1);
+  });
+
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <div className="grid min-w-[760px] grid-cols-[minmax(170px,1.4fr)_110px_100px_130px_80px_minmax(150px,1fr)] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div>Drill</div>
+        <div>Current</div>
+        <div>Latest</div>
+        <div>Best</div>
+        <div className="text-right">Scored</div>
+        <div>Trend</div>
+      </div>
+      <div className="divide-y">
+        {ordered.map(({ drillName, stats, latestRaw }) => {
+          const level = levelFor(stats.currentForm);
+          return (
+            <div
+              key={drillName}
+              className={cn(
+                'grid min-w-[760px] grid-cols-[minmax(170px,1.4fr)_110px_100px_130px_80px_minmax(150px,1fr)] items-center gap-3 px-4 py-3 text-sm',
+                stats.count === 0 ? 'bg-muted/10 text-muted-foreground' : 'bg-background',
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span className={cn('h-9 w-1 rounded-full', levelDotClass(stats.currentForm))} />
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-foreground">{drillName}</div>
+                  <div className="text-xs text-muted-foreground">{currentFormLabel(stats, 'result')}</div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xl font-bold tabular-nums text-foreground">{scoreText(stats.currentForm)}</div>
+                <Badge variant="outline" className="mt-1">{level.label}</Badge>
+              </div>
+              <div className="font-medium tabular-nums text-foreground">{latestRaw}</div>
+              <div className="font-medium tabular-nums text-foreground">{bestText(stats.best)}</div>
+              <div className="text-right font-medium tabular-nums text-foreground">{stats.count}</div>
+              <TrendBadge trend={stats.trend} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -415,20 +484,9 @@ export function PuttingDashboard({ sessions: providedSessions, loading: provided
         <div className="space-y-3">
           <div>
             <h3 className="text-base font-semibold">Drill Performance</h3>
-            <p className="text-sm text-muted-foreground">Each drill tracks current form, latest result, best score, and trend.</p>
+            <p className="text-sm text-muted-foreground">Scored drills first. No-data drills stay visible but compact.</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {dashboard.drillStats.map(({ drillName, stats, latestRaw }) => (
-              <SummaryCard
-                key={drillName}
-                title={drillName}
-                stats={stats}
-                icon={Goal}
-                detail={currentFormLabel(stats, 'result')}
-                latestValue={latestRaw}
-              />
-            ))}
-          </div>
+          <DrillPerformanceList drillStats={dashboard.drillStats} />
         </div>
       </CardContent>
     </Card>
