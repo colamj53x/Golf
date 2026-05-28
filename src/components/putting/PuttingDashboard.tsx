@@ -438,35 +438,39 @@ export function PuttingDashboard({ sessions: providedSessions, loading: provided
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className={cn('rounded-md border p-5', overallLevel.className)}>
-          <div className="grid gap-5 lg:grid-cols-[minmax(220px,300px)_1fr]">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Current Form</p>
-              <div className="mt-2 text-5xl font-bold">{scoreText(dashboard.overall.currentForm)}</div>
-              <p className="mt-2 text-sm text-muted-foreground">{currentFormLabel(dashboard.overall, 'session')}</p>
-              <Badge variant="outline" className="mt-3">{overallLevel.label}</Badge>
+      <CardContent className="space-y-5">
+        <div className={cn('rounded-md border px-4 py-3', overallLevel.className)}>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div className="min-w-[210px] flex-1">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Current Form</p>
+                  <div className="mt-1 text-4xl font-bold leading-none">{scoreText(dashboard.overall.currentForm)}</div>
+                </div>
+                <Badge variant="outline">{overallLevel.label}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{currentFormLabel(dashboard.overall, 'session')}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid flex-[2] grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
               <div>
                 <p className="text-xs uppercase text-muted-foreground">Latest</p>
-                <p className="mt-1 font-semibold">{latestText(dashboard.overall.latest)}</p>
+                <p className="mt-0.5 font-semibold">{latestText(dashboard.overall.latest)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-muted-foreground">Best</p>
-                <p className="mt-1 font-semibold">{bestText(dashboard.overall.best)}</p>
+                <p className="mt-0.5 font-semibold">{bestText(dashboard.overall.best)}</p>
               </div>
               <div>
-                <p className="text-xs uppercase text-muted-foreground">Total scored sessions</p>
-                <p className="mt-1 font-semibold">{dashboard.overall.count}</p>
+                <p className="text-xs uppercase text-muted-foreground">Sessions</p>
+                <p className="mt-0.5 font-semibold">{dashboard.overall.count}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-muted-foreground">Trend</p>
-                <div className="mt-1"><TrendBadge trend={dashboard.overall.trend} /></div>
+                <div className="mt-0.5"><TrendBadge trend={dashboard.overall.trend} /></div>
               </div>
             </div>
           </div>
-          <Progress value={dashboard.overall.currentForm ?? 0} className={cn('mt-5 h-2', overallLevel.progressClass)} />
+          <Progress value={dashboard.overall.currentForm ?? 0} className={cn('mt-3 h-1.5', overallLevel.progressClass)} />
         </div>
 
         <div className="grid gap-3 lg:grid-cols-3">
