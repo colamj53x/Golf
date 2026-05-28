@@ -497,14 +497,14 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-auto min-w-[660px] text-sm border-separate border-spacing-0">
+            <table className="w-auto min-w-[700px] text-sm border-separate border-spacing-0">
               <colgroup>
                 <col className="w-32" />
-                <col className="w-20" />
                 <col className="w-24" />
-                <col className="w-14" />
-                <col className="w-14" />
-                <col className="w-14" />
+                <col className="w-28" />
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
                 <col className="w-24" />
                 <col className="w-24" />
               </colgroup>
@@ -552,7 +552,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             row.clubName
                           )}
                         </td>
-                        <td className="py-1.5 pr-1">
+                        <td className="py-1.5 pr-2">
                           <div className="flex items-center gap-2">
                             <Badge
                               variant="outline"
@@ -575,7 +575,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                           </Badge>
                         </td>
-                        <td className="py-1.5 px-1 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-1.5 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.reliancePerRound}
                             greenAt={1}
@@ -583,7 +583,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             title={reliabilityTitle(row.reliancePerRound, row.courseShotCount)}
                           />
                         </td>
-                        <td className="py-1.5 px-1 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-1.5 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last20Score}
                             greenAt={65}
@@ -595,7 +595,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-1.5 px-1 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-1.5 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last3PracticeScore}
                             greenAt={80}
@@ -607,7 +607,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-1.5 pl-1 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className="flex justify-end">
                             <span className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</span>
                           </div>
