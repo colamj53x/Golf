@@ -78,11 +78,7 @@ export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
-        <div>
-          <h3 className="text-lg font-semibold">Putting</h3>
-          <p className="text-sm text-muted-foreground">Keep reporting separate from the drills and cue cards.</p>
-        </div>
+      <div className="flex justify-end border-b pb-3">
         <div className="inline-flex rounded-md bg-muted/70 p-1">
           <button
             type="button"

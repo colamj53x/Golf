@@ -45,6 +45,7 @@ const fullSwingTiles = [
 ];
 
 export function PracticeTab() {
+  const [practiceMode, setPracticeMode] = useState<'full-swing' | 'putting'>('full-swing');
   const [fullSwingView, setFullSwingView] = useState<FullSwingView>('home');
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
@@ -68,15 +69,17 @@ export function PracticeTab() {
     }`;
 
   return (
-    <Tabs defaultValue="full-swing" className="w-full space-y-5">
-      <h2 className="text-xl font-semibold text-foreground">Practice</h2>
-
-      <TabsContent value="full-swing">
-        <div className="mb-5 flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b">
-          <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
-            <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
-            <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
-          </TabsList>
+    <Tabs
+      value={practiceMode}
+      onValueChange={(value) => setPracticeMode(value as typeof practiceMode)}
+      className="w-full space-y-5"
+    >
+      <div className="flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b">
+        <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
+          <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
+          <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
+        </TabsList>
+        {practiceMode === 'full-swing' && (
           <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto" role="tablist" aria-label="Full swing practice views">
             {secondaryNavItems.map((item) => (
               <button
@@ -91,8 +94,10 @@ export function PracticeTab() {
               </button>
             ))}
           </div>
-        </div>
+        )}
+      </div>
 
+      <TabsContent value="full-swing">
         {fullSwingTab === 'summary' && <PracticeSummaryTab onOpenLog={openLog} />}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
@@ -140,12 +145,6 @@ export function PracticeTab() {
       </TabsContent>
 
       <TabsContent value="putting">
-        <div className="mb-5 flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b pb-2">
-          <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
-            <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
-            <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
-          </TabsList>
-        </div>
         {puttingView === 'home' && (
           <PuttingHome
             onSelect={(category) => {
