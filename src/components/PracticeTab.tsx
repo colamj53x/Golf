@@ -5,7 +5,7 @@ import { PracticeDashboardTab } from '@/components/PracticeDashboardTab';
 import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
 import { PracticePlanTab } from '@/components/PracticePlanTab';
 import { DrillBankTab } from '@/components/DrillBankTab';
-import { PuttingHome } from '@/components/putting/PuttingHome';
+import { PuttingHome, PuttingSection } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
 import { DriverPracticeView } from '@/components/DriverPracticeView';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -22,6 +22,11 @@ const secondaryNavItems = [
   { value: 'plan', label: 'Plan' },
   { value: 'drills', label: 'Drill Bank' },
   { value: 'types', label: 'Types' },
+];
+
+const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
+  { value: 'dashboard', label: 'Dashboard' },
+  { value: 'drills', label: 'Drills' },
 ];
 
 const fullSwingTiles = [
@@ -48,6 +53,7 @@ export function PracticeTab() {
   const [practiceMode, setPracticeMode] = useState<'full-swing' | 'putting'>('full-swing');
   const [fullSwingView, setFullSwingView] = useState<FullSwingView>('home');
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
+  const [puttingSection, setPuttingSection] = useState<PuttingSection>('dashboard');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
   const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
   const { setSelectedClub, setSelectedShotType, setSelectedPower } = usePracticeData();
@@ -60,9 +66,9 @@ export function PracticeTab() {
     setFullSwingTab('logs');
   };
 
-  const secondaryNavClass = (value: string) =>
-    `h-10 shrink-0 border-b-2 px-1.5 text-sm font-medium transition-colors sm:px-3 ${
-      fullSwingTab === value
+  const secondaryNavClass = (active: boolean) =>
+    `h-8 shrink-0 border-b-2 px-2 text-sm font-medium transition-colors sm:px-3 ${
+      active
         ? 'border-primary text-foreground'
         : 'border-transparent text-muted-foreground hover:text-foreground'
     }`;
@@ -71,32 +77,49 @@ export function PracticeTab() {
     <Tabs
       value={practiceMode}
       onValueChange={(value) => setPracticeMode(value as typeof practiceMode)}
-      className="w-full space-y-5"
+      className="w-full space-y-3"
     >
-      <div className="flex w-full flex-wrap items-end gap-x-5 gap-y-2 border-b">
+      <div className="border-b pb-2">
         <TabsList className="h-9 shrink-0 justify-start overflow-x-auto rounded-md bg-muted/70 p-1">
           <TabsTrigger value="full-swing" className="h-7 shrink-0 px-4">Full Swing</TabsTrigger>
           <TabsTrigger value="putting" className="h-7 shrink-0 px-4">Putting</TabsTrigger>
         </TabsList>
+        <div className="mt-2 flex min-w-0 gap-1 overflow-x-auto" role="tablist" aria-label={`${practiceMode === 'full-swing' ? 'Full swing' : 'Putting'} practice views`}>
         {practiceMode === 'full-swing' && (
-          <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto" role="tablist" aria-label="Full swing practice views">
-            {secondaryNavItems.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                role="tab"
-                aria-selected={fullSwingTab === item.value}
-                className={secondaryNavClass(item.value)}
-                onClick={() => setFullSwingTab(item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          secondaryNavItems.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={fullSwingTab === item.value}
+              className={secondaryNavClass(fullSwingTab === item.value)}
+              onClick={() => setFullSwingTab(item.value)}
+            >
+              {item.label}
+            </button>
+          ))
         )}
+        {practiceMode === 'putting' && (
+          puttingNavItems.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={puttingSection === item.value}
+              className={secondaryNavClass(puttingSection === item.value)}
+              onClick={() => {
+                setPuttingSection(item.value);
+                setPuttingView('home');
+              }}
+            >
+              {item.label}
+            </button>
+          ))
+        )}
+        </div>
       </div>
 
-      <TabsContent value="full-swing">
+      <TabsContent value="full-swing" className="mt-0">
         {fullSwingTab === 'summary' && <PracticeSummaryTab onOpenLog={openLog} />}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
@@ -143,9 +166,10 @@ export function PracticeTab() {
         )}
       </TabsContent>
 
-      <TabsContent value="putting">
+      <TabsContent value="putting" className="mt-0">
         {puttingView === 'home' && (
           <PuttingHome
+            section={puttingSection}
             onStartIndoorSet={(setId) => {
               setPuttingSetId(setId);
               setPuttingView('indoor');

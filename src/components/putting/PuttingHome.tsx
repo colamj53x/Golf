@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { BarChart3, CheckCircle2, ClipboardList, Eye, Flag, Footprints, ListChecks, Play, ScanLine, TreePine } from 'lucide-react';
+import { CheckCircle2, Eye, Flag, Footprints, ListChecks, Play, ScanLine, TreePine } from 'lucide-react';
 import { toast } from 'sonner';
 import { PuttingTracking } from './PuttingTracking';
 import { INDOOR_PRACTICE_SETS, IndoorPracticeSetId } from '@/lib/putting/drills';
@@ -11,13 +11,13 @@ import { loadPuttingSessionDraft, PuttingSessionDraft } from '@/lib/putting/sess
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { DrillResult, PuttingSessionRecord } from '@/types/putting';
-import { cn } from '@/lib/utils';
 
 interface Props {
+  section: PuttingSection;
   onStartIndoorSet: (setId: IndoorPracticeSetId) => void;
 }
 
-type PuttingSection = 'tracking' | 'drills';
+export type PuttingSection = 'dashboard' | 'drills';
 
 const readSteps = [
   {
@@ -70,9 +70,8 @@ const techniqueSteps = [
   },
 ];
 
-export function PuttingHome({ onStartIndoorSet }: Props) {
+export function PuttingHome({ section, onStartIndoorSet }: Props) {
   const { user } = useAuth();
-  const [section, setSection] = useState<PuttingSection>('tracking');
   const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
   const [draft, setDraft] = useState<PuttingSessionDraft | null>(() => loadPuttingSessionDraft());
 
@@ -113,14 +112,6 @@ export function PuttingHome({ onStartIndoorSet }: Props) {
     return () => window.removeEventListener('focus', refreshDraft);
   }, []);
 
-  const sectionButtonClass = (value: PuttingSection) =>
-    cn(
-      'inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
-      section === value
-        ? 'bg-background text-foreground shadow-sm'
-        : 'text-muted-foreground hover:text-foreground',
-    );
-
   const drillStats = useMemo(() => {
     const stats = new Map<string, { count: number; lastDone: string | null }>();
     for (const session of sessions) {
@@ -159,29 +150,8 @@ export function PuttingHome({ onStartIndoorSet }: Props) {
     : null;
 
   return (
-    <div className="space-y-5">
-      <div className="flex justify-end border-b pb-3">
-        <div className="inline-flex rounded-md bg-muted/70 p-1">
-          <button
-            type="button"
-            className={sectionButtonClass('tracking')}
-            onClick={() => setSection('tracking')}
-          >
-            <BarChart3 className="h-4 w-4" />
-            Tracking
-          </button>
-          <button
-            type="button"
-            className={sectionButtonClass('drills')}
-            onClick={() => setSection('drills')}
-          >
-            <ClipboardList className="h-4 w-4" />
-            Drills
-          </button>
-        </div>
-      </div>
-
-      {section === 'tracking' ? (
+    <div>
+      {section === 'dashboard' ? (
         <PuttingTracking />
       ) : (
         <div className="space-y-4">
