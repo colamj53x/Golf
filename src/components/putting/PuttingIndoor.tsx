@@ -1,30 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { PuttingDrill, LevelBand, ScoringInput } from '@/types/putting';
 import { PuttingSessionRunner } from './PuttingSessionRunner';
-import { DrillBuilderDialog } from './DrillBuilderDialog';
 import { IndoorPracticeSetId, mergeLockedIndoorDrills } from '@/lib/putting/drills';
 
 interface Props {
   onBack: () => void;
   initialPracticeSetId?: IndoorPracticeSetId;
-  startInRun?: boolean;
 }
 
-type View = 'home' | 'run';
-
-export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInRun = false }: Props) {
+export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a' }: Props) {
   const { user } = useAuth();
   const [drills, setDrills] = useState<PuttingDrill[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>(startInRun ? 'run' : 'home');
-  const [builderOpen, setBuilderOpen] = useState(false);
 
   const loadDrills = useCallback(async () => {
     let query = supabase
@@ -55,108 +47,22 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a', startInR
     loadDrills().finally(() => setLoading(false));
   }, [loadDrills]);
 
-  const handleDeleteDrill = async (id: string) => {
-    if (!confirm('Delete this custom drill?')) return;
-    if (!user) return;
-    const { error } = await supabase
-      .from('putting_drills')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .eq('is_builtin', false);
-    if (error) {
-      toast.error('Failed to delete');
-      return;
-    }
-    toast.success('Drill deleted');
-    loadDrills();
-  };
-
-  if (view === 'run') {
-    return (
-      <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => setView('home')}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Back to Indoor
-        </Button>
+  return (
+    <div className="space-y-4">
+      <Button variant="ghost" size="sm" onClick={onBack}>
+        <ArrowLeft className="mr-1 h-4 w-4" /> Back to Drills
+      </Button>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading putting drills...</p>
+      ) : (
         <PuttingSessionRunner
           drills={drills}
           category="indoor"
           initialPracticeSetId={initialPracticeSetId}
-          onComplete={() => {
-            setView('home');
-          }}
-          onCancel={() => setView('home')}
+          onComplete={onBack}
+          onCancel={onBack}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Putting
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div>
-              <CardTitle>Indoor Carpet Putting</CardTitle>
-              <CardDescription>Start Line & Short Putt Control · scored out of 100</CardDescription>
-            </div>
-            <Button size="lg" onClick={() => setView('run')} disabled={drills.length === 0}>
-              <Play className="mr-2 h-4 w-4" /> Start Session
-            </Button>
-          </div>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Drills</CardTitle>
-              <CardDescription>Built-in + your custom drills</CardDescription>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => setBuilderOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" /> Add Drill
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {!loading && drills.map(d => (
-              <div key={d.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{d.name}</span>
-                    {d.is_builtin ? <Badge variant="secondary">Built-in</Badge> : <Badge>Custom</Badge>}
-                    <span className="text-xs text-muted-foreground">
-                      {d.reps} reps · max {d.scaled && d.scaled_max ? d.scaled_max : d.max_score}
-                    </span>
-                  </div>
-                  {d.purpose && <p className="mt-1 text-xs text-muted-foreground">{d.purpose}</p>}
-                </div>
-                {!d.is_builtin && (
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteDrill(d.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <DrillBuilderDialog
-        open={builderOpen}
-        onOpenChange={setBuilderOpen}
-        category="indoor"
-        onSaved={loadDrills}
-      />
+      )}
     </div>
   );
 }

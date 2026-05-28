@@ -14,7 +14,6 @@ import { DrillResult, PuttingSessionRecord } from '@/types/putting';
 import { cn } from '@/lib/utils';
 
 interface Props {
-  onSelect: (category: 'indoor' | 'outdoor') => void;
   onStartIndoorSet: (setId: IndoorPracticeSetId) => void;
 }
 
@@ -71,7 +70,7 @@ const techniqueSteps = [
   },
 ];
 
-export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
+export function PuttingHome({ onStartIndoorSet }: Props) {
   const { user } = useAuth();
   const [section, setSection] = useState<PuttingSection>('tracking');
   const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
@@ -275,14 +274,11 @@ export function PuttingHome({ onSelect, onStartIndoorSet }: Props) {
           </div>
 
       <div className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
           <div>
             <h3 className="text-lg font-semibold">Choose a Putting Set</h3>
             <p className="text-sm text-muted-foreground">Pick the session shape before you start scoring.</p>
           </div>
-          <Button className="w-full sm:w-auto" variant="outline" onClick={() => onSelect('indoor')}>
-            Open Indoor Practice
-          </Button>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

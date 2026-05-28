@@ -13,7 +13,7 @@ import { parsePracticeConfigKey } from '@/types/practiceClubs';
 import { IndoorPracticeSetId } from '@/lib/putting/drills';
 import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
 
-type PuttingView = 'home' | 'indoor' | 'outdoor';
+type PuttingView = 'home' | 'indoor';
 type FullSwingView = 'home' | 'driver';
 
 const secondaryNavItems = [
@@ -50,7 +50,6 @@ export function PracticeTab() {
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
   const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
-  const [startPuttingSet, setStartPuttingSet] = useState(false);
   const { setSelectedClub, setSelectedShotType, setSelectedPower } = usePracticeData();
 
   const openLog = (configKey: string) => {
@@ -147,13 +146,8 @@ export function PracticeTab() {
       <TabsContent value="putting">
         {puttingView === 'home' && (
           <PuttingHome
-            onSelect={(category) => {
-              setStartPuttingSet(false);
-              setPuttingView(category);
-            }}
             onStartIndoorSet={(setId) => {
               setPuttingSetId(setId);
-              setStartPuttingSet(true);
               setPuttingView('indoor');
             }}
           />
@@ -161,9 +155,7 @@ export function PracticeTab() {
         {puttingView === 'indoor' && (
           <PuttingIndoor
             initialPracticeSetId={puttingSetId}
-            startInRun={startPuttingSet}
             onBack={() => {
-              setStartPuttingSet(false);
               setPuttingView('home');
             }}
           />
