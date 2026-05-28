@@ -8,8 +8,9 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
+import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
 
@@ -34,11 +35,13 @@ interface SummaryRow {
   carryBest: number | null;
   totalAvg: number | null;
   totalBest: number | null;
-  consOverall: number | null;
-  consLast: number | null;
-  consLast3: number | null;
-  courseAvgPerRound: number | null;
-  courseShotCount: number;
+  reliancePct: number | null;
+  opportunityCount: number;
+  usedOpportunityCount: number;
+  last20Score: number | null;
+  last20Count: number;
+  last3PracticeScore: number | null;
+  last3PracticeCount: number;
 }
 
 type SortKey =
@@ -47,8 +50,9 @@ type SortKey =
   | 'last'
   | 'carry'
   | 'total'
-  | 'course'
-  | 'cons';
+  | 'reliance'
+  | 'last20'
+  | 'last3';
 
 function names(configKey: string) {
   const { club, shotType } = parsePracticeConfigKey(configKey);
@@ -91,33 +95,12 @@ function fmt(v: number | null, digits = 0): string {
   return v === null ? '—' : v.toFixed(digits);
 }
 
-function consistencyColor(v: number | null): string {
-  if (v === null) return 'text-muted-foreground';
-  if (v >= 80) return 'text-green-500';
-  if (v >= 60) return 'text-amber-500';
-  return 'text-red-500';
-}
-
 function recencyClass(date: Date | null): string {
   if (!date) return 'text-muted-foreground';
   const days = differenceInCalendarDays(new Date(), date);
   if (days <= 31) return 'text-green-600';
   if (days <= 62) return 'text-amber-600';
   return 'text-red-600';
-}
-
-function courseRelianceLabel(value: number | null): string {
-  if (value === null) return 'No data';
-  if (value >= 2) return 'High';
-  if (value >= 0.75) return 'Medium';
-  return 'Low';
-}
-
-function courseRelianceClass(value: number | null): string {
-  if (value === null) return 'border-muted bg-background text-muted-foreground';
-  if (value >= 2) return 'border-green-600 bg-green-50 text-green-800';
-  if (value >= 0.75) return 'border-amber-500 bg-amber-50 text-amber-800';
-  return 'border-slate-300 bg-slate-50 text-slate-700';
 }
 
 function fallbackCourseConfigKey(clubId: string): string | null {
@@ -132,6 +115,71 @@ function primaryDistanceMetric(row: SummaryRow): 'total' | 'carry' {
 
 function metricValueClass(isPrimary: boolean): string {
   return isPrimary ? 'font-semibold text-green-700' : '';
+}
+
+function isDriverDrivingShot(shot: Shot): boolean {
+  return getClubConfigId(shot.club) === 'dr' && shot.type.trim().toLowerCase().startsWith('driv');
+}
+
+function matchesCourseContext(shot: Shot, context: ShotContext): boolean {
+  if (isDriverDrivingShot(shot)) return context === 'tee';
+
+  const lie = shot.startLie.toLowerCase();
+  if (context === 'tee') return lie.includes('tee');
+  if (context === 'fairway') return lie.includes('fairway');
+  return lie.includes('rough') || lie.includes('recovery') || lie.includes('tree') || lie.includes('punch') || lie.includes('trouble');
+}
+
+function windowForRow(row: GappingRow): { min: number; max: number } | null {
+  const min = row.totalMin !== null && Number.isFinite(row.totalMin) ? row.totalMin : null;
+  const max = row.totalMax !== null && Number.isFinite(row.totalMax) ? row.totalMax : null;
+  if (min !== null && max !== null && max >= min) return { min, max };
+
+  const target = row.displayTotal ?? row.rangeTargetTotal;
+  if (target === null || !Number.isFinite(target)) return null;
+  const buffer = Math.max(8, target * 0.12);
+  return { min: target - buffer, max: target + buffer };
+}
+
+function isShotInWindow(shot: Shot, window: { min: number; max: number }): boolean {
+  return Number.isFinite(shot.target) && shot.target >= window.min && shot.target <= window.max;
+}
+
+function shotSafeScore(shot: Shot): boolean {
+  const endLie = shot.endLie.toLowerCase();
+  return endLie.includes('fairway') || endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole');
+}
+
+function scoreShots(shots: Shot[]): number | null {
+  if (!shots.length) return null;
+  return (shots.filter(shotSafeScore).length / shots.length) * 100;
+}
+
+function signalClass(value: number | null, greenAt: number, amberAt: number): string {
+  if (value === null) return 'border-muted bg-muted';
+  if (value >= greenAt) return 'border-green-600 bg-green-600';
+  if (value >= amberAt) return 'border-amber-500 bg-amber-500';
+  return 'border-red-600 bg-red-600';
+}
+
+function SignalDot({
+  value,
+  title,
+  greenAt,
+  amberAt,
+}: {
+  value: number | null;
+  title: string;
+  greenAt: number;
+  amberAt: number;
+}) {
+  return (
+    <span
+      className={cn('inline-block h-4 w-4 rounded-full border', signalClass(value, greenAt, amberAt))}
+      title={title}
+      aria-label={title}
+    />
+  );
 }
 
 // Sort helpers
@@ -161,8 +209,10 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
 
-  const courseUsage = useMemo(() => {
+  const courseSignals = useMemo(() => {
     const shotToConfig = new Map<string, string>();
+    const shotsByConfig = new Map<string, Shot[]>();
+    const windowsByConfig = new Map<string, Array<{ context: ShotContext; min: number; max: number }>>();
     const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
     const shotCategoryOverrides = loadShotCategoryOverrides();
 
@@ -180,6 +230,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
 
       for (const row of rows) {
         const configKey = visibleConfigKey(row.profile.id);
+        const window = windowForRow(row);
+        if (window) {
+          windowsByConfig.set(configKey, [
+            ...(windowsByConfig.get(configKey) ?? []),
+            { context: shotContext, ...window },
+          ]);
+        }
         for (const shot of row.sample) {
           if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
         }
@@ -190,18 +247,39 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       const clubId = getClubConfigId(shot.club);
       return fallbackCourseConfigKey(clubId) !== null;
     });
-    const roundDates = new Set(courseShots.map((shot) => format(shot.date, 'yyyy-MM-dd')));
+    const courseShotsById = new Map(courseShots.map((shot) => [shot.id, shot]));
 
-    const usage = new Map<string, number>();
     for (const shot of courseShots) {
       const clubId = getClubConfigId(shot.club);
       const configKey = shotToConfig.get(shot.id) ?? fallbackCourseConfigKey(clubId);
       if (!configKey) continue;
-      usage.set(configKey, (usage.get(configKey) ?? 0) + 1);
+      shotsByConfig.set(configKey, [...(shotsByConfig.get(configKey) ?? []), shot]);
     }
 
-    const total = [...usage.values()].reduce((sum, count) => sum + count, 0);
-    return { usage, total, roundCount: roundDates.size };
+    const opportunityCounts = new Map<string, { opportunities: number; used: number }>();
+    for (const [configKey, windows] of windowsByConfig) {
+      const opportunityShotIds = new Set<string>();
+      for (const shot of courseShots) {
+        const isOpportunity = windows.some((window) => {
+          if (configKey === 'dr_full_full' && window.context === 'tee') {
+            return matchesCourseContext(shot, 'tee');
+          }
+          return matchesCourseContext(shot, window.context) && isShotInWindow(shot, window);
+        });
+        if (isOpportunity) opportunityShotIds.add(shot.id);
+      }
+
+      const used = [...opportunityShotIds].filter((shotId) => {
+        const shot = courseShotsById.get(shotId);
+        if (!shot) return false;
+        const clubId = getClubConfigId(shot.club);
+        return (shotToConfig.get(shot.id) ?? fallbackCourseConfigKey(clubId)) === configKey;
+      }).length;
+
+      opportunityCounts.set(configKey, { opportunities: opportunityShotIds.size, used });
+    }
+
+    return { opportunityCounts, shotsByConfig };
   }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const gappingOptions = useMemo(() => {
@@ -339,17 +417,20 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       }
 
       const withCons = g.allSessions.filter(s => s.consistency !== undefined);
-      const overallCons = withCons.length
-        ? withCons.reduce((a, s) => a + (s.consistency?.overallScore ?? 0), 0) / withCons.length
-        : null;
       const last3 = withCons.slice(0, 3);
       const last3Cons = last3.length
         ? last3.reduce((a, s) => a + (s.consistency?.overallScore ?? 0), 0) / last3.length
         : null;
       const n = names(g.configKey);
       const { club, shotType, power } = parsePracticeConfigKey(g.configKey);
-      const courseShotCount = courseUsage.usage.get(g.configKey) ?? 0;
-      const courseAvgPerRound = courseUsage.roundCount > 0 ? courseShotCount / courseUsage.roundCount : null;
+      const opportunity = courseSignals.opportunityCounts.get(g.configKey);
+      const reliancePct = opportunity && opportunity.opportunities > 0
+        ? (opportunity.used / opportunity.opportunities) * 100
+        : null;
+      const recentCourseShots = [...(courseSignals.shotsByConfig.get(g.configKey) ?? [])]
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 20);
+      const last20Score = scoreShots(recentCourseShots);
       return {
         configKey: g.configKey,
         clubId: club,
@@ -363,14 +444,16 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         carryBest,
         totalAvg,
         totalBest,
-        consOverall: overallCons,
-        consLast: withCons[0]?.consistency?.overallScore ?? null,
-        consLast3: last3Cons,
-        courseAvgPerRound,
-        courseShotCount,
+        reliancePct,
+        opportunityCount: opportunity?.opportunities ?? 0,
+        usedOpportunityCount: opportunity?.used ?? 0,
+        last20Score,
+        last20Count: recentCourseShots.length,
+        last3PracticeScore: last3Cons,
+        last3PracticeCount: last3.length,
       };
     });
-  }, [courseUsage, groupedRows, shotsBySession]);
+  }, [courseSignals, groupedRows, shotsBySession]);
 
 
   // Apply sorting
@@ -395,10 +478,12 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           return nullsLast(a.carryAvg, b.carryAvg, dir);
         case 'total':
           return nullsLast(a.totalAvg, b.totalAvg, dir);
-        case 'course':
-          return nullsLast(a.courseAvgPerRound, b.courseAvgPerRound, dir);
-        case 'cons':
-          return nullsLast(a.consOverall, b.consOverall, dir);
+        case 'reliance':
+          return nullsLast(a.reliancePct, b.reliancePct, dir);
+        case 'last20':
+          return nullsLast(a.last20Score, b.last20Score, dir);
+        case 'last3':
+          return nullsLast(a.last3PracticeScore, b.last3PracticeScore, dir);
       }
     });
     return arr;
@@ -410,7 +495,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     } else {
       setSortKey(key);
       // Default direction: alpha/club asc, numerics desc
-      setSortDir(['carry', 'total', 'course', 'cons', 'last'].includes(key) ? 'desc' : 'asc');
+      setSortDir(['carry', 'total', 'reliance', 'last20', 'last3', 'last'].includes(key) ? 'desc' : 'asc');
     }
   }
 
@@ -447,13 +532,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     );
   }
 
-  const consCell = (v: number | null) =>
-    v === null ? (
-      <span className="text-muted-foreground">—</span>
-    ) : (
-      <span className={cn('font-semibold', consistencyColor(v))}>{Math.round(v)}%</span>
-    );
-
   return (
     <Card>
       <CardHeader>
@@ -473,13 +551,14 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
                   <SortHeader label="Last" sKey="last" />
-                  <SortHeader label="Per Round" sKey="course" align="right" />
+                  <SortHeader label="Reliance" sKey="reliance" align="right" />
+                  <SortHeader label="Last 20" sKey="last20" align="right" />
+                  <SortHeader label="Last 3 Practice" sKey="last3" align="right" />
                   <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
                   <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
-                  <SortHeader label="Cons (All / Last / L3)" sKey="cons" align="right" />
                 </tr>
                 <tr>
-                  <th colSpan={7} className="border-b border-border p-0" />
+                  <th colSpan={8} className="border-b border-border p-0" />
                 </tr>
               </thead>
               <tbody>
@@ -494,7 +573,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                     <Fragment key={row.configKey}>
                       {showGap && (
                         <tr aria-hidden="true">
-                          <td colSpan={7} className="h-3" />
+                          <td colSpan={8} className="h-3" />
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
@@ -530,14 +609,40 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                           {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                         </td>
                         <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div className="flex justify-end">
-                            <Badge variant="outline" className={cn('w-fit', courseRelianceClass(row.courseAvgPerRound))}>
-                              {courseRelianceLabel(row.courseAvgPerRound)}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.courseAvgPerRound === null ? '—' : `${row.courseAvgPerRound.toFixed(1)} / round · ${row.courseShotCount}`}
-                          </div>
+                          <SignalDot
+                            value={row.reliancePct}
+                            greenAt={60}
+                            amberAt={30}
+                            title={
+                              row.reliancePct === null
+                                ? 'No mapped opportunities'
+                                : `${Math.round(row.reliancePct)}% used (${row.usedOpportunityCount}/${row.opportunityCount} opportunities)`
+                            }
+                          />
+                        </td>
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                          <SignalDot
+                            value={row.last20Score}
+                            greenAt={65}
+                            amberAt={40}
+                            title={
+                              row.last20Score === null
+                                ? 'No recent on-course shots'
+                                : `${Math.round(row.last20Score)}% safe from last ${row.last20Count} on-course shots`
+                            }
+                          />
+                        </td>
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                          <SignalDot
+                            value={row.last3PracticeScore}
+                            greenAt={80}
+                            amberAt={60}
+                            title={
+                              row.last3PracticeScore === null
+                                ? 'No scored recent practices'
+                                : `${Math.round(row.last3PracticeScore)}% from last ${row.last3PracticeCount} practices`
+                            }
+                          />
                         </td>
                         <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</div>
@@ -550,11 +655,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.carryBest)}
                           </div>
-                        </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
-                          {consCell(row.consOverall)}{' '}
-                          <span className="text-muted-foreground">·</span> {consCell(row.consLast)}{' '}
-                          <span className="text-muted-foreground">·</span> {consCell(row.consLast3)}
                         </td>
 
                       </tr>
