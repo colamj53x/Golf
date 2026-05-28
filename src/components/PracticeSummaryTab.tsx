@@ -11,6 +11,7 @@ import { PracticeSession } from '@/types/practice';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
 import { cn } from '@/lib/utils';
+import { getClubConfigId } from '@/lib/golfCalculations';
 
 const CLUB_ORDER: Record<string, number> = Object.fromEntries(
   PRACTICE_CLUBS.map((c, i) => [c.id, i]),
@@ -36,7 +37,7 @@ interface SummaryRow {
   consOverall: number | null;
   consLast: number | null;
   consLast3: number | null;
-  courseSharePct: number | null;
+  courseAvgPerRound: number | null;
   courseShotCount: number;
 }
 
@@ -107,16 +108,30 @@ function recencyClass(date: Date | null): string {
 
 function courseRelianceLabel(value: number | null): string {
   if (value === null) return 'No data';
-  if (value >= 10) return 'High';
-  if (value >= 4) return 'Medium';
+  if (value >= 2) return 'High';
+  if (value >= 0.75) return 'Medium';
   return 'Low';
 }
 
 function courseRelianceClass(value: number | null): string {
   if (value === null) return 'border-muted bg-background text-muted-foreground';
-  if (value >= 10) return 'border-green-600 bg-green-50 text-green-800';
-  if (value >= 4) return 'border-amber-500 bg-amber-50 text-amber-800';
+  if (value >= 2) return 'border-green-600 bg-green-50 text-green-800';
+  if (value >= 0.75) return 'border-amber-500 bg-amber-50 text-amber-800';
   return 'border-slate-300 bg-slate-50 text-slate-700';
+}
+
+function fallbackCourseConfigKey(clubId: string): string | null {
+  return PRACTICE_CLUBS.some((club) => club.id === clubId) ? `${clubId}_full_full` : null;
+}
+
+function primaryDistanceMetric(row: SummaryRow): 'total' | 'carry' {
+  if (row.shotType === 'punch' || row.shotType === 'bump' || row.shotType === 'chip') return 'total';
+  if (['dr', '3w', '5w', '4h', '5h', '6i', '7i'].includes(row.clubId)) return 'total';
+  return 'carry';
+}
+
+function metricValueClass(isPrimary: boolean): string {
+  return isPrimary ? 'font-semibold text-green-700' : '';
 }
 
 // Sort helpers
@@ -147,7 +162,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
 
   const courseUsage = useMemo(() => {
-    const usage = new Map<string, number>();
+    const shotToConfig = new Map<string, string>();
     const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
     const shotCategoryOverrides = loadShotCategoryOverrides();
 
@@ -165,12 +180,28 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
 
       for (const row of rows) {
         const configKey = visibleConfigKey(row.profile.id);
-        usage.set(configKey, (usage.get(configKey) ?? 0) + row.intentShotCount);
+        for (const shot of row.sample) {
+          if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
+        }
       }
     }
 
+    const courseShots = shots.filter((shot) => {
+      const clubId = getClubConfigId(shot.club);
+      return fallbackCourseConfigKey(clubId) !== null;
+    });
+    const roundDates = new Set(courseShots.map((shot) => format(shot.date, 'yyyy-MM-dd')));
+
+    const usage = new Map<string, number>();
+    for (const shot of courseShots) {
+      const clubId = getClubConfigId(shot.club);
+      const configKey = shotToConfig.get(shot.id) ?? fallbackCourseConfigKey(clubId);
+      if (!configKey) continue;
+      usage.set(configKey, (usage.get(configKey) ?? 0) + 1);
+    }
+
     const total = [...usage.values()].reduce((sum, count) => sum + count, 0);
-    return { usage, total };
+    return { usage, total, roundCount: roundDates.size };
   }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const gappingOptions = useMemo(() => {
@@ -318,7 +349,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       const n = names(g.configKey);
       const { club, shotType, power } = parsePracticeConfigKey(g.configKey);
       const courseShotCount = courseUsage.usage.get(g.configKey) ?? 0;
-      const courseSharePct = courseUsage.total > 0 ? (courseShotCount / courseUsage.total) * 100 : null;
+      const courseAvgPerRound = courseUsage.roundCount > 0 ? courseShotCount / courseUsage.roundCount : null;
       return {
         configKey: g.configKey,
         clubId: club,
@@ -335,7 +366,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         consOverall: overallCons,
         consLast: withCons[0]?.consistency?.overallScore ?? null,
         consLast3: last3Cons,
-        courseSharePct,
+        courseAvgPerRound,
         courseShotCount,
       };
     });
@@ -365,7 +396,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         case 'total':
           return nullsLast(a.totalAvg, b.totalAvg, dir);
         case 'course':
-          return nullsLast(a.courseSharePct, b.courseSharePct, dir);
+          return nullsLast(a.courseAvgPerRound, b.courseAvgPerRound, dir);
         case 'cons':
           return nullsLast(a.consOverall, b.consOverall, dir);
       }
@@ -442,9 +473,9 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
                   <SortHeader label="Last" sKey="last" />
+                  <SortHeader label="Per Round" sKey="course" align="right" />
                   <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
                   <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
-                  <SortHeader label="Course Use" sKey="course" align="right" />
                   <SortHeader label="Cons (All / Last / L3)" sKey="cons" align="right" />
                 </tr>
                 <tr>
@@ -454,6 +485,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
               <tbody>
                 {sortedRows.map((row, idx) => {
                   const prev = sortedRows[idx - 1];
+                  const primaryMetric = primaryDistanceMetric(row);
                   // Only insert a club-group gap when sorted by club
                   const showGap =
                     sortKey === 'club' && prev !== undefined && prev.clubId !== row.clubId;
@@ -498,25 +530,25 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                           {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                         </td>
                         <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div>{fmt(row.totalAvg)}</div>
+                          <div className="flex justify-end">
+                            <Badge variant="outline" className={cn('w-fit', courseRelianceClass(row.courseAvgPerRound))}>
+                              {courseRelianceLabel(row.courseAvgPerRound)}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.courseAvgPerRound === null ? '—' : `${row.courseAvgPerRound.toFixed(1)} / round · ${row.courseShotCount}`}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                          <div className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.totalBest)}
                           </div>
                         </td>
                         <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div>{fmt(row.carryAvg)}</div>
+                          <div className={metricValueClass(primaryMetric === 'carry')}>{fmt(row.carryAvg)}</div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.carryBest)}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div className="flex justify-end">
-                            <Badge variant="outline" className={cn('w-fit', courseRelianceClass(row.courseSharePct))}>
-                              {courseRelianceLabel(row.courseSharePct)}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.courseSharePct === null ? '—' : `${row.courseSharePct.toFixed(0)}% · ${row.courseShotCount} shots`}
                           </div>
                         </td>
                         <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
