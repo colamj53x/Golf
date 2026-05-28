@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { clearPuttingSessionDraft, loadPuttingSessionDraft, savePuttingSessionDraft } from '@/lib/putting/sessionDraft';
 
 interface SessionMeta {
   date: string;
@@ -35,18 +36,23 @@ interface Props {
 
 export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 'set-a', onComplete, onCancel }: Props) {
   const { user } = useAuth();
+  const matchingDraft = useMemo(() => {
+    const draft = loadPuttingSessionDraft();
+    if (!draft || draft.category !== category || draft.practiceSetId !== initialPracticeSetId) return null;
+    return draft;
+  }, [category, initialPracticeSetId]);
   // step: -1 = setup screen, 0..n-1 = drill, n = result/save
-  const [step, setStep] = useState(-1);
+  const [step, setStep] = useState(matchingDraft?.step ?? -1);
   const [meta, setMeta] = useState<SessionMeta>({
-    date: format(new Date(), 'yyyy-MM-dd'),
-    location: '',
-    carpetSpeed: 'Medium',
-    targetType: 'Cup',
-    sessionLength: '25 min',
-    notes: '',
+    date: matchingDraft?.meta.date ?? format(new Date(), 'yyyy-MM-dd'),
+    location: matchingDraft?.meta.location ?? '',
+    carpetSpeed: matchingDraft?.meta.carpetSpeed ?? 'Medium',
+    targetType: matchingDraft?.meta.targetType ?? 'Cup',
+    sessionLength: matchingDraft?.meta.sessionLength ?? '25 min',
+    notes: matchingDraft?.meta.notes ?? '',
   });
-  const [allCounts, setAllCounts] = useState<Record<string, Record<string, number>>>({});
-  const [practiceSetId, setPracticeSetId] = useState<IndoorPracticeSetId>(initialPracticeSetId);
+  const [allCounts, setAllCounts] = useState<Record<string, Record<string, number>>>(matchingDraft?.allCounts ?? {});
+  const [practiceSetId, setPracticeSetId] = useState<IndoorPracticeSetId>(matchingDraft?.practiceSetId ?? initialPracticeSetId);
   const [saving, setSaving] = useState(false);
 
   const sortedDrills = useMemo(() => [...drills].sort((a, b) => a.sort_order - b.sort_order), [drills]);
@@ -87,6 +93,17 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
     ? currentDrill.scoring_inputs.reduce((s, i) => s + (currentCounts[i.id] ?? 0), 0)
     : 0;
   const liveScore = currentDrill ? computeDrillResult(currentDrill, currentCounts) : null;
+
+  useEffect(() => {
+    if (step < 0) return;
+    savePuttingSessionDraft({
+      category,
+      practiceSetId,
+      step,
+      meta,
+      allCounts,
+    });
+  }, [allCounts, category, meta, practiceSetId, step]);
 
   const handleNext = () => {
     if (!currentDrill) return;
@@ -137,6 +154,7 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
       return;
     }
     toast.success('Session saved');
+    clearPuttingSessionDraft();
     onComplete(data.id);
   };
 
@@ -155,7 +173,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                 <Label>Practice set</Label>
                 <Select
                   value={practiceSetId}
-                  onValueChange={v => setPracticeSetId(v as typeof practiceSetId)}
+                  onValueChange={v => {
+                    setPracticeSetId(v as typeof practiceSetId);
+                    setAllCounts({});
+                    setStep(-1);
+                  }}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -215,9 +237,12 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             <Label>Notes before session</Label>
             <Textarea value={meta.notes} onChange={e => setMeta({ ...meta, notes: e.target.value })} maxLength={1000} rows={2} />
           </div>
-          <div className="flex justify-between pt-2">
-            <Button variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button onClick={() => setStep(0)} disabled={activeDrills.length === 0}>
+          <div className="flex gap-2 pt-2 sm:justify-between">
+            <Button className="flex-1 sm:flex-none" variant="outline" onClick={() => {
+              clearPuttingSessionDraft();
+              onCancel();
+            }}>Cancel</Button>
+            <Button className="flex-1 sm:flex-none" onClick={() => setStep(0)} disabled={activeDrills.length === 0}>
               Start <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
@@ -234,9 +259,9 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
           <CardTitle>Session Result</CardTitle>
           <CardDescription>{format(new Date(meta.date), 'PPP')} · {meta.carpetSpeed} carpet</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="rounded-lg border-2 border-primary bg-primary/5 p-6 text-center">
-            <div className="text-5xl font-bold">{summary.total}<span className="text-2xl text-muted-foreground"> / {summary.maxTotal}</span></div>
+        <CardContent className="space-y-4 sm:space-y-6">
+          <div className="rounded-lg border-2 border-primary bg-primary/5 p-5 text-center sm:p-6">
+            <div className="text-4xl font-bold sm:text-5xl">{summary.total}<span className="text-xl text-muted-foreground sm:text-2xl"> / {summary.maxTotal}</span></div>
             <Badge variant="secondary" className="mt-2 text-base">{summary.level}</Badge>
           </div>
 
@@ -276,11 +301,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             ))}
           </div>
 
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(activeDrills.length - 1)}>
+          <div className="flex gap-2 sm:justify-between">
+            <Button className="flex-1 sm:flex-none" variant="outline" onClick={() => setStep(activeDrills.length - 1)}>
               <ArrowLeft className="mr-1 h-4 w-4" /> Back
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button className="flex-1 sm:flex-none" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : (<><Check className="mr-1 h-4 w-4" /> Save Session</>)}
             </Button>
           </div>
@@ -322,7 +347,7 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             const count = currentCounts[input.id] ?? 0;
             const isPressure = currentDrill.scoring_mode === 'pressure_ladder';
             return (
-              <div key={input.id} className="rounded-lg border p-4">
+              <div key={input.id} className="rounded-lg border p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="font-medium">{input.label}</div>
@@ -330,14 +355,14 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                       {isPressure ? `Level ${input.points}` : `${input.points} pt${input.points === 1 ? '' : 's'} each`}
                     </div>
                   </div>
-                  <div className="text-3xl font-bold tabular-nums">{count}</div>
+                  <div className="text-2xl font-bold tabular-nums sm:text-3xl">{count}</div>
                 </div>
                 <div className="flex gap-2">
                   {isPressure ? (
                     <Button
                       size="lg"
                       variant={count ? 'default' : 'outline'}
-                      className="w-full"
+                      className="h-12 w-full"
                       onClick={() => {
                         const reset = Object.fromEntries(currentDrill.scoring_inputs.map(option => [option.id, 0]));
                         setAllCounts({
@@ -354,10 +379,10 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                     </Button>
                   ) : (
                     <>
-                      <Button variant="outline" size="lg" className="flex-1" onClick={() => setCount(input.id, count - 1)}>
+                      <Button variant="outline" size="lg" className="h-12 flex-1" onClick={() => setCount(input.id, count - 1)}>
                         <Minus className="h-5 w-5" />
                       </Button>
-                      <Button size="lg" className="flex-[2]" disabled={repsUsed >= currentDrill.reps} onClick={() => setCount(input.id, count + 1)}>
+                      <Button size="lg" className="h-12 flex-[2]" disabled={repsUsed >= currentDrill.reps} onClick={() => setCount(input.id, count + 1)}>
                         <Plus className="h-5 w-5 mr-1" /> Tap
                       </Button>
                     </>
@@ -392,11 +417,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
           </span>
         </div>
 
-        <div className="flex justify-between pt-2">
-          <Button variant="outline" onClick={() => setStep(step - 1)}>
+        <div className="sticky bottom-0 z-10 -mx-4 flex gap-2 border-t bg-card/95 px-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:justify-between sm:border-0 sm:bg-transparent sm:px-0 sm:pt-2">
+          <Button className="flex-1 sm:flex-none" variant="outline" onClick={() => setStep(step - 1)}>
             <ArrowLeft className="mr-1 h-4 w-4" /> Back
           </Button>
-          <Button onClick={handleNext}>
+          <Button className="flex-1 sm:flex-none" onClick={handleNext}>
             {step === activeDrills.length - 1 ? 'See Result' : 'Next Drill'} <ArrowRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
