@@ -1,5 +1,5 @@
 import { useMemo, useState, Fragment } from 'react';
-import { format } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,8 @@ interface SummaryRow {
   consOverall: number | null;
   consLast: number | null;
   consLast3: number | null;
+  courseSharePct: number | null;
+  courseShotCount: number;
 }
 
 type SortKey =
@@ -44,6 +46,7 @@ type SortKey =
   | 'last'
   | 'carry'
   | 'total'
+  | 'course'
   | 'cons';
 
 function names(configKey: string) {
@@ -94,6 +97,28 @@ function consistencyColor(v: number | null): string {
   return 'text-red-500';
 }
 
+function recencyClass(date: Date | null): string {
+  if (!date) return 'text-muted-foreground';
+  const days = differenceInCalendarDays(new Date(), date);
+  if (days <= 31) return 'text-green-600';
+  if (days <= 62) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function courseRelianceLabel(value: number | null): string {
+  if (value === null) return 'No data';
+  if (value >= 10) return 'High';
+  if (value >= 4) return 'Medium';
+  return 'Low';
+}
+
+function courseRelianceClass(value: number | null): string {
+  if (value === null) return 'border-muted bg-background text-muted-foreground';
+  if (value >= 10) return 'border-green-600 bg-green-50 text-green-800';
+  if (value >= 4) return 'border-amber-500 bg-amber-50 text-amber-800';
+  return 'border-slate-300 bg-slate-50 text-slate-700';
+}
+
 // Sort helpers
 function nullsLast(a: number | null, b: number | null, dir: 'asc' | 'desc'): number {
   if (a === null && b === null) return 0;
@@ -120,6 +145,33 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+
+  const courseUsage = useMemo(() => {
+    const usage = new Map<string, number>();
+    const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
+    const shotCategoryOverrides = loadShotCategoryOverrides();
+
+    for (const shotContext of contexts) {
+      const rows = buildClubGappingRows({
+        profiles,
+        shots,
+        shotContext,
+        practiceSessions,
+        practiceConfigs,
+        shotsBySession,
+        gappingHcpTarget,
+        shotCategoryOverrides,
+      });
+
+      for (const row of rows) {
+        const configKey = visibleConfigKey(row.profile.id);
+        usage.set(configKey, (usage.get(configKey) ?? 0) + row.intentShotCount);
+      }
+    }
+
+    const total = [...usage.values()].reduce((sum, count) => sum + count, 0);
+    return { usage, total };
+  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const gappingOptions = useMemo(() => {
     const options = new Map<string, { configKey: string; profile: ShotProfile }>();
@@ -265,6 +317,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         : null;
       const n = names(g.configKey);
       const { club, shotType, power } = parsePracticeConfigKey(g.configKey);
+      const courseShotCount = courseUsage.usage.get(g.configKey) ?? 0;
+      const courseSharePct = courseUsage.total > 0 ? (courseShotCount / courseUsage.total) * 100 : null;
       return {
         configKey: g.configKey,
         clubId: club,
@@ -281,9 +335,11 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         consOverall: overallCons,
         consLast: withCons[0]?.consistency?.overallScore ?? null,
         consLast3: last3Cons,
+        courseSharePct,
+        courseShotCount,
       };
     });
-  }, [groupedRows, shotsBySession]);
+  }, [courseUsage, groupedRows, shotsBySession]);
 
 
   // Apply sorting
@@ -308,6 +364,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           return nullsLast(a.carryAvg, b.carryAvg, dir);
         case 'total':
           return nullsLast(a.totalAvg, b.totalAvg, dir);
+        case 'course':
+          return nullsLast(a.courseSharePct, b.courseSharePct, dir);
         case 'cons':
           return nullsLast(a.consOverall, b.consOverall, dir);
       }
@@ -321,7 +379,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     } else {
       setSortKey(key);
       // Default direction: alpha/club asc, numerics desc
-      setSortDir(['carry', 'total', 'cons', 'last'].includes(key) ? 'desc' : 'asc');
+      setSortDir(['carry', 'total', 'course', 'cons', 'last'].includes(key) ? 'desc' : 'asc');
     }
   }
 
@@ -339,7 +397,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     return (
       <th
         className={cn(
-          'py-2 pr-3 select-none cursor-pointer hover:text-foreground transition-colors',
+          'py-2 pr-2 select-none cursor-pointer hover:text-foreground transition-colors',
           align === 'right' ? 'text-right' : 'text-left',
         )}
         onClick={() => toggleSort(sKey)}
@@ -370,7 +428,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       <CardHeader>
         <CardTitle>Practice Summary</CardTitle>
         <CardDescription>
-          One line per gapping shot option. Values come from practice logs only; empty options show as no data.
+          One line per gapping shot option. Distance and consistency come from practice logs; course use comes from on-course shots.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -384,12 +442,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
                   <SortHeader label="Last" sKey="last" />
-                  <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
                   <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
+                  <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
+                  <SortHeader label="Course Use" sKey="course" align="right" />
                   <SortHeader label="Cons (All / Last / L3)" sKey="cons" align="right" />
                 </tr>
                 <tr>
-                  <th colSpan={6} className="border-b border-border p-0" />
+                  <th colSpan={7} className="border-b border-border p-0" />
                 </tr>
               </thead>
               <tbody>
@@ -403,7 +462,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                     <Fragment key={row.configKey}>
                       {showGap && (
                         <tr aria-hidden="true">
-                          <td colSpan={6} className="h-3" />
+                          <td colSpan={7} className="h-3" />
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
@@ -435,22 +494,32 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             )}
                           </div>
                         </td>
-                        <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
+                        <td className={cn('py-2 pr-2 whitespace-nowrap font-medium', recencyClass(row.lastPracticed))}>
                           {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                         </td>
-                        <td className="py-2 pr-3 text-right whitespace-nowrap tabular-nums">
-                          <div>{fmt(row.carryAvg)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            best {fmt(row.carryBest)}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-3 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div>{fmt(row.totalAvg)}</div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.totalBest)}
                           </div>
                         </td>
-                        <td className="py-2 pr-3 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                          <div>{fmt(row.carryAvg)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            best {fmt(row.carryBest)}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                          <div className="flex justify-end">
+                            <Badge variant="outline" className={cn('w-fit', courseRelianceClass(row.courseSharePct))}>
+                              {courseRelianceLabel(row.courseSharePct)}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.courseSharePct === null ? '—' : `${row.courseSharePct.toFixed(0)}% · ${row.courseShotCount} shots`}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           {consCell(row.consOverall)}{' '}
                           <span className="text-muted-foreground">·</span> {consCell(row.consLast)}{' '}
                           <span className="text-muted-foreground">·</span> {consCell(row.consLast3)}
