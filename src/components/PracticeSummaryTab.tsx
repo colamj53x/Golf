@@ -10,7 +10,7 @@ import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/prac
 import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
 
@@ -35,9 +35,8 @@ interface SummaryRow {
   carryBest: number | null;
   totalAvg: number | null;
   totalBest: number | null;
-  reliancePct: number | null;
-  opportunityCount: number;
-  usedOpportunityCount: number;
+  reliancePerRound: number | null;
+  courseShotCount: number;
   last20Score: number | null;
   last20Count: number;
   last3PracticeScore: number | null;
@@ -108,41 +107,15 @@ function fallbackCourseConfigKey(clubId: string): string | null {
 }
 
 function primaryDistanceMetric(row: SummaryRow): 'total' | 'carry' {
-  if (row.shotType === 'punch' || row.shotType === 'bump' || row.shotType === 'chip') return 'total';
-  if (['dr', '3w', '5w', '4h', '5h', '6i', '7i'].includes(row.clubId)) return 'total';
+  if (row.shotType === 'chip' || row.shotType === 'bump') return 'total';
+  if (row.shotType === 'pitch') return 'carry';
+  if (['dr', '5w', '4h', '5h'].includes(row.clubId)) return 'total';
+  if ((row.clubId === '6i' || row.clubId === '7i') && (row.shotType === 'full' || row.shotType === 'punch')) return 'total';
   return 'carry';
 }
 
 function metricValueClass(isPrimary: boolean): string {
   return isPrimary ? 'font-semibold text-green-700' : '';
-}
-
-function isDriverDrivingShot(shot: Shot): boolean {
-  return getClubConfigId(shot.club) === 'dr' && shot.type.trim().toLowerCase().startsWith('driv');
-}
-
-function matchesCourseContext(shot: Shot, context: ShotContext): boolean {
-  if (isDriverDrivingShot(shot)) return context === 'tee';
-
-  const lie = shot.startLie.toLowerCase();
-  if (context === 'tee') return lie.includes('tee');
-  if (context === 'fairway') return lie.includes('fairway');
-  return lie.includes('rough') || lie.includes('recovery') || lie.includes('tree') || lie.includes('punch') || lie.includes('trouble');
-}
-
-function windowForRow(row: GappingRow): { min: number; max: number } | null {
-  const min = row.totalMin !== null && Number.isFinite(row.totalMin) ? row.totalMin : null;
-  const max = row.totalMax !== null && Number.isFinite(row.totalMax) ? row.totalMax : null;
-  if (min !== null && max !== null && max >= min) return { min, max };
-
-  const target = row.displayTotal ?? row.rangeTargetTotal;
-  if (target === null || !Number.isFinite(target)) return null;
-  const buffer = Math.max(8, target * 0.12);
-  return { min: target - buffer, max: target + buffer };
-}
-
-function isShotInWindow(shot: Shot, window: { min: number; max: number }): boolean {
-  return Number.isFinite(shot.target) && shot.target >= window.min && shot.target <= window.max;
 }
 
 function shotSafeScore(shot: Shot): boolean {
@@ -182,6 +155,11 @@ function SignalDot({
   );
 }
 
+function reliabilityTitle(value: number | null, count: number): string {
+  if (value === null) return 'No on-course usage';
+  return `${value.toFixed(1)} shots per round · ${count} total shots`;
+}
+
 // Sort helpers
 function nullsLast(a: number | null, b: number | null, dir: 'asc' | 'desc'): number {
   if (a === null && b === null) return 0;
@@ -212,7 +190,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   const courseSignals = useMemo(() => {
     const shotToConfig = new Map<string, string>();
     const shotsByConfig = new Map<string, Shot[]>();
-    const windowsByConfig = new Map<string, Array<{ context: ShotContext; min: number; max: number }>>();
     const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
     const shotCategoryOverrides = loadShotCategoryOverrides();
 
@@ -230,13 +207,6 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
 
       for (const row of rows) {
         const configKey = visibleConfigKey(row.profile.id);
-        const window = windowForRow(row);
-        if (window) {
-          windowsByConfig.set(configKey, [
-            ...(windowsByConfig.get(configKey) ?? []),
-            { context: shotContext, ...window },
-          ]);
-        }
         for (const shot of row.sample) {
           if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
         }
@@ -247,7 +217,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       const clubId = getClubConfigId(shot.club);
       return fallbackCourseConfigKey(clubId) !== null;
     });
-    const courseShotsById = new Map(courseShots.map((shot) => [shot.id, shot]));
+    const roundDates = new Set(courseShots.map((shot) => format(shot.date, 'yyyy-MM-dd')));
 
     for (const shot of courseShots) {
       const clubId = getClubConfigId(shot.club);
@@ -256,30 +226,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       shotsByConfig.set(configKey, [...(shotsByConfig.get(configKey) ?? []), shot]);
     }
 
-    const opportunityCounts = new Map<string, { opportunities: number; used: number }>();
-    for (const [configKey, windows] of windowsByConfig) {
-      const opportunityShotIds = new Set<string>();
-      for (const shot of courseShots) {
-        const isOpportunity = windows.some((window) => {
-          if (configKey === 'dr_full_full' && window.context === 'tee') {
-            return matchesCourseContext(shot, 'tee');
-          }
-          return matchesCourseContext(shot, window.context) && isShotInWindow(shot, window);
-        });
-        if (isOpportunity) opportunityShotIds.add(shot.id);
-      }
-
-      const used = [...opportunityShotIds].filter((shotId) => {
-        const shot = courseShotsById.get(shotId);
-        if (!shot) return false;
-        const clubId = getClubConfigId(shot.club);
-        return (shotToConfig.get(shot.id) ?? fallbackCourseConfigKey(clubId)) === configKey;
-      }).length;
-
-      opportunityCounts.set(configKey, { opportunities: opportunityShotIds.size, used });
-    }
-
-    return { opportunityCounts, shotsByConfig };
+    return { shotsByConfig, roundCount: roundDates.size };
   }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const gappingOptions = useMemo(() => {
@@ -423,14 +370,12 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         : null;
       const n = names(g.configKey);
       const { club, shotType, power } = parsePracticeConfigKey(g.configKey);
-      const opportunity = courseSignals.opportunityCounts.get(g.configKey);
-      const reliancePct = opportunity && opportunity.opportunities > 0
-        ? (opportunity.used / opportunity.opportunities) * 100
-        : null;
       const recentCourseShots = [...(courseSignals.shotsByConfig.get(g.configKey) ?? [])]
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 20);
       const last20Score = scoreShots(recentCourseShots);
+      const courseShotCount = courseSignals.shotsByConfig.get(g.configKey)?.length ?? 0;
+      const reliancePerRound = courseSignals.roundCount > 0 ? courseShotCount / courseSignals.roundCount : null;
       return {
         configKey: g.configKey,
         clubId: club,
@@ -444,9 +389,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         carryBest,
         totalAvg,
         totalBest,
-        reliancePct,
-        opportunityCount: opportunity?.opportunities ?? 0,
-        usedOpportunityCount: opportunity?.used ?? 0,
+        reliancePerRound,
+        courseShotCount,
         last20Score,
         last20Count: recentCourseShots.length,
         last3PracticeScore: last3Cons,
@@ -479,7 +423,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
         case 'total':
           return nullsLast(a.totalAvg, b.totalAvg, dir);
         case 'reliance':
-          return nullsLast(a.reliancePct, b.reliancePct, dir);
+          return nullsLast(a.reliancePerRound, b.reliancePerRound, dir);
         case 'last20':
           return nullsLast(a.last20Score, b.last20Score, dir);
         case 'last3':
@@ -513,7 +457,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     return (
       <th
         className={cn(
-          'py-2 pr-2 select-none cursor-pointer hover:text-foreground transition-colors',
+          'py-1.5 pr-2 select-none cursor-pointer hover:text-foreground transition-colors',
           align === 'right' ? 'text-right' : 'text-left',
         )}
         onClick={() => toggleSort(sKey)}
@@ -545,7 +489,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-separate border-spacing-0">
+            <table className="w-full min-w-[920px] text-sm border-separate border-spacing-0">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <SortHeader label="Club" sKey="club" />
@@ -553,9 +497,9 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                   <SortHeader label="Last" sKey="last" />
                   <SortHeader label="Reliance" sKey="reliance" align="right" />
                   <SortHeader label="Last 20" sKey="last20" align="right" />
-                  <SortHeader label="Last 3 Practice" sKey="last3" align="right" />
-                  <SortHeader label="Total (L3 / Best)" sKey="total" align="right" />
-                  <SortHeader label="Carry (L3 / Best)" sKey="carry" align="right" />
+                  <SortHeader label="Last 3 Prac" sKey="last3" align="right" />
+                  <SortHeader label="Total" sKey="total" align="right" />
+                  <SortHeader label="Carry" sKey="carry" align="right" />
                 </tr>
                 <tr>
                   <th colSpan={8} className="border-b border-border p-0" />
@@ -577,7 +521,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
-                        <td className="py-2 pr-3 font-medium">
+                        <td className="py-1.5 pr-2 font-medium">
                           {onOpenLog ? (
                             <button
                               type="button"
@@ -590,7 +534,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             row.clubName
                           )}
                         </td>
-                        <td className="py-2 pr-3">
+                        <td className="py-1.5 pr-2">
                           <div className="flex flex-col gap-1">
                             <Badge
                               variant="outline"
@@ -599,28 +543,24 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                               {row.shotName}
                             </Badge>
                             {row.description && (
-                              <span className="max-w-[280px] text-xs text-muted-foreground">
+                              <span className="max-w-[220px] text-xs text-muted-foreground">
                                 {row.description}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className={cn('py-2 pr-2 whitespace-nowrap font-medium', recencyClass(row.lastPracticed))}>
+                        <td className={cn('py-1.5 pr-2 whitespace-nowrap font-medium', recencyClass(row.lastPracticed))}>
                           {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                         </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
-                            value={row.reliancePct}
-                            greenAt={60}
-                            amberAt={30}
-                            title={
-                              row.reliancePct === null
-                                ? 'No mapped opportunities'
-                                : `${Math.round(row.reliancePct)}% used (${row.usedOpportunityCount}/${row.opportunityCount} opportunities)`
-                            }
+                            value={row.reliancePerRound}
+                            greenAt={1}
+                            amberAt={0.25}
+                            title={reliabilityTitle(row.reliancePerRound, row.courseShotCount)}
                           />
                         </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last20Score}
                             greenAt={65}
@@ -632,7 +572,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last3PracticeScore}
                             greenAt={80}
@@ -644,13 +584,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.totalBest)}
                           </div>
                         </td>
-                        <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className={metricValueClass(primaryMetric === 'carry')}>{fmt(row.carryAvg)}</div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.carryBest)}
