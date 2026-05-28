@@ -116,7 +116,7 @@ function primaryDistanceMetric(row: SummaryRow): 'total' | 'carry' {
 
 function metricValueClass(isPrimary: boolean): string {
   return cn(
-    'inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+    'inline-flex min-w-10 justify-center rounded-full border px-2 py-0.5 text-xs font-semibold leading-none',
     isPrimary
       ? 'border-green-600 bg-green-50 text-green-800'
       : 'border-transparent bg-transparent text-foreground',
@@ -153,7 +153,7 @@ function SignalDot({
 }) {
   return (
     <span
-      className={cn('inline-block h-4 w-4 rounded-full border', signalClass(value, greenAt, amberAt))}
+      className={cn('inline-block h-3.5 w-3.5 rounded-full border', signalClass(value, greenAt, amberAt))}
       title={title}
       aria-label={title}
     />
@@ -497,16 +497,16 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[940px] table-fixed text-sm border-separate border-spacing-0">
+            <table className="w-auto min-w-[760px] text-sm border-separate border-spacing-0">
               <colgroup>
-                <col className="w-[12%]" />
-                <col className="w-[25%]" />
-                <col className="w-[11%]" />
-                <col className="w-[9%]" />
-                <col className="w-[9%]" />
-                <col className="w-[10%]" />
-                <col className="w-[12%]" />
-                <col className="w-[12%]" />
+                <col className="w-32" />
+                <col className="w-28" />
+                <col className="w-28" />
+                <col className="w-20" />
+                <col className="w-20" />
+                <col className="w-20" />
+                <col className="w-24" />
+                <col className="w-24" />
               </colgroup>
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -539,7 +539,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
-                        <td className="py-1.5 pr-2 font-medium">
+                        <td className="py-1.5 pr-3 font-medium whitespace-nowrap">
                           {onOpenLog ? (
                             <button
                               type="button"
@@ -552,30 +552,30 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             row.clubName
                           )}
                         </td>
-                        <td className="py-1.5 pr-2">
-                          <div className="flex flex-col gap-1">
+                        <td className="py-1.5 pr-3">
+                          <div className="flex items-center gap-2">
                             <Badge
                               variant="outline"
-                              className={cn('w-fit', powerBadgeClass(row.powerId))}
+                              className={cn('min-w-14 justify-center px-2 py-0.5 text-xs leading-none', powerBadgeClass(row.powerId))}
                             >
                               {row.shotName}
                             </Badge>
                             {row.description && (
-                              <span className="max-w-[220px] text-xs text-muted-foreground">
+                              <span className="sr-only">
                                 {row.description}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-1.5 pr-2 whitespace-nowrap">
+                        <td className="py-1.5 pr-3 whitespace-nowrap">
                           <Badge
                             variant="outline"
-                            className={cn('w-20 justify-center', recencyBadgeClass(row.lastPracticed))}
+                            className={cn('w-20 justify-center px-2 py-0.5 text-xs leading-none', recencyBadgeClass(row.lastPracticed))}
                           >
                             {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
                           </Badge>
                         </td>
-                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.reliancePerRound}
                             greenAt={1}
@@ -583,7 +583,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             title={reliabilityTitle(row.reliancePerRound, row.courseShotCount)}
                           />
                         </td>
-                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last20Score}
                             greenAt={65}
@@ -595,7 +595,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 px-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
                             value={row.last3PracticeScore}
                             greenAt={80}
@@ -607,19 +607,19 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             }
                           />
                         </td>
-                        <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pl-3 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className="flex justify-end">
                             <span className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</span>
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-[11px] leading-tight text-muted-foreground">
                             best {fmt(row.totalBest)}
                           </div>
                         </td>
-                        <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
+                        <td className="py-1.5 pl-3 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className="flex justify-end">
                             <span className={metricValueClass(primaryMetric === 'carry')}>{fmt(row.carryAvg)}</span>
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-[11px] leading-tight text-muted-foreground">
                             best {fmt(row.carryBest)}
                           </div>
                         </td>
