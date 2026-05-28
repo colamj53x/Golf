@@ -94,12 +94,12 @@ function fmt(v: number | null, digits = 0): string {
   return v === null ? '—' : v.toFixed(digits);
 }
 
-function recencyClass(date: Date | null): string {
-  if (!date) return 'text-muted-foreground';
+function recencyBadgeClass(date: Date | null): string {
+  if (!date) return 'border-muted bg-muted/40 text-muted-foreground hover:bg-muted/40';
   const days = differenceInCalendarDays(new Date(), date);
-  if (days <= 31) return 'text-green-600';
-  if (days <= 62) return 'text-amber-600';
-  return 'text-red-600';
+  if (days <= 31) return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
+  if (days <= 62) return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
+  return 'border-red-600 bg-red-50 text-red-800 hover:bg-red-50';
 }
 
 function fallbackCourseConfigKey(clubId: string): string | null {
@@ -115,7 +115,12 @@ function primaryDistanceMetric(row: SummaryRow): 'total' | 'carry' {
 }
 
 function metricValueClass(isPrimary: boolean): string {
-  return isPrimary ? 'font-semibold text-green-700' : '';
+  return cn(
+    'inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+    isPrimary
+      ? 'border-green-600 bg-green-50 text-green-800'
+      : 'border-transparent bg-transparent text-foreground',
+  );
 }
 
 function shotSafeScore(shot: Shot): boolean {
@@ -450,7 +455,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
   }: {
     label: string;
     sKey: SortKey;
-    align?: 'left' | 'right';
+    align?: 'left' | 'center' | 'right';
   }) {
     const active = sortKey === sKey;
     const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
@@ -458,7 +463,9 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
       <th
         className={cn(
           'py-1.5 pr-2 select-none cursor-pointer hover:text-foreground transition-colors',
-          align === 'right' ? 'text-right' : 'text-left',
+          align === 'right' && 'text-right',
+          align === 'center' && 'text-center',
+          align === 'left' && 'text-left',
         )}
         onClick={() => toggleSort(sKey)}
       >
@@ -466,6 +473,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           className={cn(
             'inline-flex items-center gap-1',
             align === 'right' && 'flex-row-reverse',
+            align === 'center' && 'justify-center',
             active && 'text-foreground',
           )}
         >
@@ -489,15 +497,25 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-sm border-separate border-spacing-0">
+            <table className="w-full min-w-[940px] table-fixed text-sm border-separate border-spacing-0">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[25%]" />
+                <col className="w-[11%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[10%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+              </colgroup>
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
                   <SortHeader label="Last" sKey="last" />
-                  <SortHeader label="Reliance" sKey="reliance" align="right" />
-                  <SortHeader label="Last 20" sKey="last20" align="right" />
-                  <SortHeader label="Last 3 Prac" sKey="last3" align="right" />
+                  <SortHeader label="Reliance" sKey="reliance" align="center" />
+                  <SortHeader label="Last 20" sKey="last20" align="center" />
+                  <SortHeader label="Last 3" sKey="last3" align="center" />
                   <SortHeader label="Total" sKey="total" align="right" />
                   <SortHeader label="Carry" sKey="carry" align="right" />
                 </tr>
@@ -549,8 +567,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             )}
                           </div>
                         </td>
-                        <td className={cn('py-1.5 pr-2 whitespace-nowrap font-medium', recencyClass(row.lastPracticed))}>
-                          {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
+                        <td className="py-1.5 pr-2 whitespace-nowrap">
+                          <Badge
+                            variant="outline"
+                            className={cn('w-20 justify-center', recencyBadgeClass(row.lastPracticed))}
+                          >
+                            {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
+                          </Badge>
                         </td>
                         <td className="py-1.5 pr-2 text-center whitespace-nowrap tabular-nums">
                           <SignalDot
@@ -585,13 +608,17 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                           />
                         </td>
                         <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</div>
+                          <div className="flex justify-end">
+                            <span className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</span>
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.totalBest)}
                           </div>
                         </td>
                         <td className="py-1.5 pr-2 text-right whitespace-nowrap tabular-nums">
-                          <div className={metricValueClass(primaryMetric === 'carry')}>{fmt(row.carryAvg)}</div>
+                          <div className="flex justify-end">
+                            <span className={metricValueClass(primaryMetric === 'carry')}>{fmt(row.carryAvg)}</span>
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             best {fmt(row.carryBest)}
                           </div>
