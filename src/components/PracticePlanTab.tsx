@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Target, Dumbbell, Gauge, Trash2, TrendingUp } from 'lucide-react';
+import { Target, Dumbbell, Gauge, Trash2, TrendingUp, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
-import { PRACTICE_CLUBS, getConfigDisplayName, getPracticeConfigKey } from '@/types/practiceClubs';
-import { getEnabledShotTypesForClub, getEnabledPowersForClub } from '@/lib/practiceEnabledCombos';
+import { getConfigDisplayName } from '@/types/practiceClubs';
 import { getDrillsForConfig, ScorableDrill, BaselineDrill, SESSION_BALL_SPLIT } from '@/lib/practiceDrillsLibrary';
+import { PracticeSession } from '@/types/practice';
 
 interface DrillScoreRow {
   id: string;
@@ -28,82 +27,272 @@ interface DrillScoreRow {
   notes: string | null;
 }
 
+type PracticeGroupId = 'driver' | 'hybrids' | 'approach' | 'wedges' | 'short';
+
+const PRACTICE_GROUPS: Array<{
+  id: PracticeGroupId;
+  title: string;
+  description: string;
+  configKeys: string[];
+  enabled: boolean;
+}> = [
+  {
+    id: 'driver',
+    title: 'Driver',
+    description: 'Tee shots: distance, start line, playable misses.',
+    configKeys: ['dr_full_full'],
+    enabled: true,
+  },
+  {
+    id: 'hybrids',
+    title: 'Hybrids / Woods',
+    description: 'Long clubs: playable launch, carry windows, recovery from distance.',
+    configKeys: ['5w_full_full', '4h_full_full', '5h_full_full'],
+    enabled: false,
+  },
+  {
+    id: 'approach',
+    title: 'Approach Irons',
+    description: '6i-9i full shots: carry control, start line, green-hitting patterns.',
+    configKeys: ['6i_full_full', '7i_full_full', '8i_full_full', '9i_full_full'],
+    enabled: false,
+  },
+  {
+    id: 'wedges',
+    title: 'Wedges',
+    description: 'Pitch and wedge distance control: carry windows and launch consistency.',
+    configKeys: [
+      'pw_full_full', 'pw_pitch_730pm', 'pw_pitch_9pm', 'pw_pitch_10pm',
+      'gw_pitch_730pm', 'gw_pitch_9pm', 'gw_pitch_10pm',
+      'sw_pitch_730pm', 'sw_pitch_9pm', 'sw_pitch_10pm',
+    ],
+    enabled: false,
+  },
+  {
+    id: 'short',
+    title: 'Chips / Bumps',
+    description: 'Short shots: chips, bumps, punches, and recovery control.',
+    configKeys: [
+      '6i_punch_full', '7i_punch_full',
+      '8i_bump_730pm', '8i_bump_9pm',
+      '9i_bump_730pm', '9i_bump_9pm',
+      'pw_chip_730pm', 'pw_chip_9pm',
+      'gw_chip_730pm', 'gw_chip_9pm',
+    ],
+    enabled: false,
+  },
+];
+
+const DRIVER_CONFIG_KEY = 'dr_full_full';
+
+interface OutcomeSummary {
+  scoredSessions: number;
+  latestDate: Date | null;
+  latestScore: number | null;
+  currentForm: number | null;
+  bestScore: number | null;
+  distanceForm: number | null;
+  dispersionForm: number | null;
+  strikeForm: number | null;
+  focusLabel: string;
+  focusTags: string[];
+  trend: 'up' | 'down' | 'same' | 'none';
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function getLevel(score: number | null): { label: string; className: string; barClassName: string } {
+  if (score === null) {
+    return {
+      label: 'No data',
+      className: 'border-border bg-muted/20 text-muted-foreground',
+      barClassName: 'bg-muted',
+    };
+  }
+  if (score >= 80) {
+    return {
+      label: 'Strong',
+      className: 'border-green-500/40 bg-green-500/10 text-green-700',
+      barClassName: 'bg-green-500',
+    };
+  }
+  if (score >= 60) {
+    return {
+      label: 'Developing',
+      className: 'border-amber-500/40 bg-amber-500/10 text-amber-700',
+      barClassName: 'bg-amber-500',
+    };
+  }
+  return {
+    label: 'Priority',
+    className: 'border-red-500/40 bg-red-500/10 text-red-700',
+    barClassName: 'bg-red-500',
+  };
+}
+
+function buildOutcomeSummary(sessions: PracticeSession[]): OutcomeSummary {
+  const scored = sessions.filter((session) => session.consistency);
+  const recent10 = scored.slice(0, 10);
+  const latest = scored[0] ?? sessions[0] ?? null;
+  const latestScore = latest?.consistency?.overallScore ?? null;
+  const currentForm = average(recent10.map((session) => session.consistency!.overallScore));
+  const bestScore = scored.length ? Math.max(...scored.map((session) => session.consistency!.overallScore)) : null;
+  const distanceForm = average(recent10.map((session) => session.consistency!.distancePct));
+  const dispersionForm = average(recent10.map((session) => session.consistency!.lateralPct));
+  const strikeForm = average(recent10.map((session) => session.consistency!.bestPct));
+
+  const areas = [
+    {
+      label: 'Distance control',
+      score: distanceForm,
+      tags: ['carry', 'total_distance', 'strike'],
+    },
+    {
+      label: 'Start line / dispersion',
+      score: dispersionForm,
+      tags: ['start_line', 'offline', 'curve'],
+    },
+    {
+      label: 'Strike quality',
+      score: strikeForm,
+      tags: ['strike', 'tempo', 'smash_factor'],
+    },
+  ].sort((a, b) => (a.score ?? -1) - (b.score ?? -1));
+
+  const focus = areas[0];
+  const recent5 = scored.slice(0, 5);
+  const previous5 = scored.slice(5, 10);
+  const recent5Avg = average(recent5.map((session) => session.consistency!.overallScore));
+  const previous5Avg = average(previous5.map((session) => session.consistency!.overallScore));
+  const trend = (() => {
+    if (recent5Avg === null || previous5Avg === null) return 'none';
+    const diff = recent5Avg - previous5Avg;
+    if (diff >= 5) return 'up';
+    if (diff <= -5) return 'down';
+    return 'same';
+  })();
+
+  return {
+    scoredSessions: scored.length,
+    latestDate: latest?.date ?? null,
+    latestScore,
+    currentForm,
+    bestScore,
+    distanceForm,
+    dispersionForm,
+    strikeForm,
+    focusLabel: focus.score === null || focus.score >= 75 ? 'Maintain driver baseline' : focus.label,
+    focusTags: focus.tags,
+    trend,
+  };
+}
+
+function drillMatchesWeakness(
+  drill: { fixes?: string[]; metricsAddressed?: string[] },
+  tags: string[],
+): boolean {
+  const fixes = drill.fixes ?? [];
+  const metrics = (drill.metricsAddressed ?? []).map((metric) => metric.toLowerCase());
+  return tags.some((tag) => {
+    if (fixes.some((fix) => tag.includes(fix) || fix.includes(tag))) return true;
+    if (tag === 'start_line' || tag === 'offline' || tag === 'curve') {
+      return metrics.some((metric) =>
+        metric.includes('start') || metric.includes('lateral') || metric.includes('curve') || metric.includes('fairway') || metric.includes('face'),
+      );
+    }
+    if (tag === 'carry' || tag === 'total_distance') {
+      return metrics.some((metric) => metric.includes('carry') || metric.includes('distance'));
+    }
+    if (tag === 'strike' || tag === 'smash_factor') {
+      return metrics.some((metric) => metric.includes('strike') || metric.includes('smash'));
+    }
+    if (tag === 'tempo') {
+      return metrics.some((metric) => metric.includes('tempo'));
+    }
+    return false;
+  });
+}
+
 export function PracticePlanTab() {
   const { user } = useAuth();
   const {
-    selectedClub, setSelectedClub,
-    selectedShotType, setSelectedShotType,
-    selectedPower, setSelectedPower,
-    currentConfigKey,
-    getLatestSessionForClub,
+    practiceSessions,
   } = usePracticeData();
+  const [selectedGroupId, setSelectedGroupId] = useState<PracticeGroupId>('driver');
 
-  const drills = getDrillsForConfig(currentConfigKey);
+  const selectedGroup = PRACTICE_GROUPS.find((group) => group.id === selectedGroupId) ?? PRACTICE_GROUPS[0];
+  const activeConfigKey = selectedGroup.id === 'driver' ? DRIVER_CONFIG_KEY : selectedGroup.configKeys[0];
+  const drills = selectedGroup.enabled ? getDrillsForConfig(activeConfigKey) : null;
   const displayName = useMemo(() => {
-    try { return getConfigDisplayName(currentConfigKey); } catch { return currentConfigKey; }
-  }, [currentConfigKey]);
+    try { return getConfigDisplayName(activeConfigKey); } catch { return selectedGroup.title; }
+  }, [activeConfigKey, selectedGroup.title]);
 
-  // Rank weak areas from the latest session and pick the top 2 technique drills that address them.
-  const { weakTags, recommendedTechniques, recommendedScorable } = useMemo(() => {
-    const empty = { weakTags: [] as string[], recommendedTechniques: [] as Array<{ drill: typeof drills extends null ? never : NonNullable<typeof drills>['technique'][number]; basedOn: string }>, recommendedScorable: [] as string[] };
+  const sessionsByGroup = useMemo(() => {
+    const sorted = [...practiceSessions].sort((a, b) => b.date.getTime() - a.date.getTime());
+    return Object.fromEntries(
+      PRACTICE_GROUPS.map((group) => [
+        group.id,
+        sorted.filter((session) => group.configKeys.includes(session.clubId)),
+      ]),
+    ) as Record<PracticeGroupId, PracticeSession[]>;
+  }, [practiceSessions]);
+
+  const outcomeByGroup = useMemo(() => {
+    return Object.fromEntries(
+      PRACTICE_GROUPS.map((group) => [group.id, buildOutcomeSummary(sessionsByGroup[group.id] ?? [])]),
+    ) as Record<PracticeGroupId, OutcomeSummary>;
+  }, [sessionsByGroup]);
+
+  const outcome = outcomeByGroup[selectedGroupId];
+
+  const { recommendedTechniques, recommendedScorable } = useMemo(() => {
+    const empty = {
+      recommendedTechniques: [] as Array<{ drill: NonNullable<typeof drills>['technique'][number]; basedOn: string }>,
+      recommendedScorable: [] as string[],
+    };
     if (!drills) return empty;
-    const latest = getLatestSessionForClub(currentConfigKey);
-    if (!latest || !Array.isArray(latest.metrics) || latest.metrics.length === 0) return empty;
+    const tags = outcome.focusTags;
 
-    // Collect weak metrics (outside target window), sorted by relative deviation.
-    const weak: Array<{ tag: string; delta: number }> = [];
-    for (const m of latest.metrics as Array<{ id?: string; name?: string; value?: number; targetMin?: number; targetMax?: number }>) {
-      if (typeof m.value !== 'number' || typeof m.targetMin !== 'number' || typeof m.targetMax !== 'number') continue;
-      const below = m.targetMin - m.value;
-      const above = m.value - m.targetMax;
-      const delta = Math.max(below, above, 0);
-      if (delta <= 0) continue;
-      const span = Math.max(Math.abs(m.targetMax - m.targetMin), 1);
-      weak.push({ tag: (m.id || m.name || '').toLowerCase(), delta: delta / span });
-    }
-    weak.sort((a, b) => b.delta - a.delta);
-    const weakTags = weak.map(w => w.tag);
-    if (weakTags.length === 0) return empty;
-
-    const matches = (fixes: string[] | undefined, tag: string) =>
-      (fixes ?? []).some(f => tag.includes(f) || f.includes(tag.split(/[_\s]/)[0]));
-
-    // Pick up to 2 distinct technique drills covering the top weaknesses.
     const recTech: Array<{ drill: NonNullable<typeof drills>['technique'][number]; basedOn: string }> = [];
     const usedIds = new Set<string>();
-    for (const tag of weakTags) {
+    for (const drill of drills.technique) {
       if (recTech.length >= 2) break;
-      const match = drills.technique.find(d => !usedIds.has(d.id) && matches(d.fixes, tag));
-      if (match) { recTech.push({ drill: match, basedOn: tag }); usedIds.add(match.id); }
+      if (drillMatchesWeakness(drill, tags)) {
+        recTech.push({ drill, basedOn: outcome.focusLabel });
+        usedIds.add(drill.id);
+      }
     }
-    // If we still have fewer than 2, fall back to the first remaining techniques.
-    for (const d of drills.technique) {
+    for (const drill of drills.technique) {
       if (recTech.length >= 2) break;
-      if (!usedIds.has(d.id)) { recTech.push({ drill: d, basedOn: weakTags[0] }); usedIds.add(d.id); }
+      if (!usedIds.has(drill.id)) {
+        recTech.push({ drill, basedOn: outcome.focusLabel });
+        usedIds.add(drill.id);
+      }
     }
 
-    // Scorable drill ids that map to a weak tag.
     const recScorable = drills.scorable
-      .filter(d => weakTags.some(t => matches(d.fixes, t)))
-      .map(d => d.id);
+      .filter((drill) => drillMatchesWeakness(drill, tags))
+      .map((drill) => drill.id);
 
-    return { weakTags, recommendedTechniques: recTech, recommendedScorable: recScorable };
-  }, [drills, currentConfigKey, getLatestSessionForClub]);
-
+    return { recommendedTechniques: recTech, recommendedScorable: recScorable };
+  }, [drills, outcome.focusLabel, outcome.focusTags]);
 
   // Drill scores for this config
   const [scores, setScores] = useState<DrillScoreRow[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
 
   useEffect(() => {
-    if (!user) { setScores([]); return; }
+    if (!user || !selectedGroup.enabled) { setScores([]); return; }
     let cancelled = false;
     setLoadingScores(true);
     supabase
       .from('practice_drill_scores')
       .select('*')
       .eq('user_id', user.id)
-      .eq('config_key', currentConfigKey)
+      .eq('config_key', activeConfigKey)
       .order('score_date', { ascending: false })
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -117,7 +306,7 @@ export function PracticePlanTab() {
         setLoadingScores(false);
       });
     return () => { cancelled = true; };
-  }, [user, currentConfigKey]);
+  }, [user, activeConfigKey, selectedGroup.enabled]);
 
   const addScore = async (
     drill_id: string,
@@ -129,13 +318,14 @@ export function PracticePlanTab() {
     notes: string | null,
   ) => {
     if (!user) { toast.error('Sign in to save scores'); return; }
+    if (!selectedGroup.enabled) { toast.error('This practice group is not live yet'); return; }
     const { data, error } = await supabase
       .from('practice_drill_scores')
       .insert({
         user_id: user.id,
         drill_id,
         drill_kind,
-        config_key: currentConfigKey,
+        config_key: activeConfigKey,
         score,
         max_score,
         balls,
@@ -173,43 +363,24 @@ export function PracticePlanTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Selector */}
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="text-lg">Practice Plan</CardTitle>
           <CardDescription>
-            Choose a club / shot, then pick a track: technique fixes, scorable games, or 5-ball baseline mapping.
+            Group similar shots, read the practice outcome from Logs, then choose technique, scoring, and 6-shot baseline work.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Club</label>
-              <Select value={selectedClub} onValueChange={setSelectedClub}>
-                <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRACTICE_CLUBS.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Shot Type</label>
-              <Select value={selectedShotType} onValueChange={setSelectedShotType}>
-                <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {getEnabledShotTypesForClub(selectedClub).map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Power</label>
-              <Select value={selectedPower} onValueChange={setSelectedPower}>
-                <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {PRACTICE_GROUPS.map((group) => (
+              <PracticeGroupCard
+                key={group.id}
+                group={group}
+                outcome={outcomeByGroup[group.id]}
+                selected={group.id === selectedGroupId}
+                onSelect={() => setSelectedGroupId(group.id)}
+              />
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -217,16 +388,21 @@ export function PracticePlanTab() {
       {!drills ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No drill plan built yet for <span className="font-medium text-foreground">{displayName}</span>.
-            Driver is live first — tell me which club/shot to build next.
+            <div className="mx-auto max-w-xl space-y-2">
+              <p className="text-base font-semibold text-foreground">{selectedGroup.title} plan is next.</p>
+              <p>
+                The grouping and log summary are in place. Driver is live first so we can get the structure right, then copy the same pattern into this group.
+              </p>
+            </div>
           </CardContent>
         </Card>
       ) : (
         <>
-          {/* Session split banner */}
+          <DriverOutcomePanel outcome={outcome} displayName={displayName} />
+
           <Card className="bg-muted/30">
             <CardContent className="py-3 flex flex-wrap items-center gap-3 text-sm">
-              <span className="font-medium">Session split:</span>
+              <span className="font-medium">Driver session split:</span>
               <Badge variant="outline" className="gap-1"><Dumbbell className="h-3 w-3" /> {SESSION_BALL_SPLIT.technique} technique</Badge>
               <Badge variant="outline" className="gap-1"><Target className="h-3 w-3" /> {SESSION_BALL_SPLIT.scorable} scorable</Badge>
               <Badge variant="outline" className="gap-1"><Gauge className="h-3 w-3" /> {SESSION_BALL_SPLIT.baseline} baseline</Badge>
@@ -236,110 +412,88 @@ export function PracticePlanTab() {
             </CardContent>
           </Card>
 
-          {recommendedTechniques.length > 0 && (
-            <Card className="border-amber-500/40 bg-amber-500/5">
-              <CardContent className="py-3 text-sm">
-                <div className="font-medium text-amber-700 dark:text-amber-400">
-                  Recommended technique focus ({recommendedTechniques.length})
-                </div>
-                <div className="text-muted-foreground mt-0.5">
-                  Based on your last {displayName} session — weakest areas:{' '}
-                  <span className="font-medium text-foreground">{weakTags.slice(0, 3).join(', ')}</span>.
-                  Spend the technique block on the drills below.
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Tabs defaultValue="technique" className="w-full">
-            <TabsList>
-              <TabsTrigger value="technique" className="gap-2"><Dumbbell className="h-4 w-4" /> Technique</TabsTrigger>
-              <TabsTrigger value="scorable" className="gap-2"><Target className="h-4 w-4" /> Scorable Drills</TabsTrigger>
-              <TabsTrigger value="baseline" className="gap-2"><Gauge className="h-4 w-4" /> Baseline Mapping</TabsTrigger>
-            </TabsList>
-
-          {/* TECHNIQUE */}
-          <TabsContent value="technique" className="space-y-3 mt-4">
-            <p className="text-sm text-muted-foreground">
-              {SESSION_BALL_SPLIT.technique} balls — only the 2 techniques tied to your current weak areas are shown. Pick ONE and stick with it for the block. No scoring.
-            </p>
-            {(recommendedTechniques.length > 0
-              ? recommendedTechniques.map(r => r.drill)
-              : drills.technique.slice(0, 2)
-            ).map(d => {
-              const rec = recommendedTechniques.find(r => r.drill.id === d.id);
-              return (
-                <Card key={d.id} className="border-amber-500/60 ring-1 ring-amber-500/30">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        {d.name}
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.1fr_0.95fr]">
+            <section className="space-y-3">
+              <SectionHeader
+                icon={<Dumbbell className="h-4 w-4" />}
+                title="Technique Fixes"
+                description={`${SESSION_BALL_SPLIT.technique} balls. Pick one feel and stay with it.`}
+              />
+              {(recommendedTechniques.length > 0
+                ? recommendedTechniques.map((item) => item.drill)
+                : drills.technique.slice(0, 2)
+              ).map((drill) => {
+                const rec = recommendedTechniques.find((item) => item.drill.id === drill.id);
+                return (
+                  <Card key={drill.id} className="border-amber-500/50 bg-amber-500/5">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <CardTitle className="text-base">{drill.name}</CardTitle>
                         <Badge className="bg-amber-500 text-white hover:bg-amber-500">
-                          {rec ? `Fixes: ${rec.basedOn}` : 'Recommended'}
+                          {rec ? `Fix: ${rec.basedOn}` : 'Technique'}
                         </Badge>
-                      </CardTitle>
-                      <Badge variant="outline">{d.reps}</Badge>
-                    </div>
-                    <CardDescription>{d.focus}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
-                    <div><span className="font-medium">Setup:</span> <span className="text-muted-foreground">{d.setup}</span></div>
-                    <div><span className="font-medium">Cue:</span> <span className="text-muted-foreground">{d.cue}</span></div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </TabsContent>
+                      </div>
+                      <CardDescription>{drill.focus}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div><span className="font-medium">Setup:</span> <span className="text-muted-foreground">{drill.setup}</span></div>
+                      <div><span className="font-medium">Cue:</span> <span className="text-muted-foreground">{drill.cue}</span></div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </section>
 
+            <section className="space-y-3">
+              <SectionHeader
+                icon={<Target className="h-4 w-4" />}
+                title="Scorable Reinforcement"
+                description={`${SESSION_BALL_SPLIT.scorable} balls. Score it so the fix shows up in the data.`}
+              />
+              {[...drills.scorable]
+                .sort((a, b) => {
+                  const ar = recommendedScorable.includes(a.id) ? 0 : 1;
+                  const br = recommendedScorable.includes(b.id) ? 0 : 1;
+                  return ar - br;
+                })
+                .slice(0, 3)
+                .map((drill) => (
+                  <ScorableDrillCard
+                    key={drill.id}
+                    drill={drill}
+                    recommended={recommendedScorable.includes(drill.id)}
+                    history={scores.filter((score) => score.drill_id === drill.id)}
+                    stats={statsFor(drill.id)}
+                    onSave={(score, dateStr, notes) =>
+                      addScore(drill.id, 'scorable', score, drill.maxScore, drill.balls, dateStr, notes)
+                    }
+                    onDelete={deleteScore}
+                    loading={loadingScores}
+                  />
+                ))}
+            </section>
 
-          {/* SCORABLE */}
-          <TabsContent value="scorable" className="space-y-3 mt-4">
-            <p className="text-sm text-muted-foreground">
-              Game-style. Score each round — averages and personal bests track below.
-              {recommendedScorable.length > 0 && ' Drills marked Recommended target your current weak areas.'}
-            </p>
-            {[...drills.scorable]
-              .sort((a, b) => {
-                const ar = recommendedScorable.includes(a.id) ? 0 : 1;
-                const br = recommendedScorable.includes(b.id) ? 0 : 1;
-                return ar - br;
-              })
-              .map(d => (
-                <ScorableDrillCard
-                  key={d.id}
-                  drill={d}
-                  recommended={recommendedScorable.includes(d.id)}
-                  history={scores.filter(s => s.drill_id === d.id)}
-                  stats={statsFor(d.id)}
+            <section className="space-y-3">
+              <SectionHeader
+                icon={<Gauge className="h-4 w-4" />}
+                title="Baseline Mapping"
+                description="Always 6 balls. A quick map of what driver is doing today."
+              />
+              {drills.baseline.map((drill) => (
+                <BaselineDrillCard
+                  key={drill.id}
+                  drill={drill}
+                  history={scores.filter((score) => score.drill_id === drill.id)}
+                  stats={statsFor(drill.id)}
                   onSave={(score, dateStr, notes) =>
-                    addScore(d.id, 'scorable', score, d.maxScore, d.balls, dateStr, notes)
+                    addScore(drill.id, 'baseline', score, SESSION_BALL_SPLIT.baseline, SESSION_BALL_SPLIT.baseline, dateStr, notes)
                   }
                   onDelete={deleteScore}
                   loading={loadingScores}
                 />
               ))}
-          </TabsContent>
-
-          {/* BASELINE */}
-          <TabsContent value="baseline" className="space-y-3 mt-4">
-            <p className="text-sm text-muted-foreground">
-              {SESSION_BALL_SPLIT.baseline} balls. 0 or 1 per ball. Quick mapping you can repeat to see if you're moving forward.
-            </p>
-            {drills.baseline.map(d => (
-              <BaselineDrillCard
-                key={d.id}
-                drill={d}
-                history={scores.filter(s => s.drill_id === d.id)}
-                stats={statsFor(d.id)}
-                onSave={(score, dateStr, notes) =>
-                  addScore(d.id, 'baseline', score, SESSION_BALL_SPLIT.baseline, SESSION_BALL_SPLIT.baseline, dateStr, notes)
-                }
-                onDelete={deleteScore}
-                loading={loadingScores}
-              />
-            ))}
-          </TabsContent>
-          </Tabs>
+            </section>
+          </div>
         </>
       )}
     </div>
@@ -349,6 +503,174 @@ export function PracticePlanTab() {
 // =====================================================
 // Sub-components
 // =====================================================
+
+function PracticeGroupCard({
+  group,
+  outcome,
+  selected,
+  onSelect,
+}: {
+  group: typeof PRACTICE_GROUPS[number];
+  outcome: OutcomeSummary;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const level = getLevel(outcome.currentForm);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={
+        'rounded-lg border p-4 text-left transition-colors ' +
+        (selected
+          ? 'border-primary bg-primary/5 shadow-sm'
+          : 'border-border bg-card hover:bg-muted/30')
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">{group.title}</div>
+          <div className="mt-1 text-xs leading-snug text-muted-foreground">{group.description}</div>
+        </div>
+        {!group.enabled && <Badge variant="outline">Next</Badge>}
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div>
+          <div className="text-2xl font-bold text-foreground">
+            {outcome.currentForm === null ? 'No data' : `${outcome.currentForm}%`}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {outcome.scoredSessions ? `${outcome.scoredSessions} scored` : 'Not tracked yet'}
+          </div>
+        </div>
+        <Badge variant="outline" className={level.className}>
+          {level.label}
+        </Badge>
+      </div>
+    </button>
+  );
+}
+
+function DriverOutcomePanel({
+  outcome,
+  displayName,
+}: {
+  outcome: OutcomeSummary;
+  displayName: string;
+}) {
+  const level = getLevel(outcome.currentForm);
+  const trendText = {
+    up: 'Getting better',
+    down: 'Needs attention',
+    same: 'Holding steady',
+    none: 'Trend pending',
+  }[outcome.trend];
+
+  return (
+    <Card className={level.className}>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BarChart3 className="h-5 w-5" />
+              Driver Practice Outcome
+            </CardTitle>
+            <CardDescription className="mt-1">
+              {displayName} from the practice logs
+              {outcome.latestDate ? ` • Last: ${format(outcome.latestDate, 'dd MMM yyyy')}` : ''}
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className={level.className}>
+            {level.label}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr]">
+          <OutcomeStat label="Current Form" value={outcome.currentForm === null ? 'No data' : `${outcome.currentForm}%`} note="Last 10 scored sessions" strong />
+          <OutcomeStat label="Latest" value={outcome.latestScore === null ? 'Not scored' : `${outcome.latestScore}%`} />
+          <OutcomeStat label="Best" value={outcome.bestScore === null ? '-' : `${outcome.bestScore}%`} />
+          <OutcomeStat label="Sessions" value={String(outcome.scoredSessions)} />
+          <OutcomeStat label="Trend" value={trendText} />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <OutcomeArea label="Distance control" score={outcome.distanceForm} />
+          <OutcomeArea label="Start line / dispersion" score={outcome.dispersionForm} />
+          <OutcomeArea label="Strike quality" score={outcome.strikeForm} />
+        </div>
+
+        <div className="rounded-md border bg-background/70 p-3 text-sm">
+          <span className="font-medium">What to focus on: </span>
+          <span className="text-muted-foreground">{outcome.focusLabel}</span>
+          <span className="mx-2 text-muted-foreground">•</span>
+          <span className="font-medium">Watch next: </span>
+          <span className="text-muted-foreground">
+            the scorable driver result and the 6-shot baseline. If both move, the technique fix is real.
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OutcomeStat({
+  label,
+  value,
+  note,
+  strong,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="rounded-md border bg-background/70 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={(strong ? 'text-3xl' : 'text-lg') + ' mt-1 font-bold text-foreground'}>{value}</div>
+      {note && <div className="mt-1 text-xs text-muted-foreground">{note}</div>}
+    </div>
+  );
+}
+
+function OutcomeArea({ label, score }: { label: string; score: number | null }) {
+  const level = getLevel(score);
+  return (
+    <div className="rounded-md border bg-background/70 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-sm font-bold">{score === null ? '-' : `${score}%`}</div>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-muted">
+        <div
+          className={`h-2 rounded-full ${level.barClassName}`}
+          style={{ width: `${Math.max(0, Math.min(score ?? 0, 100))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h3 className="flex items-center gap-2 text-lg font-semibold">
+        {icon}
+        {title}
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
 
 interface CommonCardProps {
   history: DrillScoreRow[];

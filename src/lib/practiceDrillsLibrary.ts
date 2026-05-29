@@ -178,7 +178,22 @@ const DRIVER_FULL_FULL: ConfigDrills = {
       metricsAddressed: ['Fairways hit %', 'Pre-shot routine consistency', 'Mental performance'],
     },
   ],
-  baseline: [],
+  baseline: [
+    {
+      id: 'drv_base_6_ball_map',
+      kind: 'baseline',
+      name: '6-shot Driver Baseline',
+      what: 'A repeatable snapshot of your stock driver: distance, start line, playable result, and confidence.',
+      setup:
+        'Hit 6 stock drivers with full routine. Use the same fairway window you use for driver practice, and record the honest outcome of each ball.',
+      scoring:
+        '1 point per playable stock driver that starts on your intended window and finishes in play. 0 for penalty, reload, dead pull/block, or a shot you would not accept on course.',
+      description:
+        'This is not a warm-up or a chase-distance test. It is your six-ball map of what driver is doing today before or after the main practice block.',
+      metricsAddressed: ['Fairways hit %', 'Lateral dispersion', 'Total distance', 'Shot quality'],
+      fixes: ['start_line', 'offline', 'curve', 'strike', 'carry'],
+    },
+  ],
 
 };
 
@@ -426,5 +441,4 @@ export function getAllDrills(): DrillWithMeta[] {
   }
   return out;
 }
-
 
