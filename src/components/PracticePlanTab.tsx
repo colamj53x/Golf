@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Target, Dumbbell, Gauge, Trash2, TrendingUp, BarChart3 } from 'lucide-react';
+import { ArrowLeft, BarChart3, ClipboardCheck, Dumbbell, Gauge, Target, Trash2, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -27,7 +27,7 @@ interface DrillScoreRow {
   notes: string | null;
 }
 
-type PracticeGroupId = 'driver' | 'hybrids' | 'approach' | 'wedges' | 'short';
+type PracticeGroupId = 'driver' | 'hybrids' | 'approach' | 'wedges' | 'short' | 'multi';
 
 const PRACTICE_GROUPS: Array<{
   id: PracticeGroupId;
@@ -81,9 +81,18 @@ const PRACTICE_GROUPS: Array<{
     ],
     enabled: false,
   },
+  {
+    id: 'multi',
+    title: 'Multi-shot Plan',
+    description: 'Course-style games: random holes, distances, and points.',
+    configKeys: [],
+    enabled: false,
+  },
 ];
 
 const DRIVER_CONFIG_KEY = 'dr_full_full';
+const SUGGESTED_SCORABLE_DRILL_COUNT = 3;
+const SUGGESTED_SCORABLE_BALLS_PER_DRILL = 6;
 
 interface OutcomeSummary {
   scoredSessions: number;
@@ -216,19 +225,52 @@ function drillMatchesWeakness(
   });
 }
 
+function rotateItems<T>(items: T[], seed: number): T[] {
+  if (items.length <= 1) return items;
+  const offset = Math.abs(seed) % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
+}
+
+function suggestedScorableDrills(
+  drills: ScorableDrill[],
+  recommendedIds: string[],
+  focusTags: string[],
+): ScorableDrill[] {
+  const daySeed = Math.floor(Date.now() / 86_400_000);
+  const recommended = rotateItems(
+    drills.filter((drill) => recommendedIds.includes(drill.id) || drillMatchesWeakness(drill, focusTags)),
+    daySeed,
+  );
+  const others = rotateItems(
+    drills.filter((drill) => !recommended.some((item) => item.id === drill.id)),
+    daySeed + 2,
+  );
+  return [...recommended, ...others].slice(0, 3);
+}
+
+function scaledMaxScore(drill: ScorableDrill, balls: number): number {
+  if (!drill.balls) return drill.maxScore;
+  return Math.max(1, Math.round((drill.maxScore / drill.balls) * balls));
+}
+
+function scaledPassScore(drill: ScorableDrill, balls: number): number {
+  if (!drill.balls) return drill.pass;
+  return Math.max(1, Math.round((drill.pass / drill.balls) * balls));
+}
+
 export function PracticePlanTab() {
   const { user } = useAuth();
   const {
     practiceSessions,
   } = usePracticeData();
-  const [selectedGroupId, setSelectedGroupId] = useState<PracticeGroupId>('driver');
+  const [selectedGroupId, setSelectedGroupId] = useState<PracticeGroupId | null>(null);
 
-  const selectedGroup = PRACTICE_GROUPS.find((group) => group.id === selectedGroupId) ?? PRACTICE_GROUPS[0];
-  const activeConfigKey = selectedGroup.id === 'driver' ? DRIVER_CONFIG_KEY : selectedGroup.configKeys[0];
-  const drills = selectedGroup.enabled ? getDrillsForConfig(activeConfigKey) : null;
+  const selectedGroup = PRACTICE_GROUPS.find((group) => group.id === selectedGroupId) ?? null;
+  const activeConfigKey = selectedGroup?.id === 'driver' ? DRIVER_CONFIG_KEY : selectedGroup?.configKeys[0] ?? DRIVER_CONFIG_KEY;
+  const drills = selectedGroup?.enabled ? getDrillsForConfig(activeConfigKey) : null;
   const displayName = useMemo(() => {
-    try { return getConfigDisplayName(activeConfigKey); } catch { return selectedGroup.title; }
-  }, [activeConfigKey, selectedGroup.title]);
+    try { return getConfigDisplayName(activeConfigKey); } catch { return selectedGroup?.title ?? 'Practice Plan'; }
+  }, [activeConfigKey, selectedGroup?.title]);
 
   const sessionsByGroup = useMemo(() => {
     const sorted = [...practiceSessions].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -246,7 +288,7 @@ export function PracticePlanTab() {
     ) as Record<PracticeGroupId, OutcomeSummary>;
   }, [sessionsByGroup]);
 
-  const outcome = outcomeByGroup[selectedGroupId];
+  const outcome = selectedGroupId ? outcomeByGroup[selectedGroupId] : outcomeByGroup.driver;
 
   const { recommendedTechniques, recommendedScorable } = useMemo(() => {
     const empty = {
@@ -280,12 +322,17 @@ export function PracticePlanTab() {
     return { recommendedTechniques: recTech, recommendedScorable: recScorable };
   }, [drills, outcome.focusLabel, outcome.focusTags]);
 
+  const suggestedScorables = useMemo(() => {
+    if (!drills) return [];
+    return suggestedScorableDrills(drills.scorable, recommendedScorable, outcome.focusTags);
+  }, [drills, outcome.focusTags, recommendedScorable]);
+
   // Drill scores for this config
   const [scores, setScores] = useState<DrillScoreRow[]>([]);
   const [loadingScores, setLoadingScores] = useState(false);
 
   useEffect(() => {
-    if (!user || !selectedGroup.enabled) { setScores([]); return; }
+    if (!user || !selectedGroup?.enabled) { setScores([]); return; }
     let cancelled = false;
     setLoadingScores(true);
     supabase
@@ -306,7 +353,7 @@ export function PracticePlanTab() {
         setLoadingScores(false);
       });
     return () => { cancelled = true; };
-  }, [user, activeConfigKey, selectedGroup.enabled]);
+  }, [user, activeConfigKey, selectedGroup?.enabled]);
 
   const addScore = async (
     drill_id: string,
@@ -318,7 +365,7 @@ export function PracticePlanTab() {
     notes: string | null,
   ) => {
     if (!user) { toast.error('Sign in to save scores'); return; }
-    if (!selectedGroup.enabled) { toast.error('This practice group is not live yet'); return; }
+    if (!selectedGroup?.enabled) { toast.error('This practice group is not live yet'); return; }
     const { data, error } = await supabase
       .from('practice_drill_scores')
       .insert({
@@ -361,28 +408,57 @@ export function PracticePlanTab() {
     return { count: rows.length, avgPct: Math.round(avg), bestPct: Math.round(best), last };
   };
 
+  if (!selectedGroup) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Practice Plan</CardTitle>
+            <CardDescription>
+              Pick a practice area. Each plan uses the Logs outcome first, then cue cards, suggested drills, and baseline mapping.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {PRACTICE_GROUPS.map((group) => (
+                <PracticeGroupCard
+                  key={group.id}
+                  group={group}
+                  outcome={outcomeByGroup[group.id]}
+                  selected={false}
+                  onSelect={() => setSelectedGroupId(group.id)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Practice Plan</CardTitle>
-          <CardDescription>
-            Group similar shots, read the practice outcome from Logs, then choose technique, scoring, and 6-shot baseline work.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {PRACTICE_GROUPS.map((group) => (
-              <PracticeGroupCard
-                key={group.id}
-                group={group}
-                outcome={outcomeByGroup[group.id]}
-                selected={group.id === selectedGroupId}
-                onSelect={() => setSelectedGroupId(group.id)}
-              />
-            ))}
+        <CardHeader className="pb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-2 w-fit gap-2 px-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setSelectedGroupId(null)}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Practice areas
+          </Button>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-xl">{selectedGroup.title}</CardTitle>
+              <CardDescription className="mt-1">{selectedGroup.description}</CardDescription>
+            </div>
+            <Badge variant={selectedGroup.enabled ? 'default' : 'outline'}>
+              {selectedGroup.enabled ? 'Live' : 'Placeholder'}
+            </Badge>
           </div>
-        </CardContent>
+        </CardHeader>
       </Card>
 
       {!drills ? (
@@ -400,14 +476,39 @@ export function PracticePlanTab() {
         <>
           <DriverOutcomePanel outcome={outcome} displayName={displayName} />
 
+          <div className="grid gap-4 lg:grid-cols-2">
+            <CueCard
+              label="Pre-shot"
+              title="Driver Pre-shot Routine"
+              items={[
+                ['Pick the shot', 'Choose one stock shape and a clear start line.'],
+                ['Choose the miss', 'Know the safe side before you step in.'],
+                ['Commit to the window', 'Your target is a fairway window, not the whole range.'],
+                ['One rehearsal', 'Feel the finish and tempo you want, then go.'],
+              ]}
+              cue="Pick it. Commit. Swing once."
+            />
+            <CueCard
+              label="Setup / Swing"
+              title="Driver Setup & Swing"
+              items={[
+                ['Face first', 'Aim the clubface at the start line before setting your body.'],
+                ['Tee and ball', 'Ball forward, tee high enough to sweep it, spine tilted slightly away.'],
+                ['Turn through', 'Finish balanced with chest through the ball.'],
+                ['Hold the finish', 'If you cannot hold it, the swing was too hard or out of sequence.'],
+              ]}
+              cue="Face. Tee. Turn. Hold."
+            />
+          </div>
+
           <Card className="bg-muted/30">
             <CardContent className="py-3 flex flex-wrap items-center gap-3 text-sm">
               <span className="font-medium">Driver session split:</span>
               <Badge variant="outline" className="gap-1"><Dumbbell className="h-3 w-3" /> {SESSION_BALL_SPLIT.technique} technique</Badge>
-              <Badge variant="outline" className="gap-1"><Target className="h-3 w-3" /> {SESSION_BALL_SPLIT.scorable} scorable</Badge>
+              <Badge variant="outline" className="gap-1"><Target className="h-3 w-3" /> 18 scorable</Badge>
               <Badge variant="outline" className="gap-1"><Gauge className="h-3 w-3" /> {SESSION_BALL_SPLIT.baseline} baseline</Badge>
               <span className="text-muted-foreground ml-auto">
-                = {SESSION_BALL_SPLIT.technique + SESSION_BALL_SPLIT.scorable + SESSION_BALL_SPLIT.baseline} balls total
+                = {SESSION_BALL_SPLIT.technique + (SUGGESTED_SCORABLE_DRILL_COUNT * SUGGESTED_SCORABLE_BALLS_PER_DRILL) + SESSION_BALL_SPLIT.baseline} balls total
               </span>
             </CardContent>
           </Card>
@@ -447,25 +548,30 @@ export function PracticePlanTab() {
             <section className="space-y-3">
               <SectionHeader
                 icon={<Target className="h-4 w-4" />}
-                title="Scorable Reinforcement"
-                description={`${SESSION_BALL_SPLIT.scorable} balls. Score it so the fix shows up in the data.`}
+                title="Suggested Scorable Drills"
+                description={`3 drills, ${SUGGESTED_SCORABLE_BALLS_PER_DRILL} balls each. ${SUGGESTED_SCORABLE_DRILL_COUNT * SUGGESTED_SCORABLE_BALLS_PER_DRILL} balls total.`}
               />
-              {[...drills.scorable]
-                .sort((a, b) => {
-                  const ar = recommendedScorable.includes(a.id) ? 0 : 1;
-                  const br = recommendedScorable.includes(b.id) ? 0 : 1;
-                  return ar - br;
-                })
-                .slice(0, 3)
+              {suggestedScorables
                 .map((drill) => (
                   <ScorableDrillCard
                     key={drill.id}
                     drill={drill}
                     recommended={recommendedScorable.includes(drill.id)}
+                    sessionBalls={SUGGESTED_SCORABLE_BALLS_PER_DRILL}
+                    sessionMaxScore={scaledMaxScore(drill, SUGGESTED_SCORABLE_BALLS_PER_DRILL)}
+                    sessionPassScore={scaledPassScore(drill, SUGGESTED_SCORABLE_BALLS_PER_DRILL)}
                     history={scores.filter((score) => score.drill_id === drill.id)}
                     stats={statsFor(drill.id)}
                     onSave={(score, dateStr, notes) =>
-                      addScore(drill.id, 'scorable', score, drill.maxScore, drill.balls, dateStr, notes)
+                      addScore(
+                        drill.id,
+                        'scorable',
+                        score,
+                        scaledMaxScore(drill, SUGGESTED_SCORABLE_BALLS_PER_DRILL),
+                        SUGGESTED_SCORABLE_BALLS_PER_DRILL,
+                        dateStr,
+                        notes,
+                      )
                     }
                     onDelete={deleteScore}
                     loading={loadingScores}
@@ -672,6 +778,45 @@ function SectionHeader({
   );
 }
 
+function CueCard({
+  label,
+  title,
+  items,
+  cue,
+}: {
+  label: string;
+  title: string;
+  items: Array<[string, string]>;
+  cue: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Badge variant="outline">{label}</Badge>
+            <CardTitle className="mt-3 text-lg">{title}</CardTitle>
+          </div>
+          <ClipboardCheck className="h-5 w-5 text-primary" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {items.map(([itemTitle, text], index) => (
+            <div key={itemTitle} className="rounded-md border bg-muted/20 p-3">
+              <div className="text-sm font-semibold">{index + 1}. {itemTitle}</div>
+              <div className="mt-1 text-sm text-muted-foreground">{text}</div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-md bg-primary/10 p-3 text-sm font-medium text-primary">
+          {cue}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 interface CommonCardProps {
   history: DrillScoreRow[];
   stats: { count: number; avgPct: number; bestPct: number; last: DrillScoreRow } | null;
@@ -681,18 +826,36 @@ interface CommonCardProps {
 }
 
 function ScorableDrillCard({
-  drill, recommended, history, stats, onSave, onDelete, loading,
-}: CommonCardProps & { drill: ScorableDrill; recommended?: boolean }) {
+  drill,
+  recommended,
+  sessionBalls,
+  sessionMaxScore,
+  sessionPassScore,
+  history,
+  stats,
+  onSave,
+  onDelete,
+  loading,
+}: CommonCardProps & {
+  drill: ScorableDrill;
+  recommended?: boolean;
+  sessionBalls?: number;
+  sessionMaxScore?: number;
+  sessionPassScore?: number;
+}) {
   const [score, setScore] = useState('');
   const [dateStr, setDateStr] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const balls = sessionBalls ?? drill.balls;
+  const maxScore = sessionMaxScore ?? drill.maxScore;
+  const passScore = sessionPassScore ?? drill.pass;
 
   const save = async () => {
     const s = parseFloat(score);
     if (Number.isNaN(s)) { toast.error('Enter a score'); return; }
-    if (s < 0 || s > drill.maxScore) { toast.error(`Score must be 0–${drill.maxScore}`); return; }
+    if (s < 0 || s > maxScore) { toast.error(`Score must be 0-${maxScore}`); return; }
     setSaving(true);
     await onSave(s, dateStr, notes.trim() || null);
     setSaving(false);
@@ -709,9 +872,9 @@ function ScorableDrillCard({
             {recommended && <Badge className="bg-amber-500 text-white hover:bg-amber-500">Recommended</Badge>}
           </CardTitle>
           <div className="flex gap-2 items-center text-xs">
-            <Badge variant="outline">{drill.balls} balls</Badge>
-            <Badge variant="outline">/{drill.maxScore}</Badge>
-            <Badge variant="secondary">Pass: {drill.pass}</Badge>
+            <Badge variant="outline">{balls} balls</Badge>
+            <Badge variant="outline">/{maxScore}</Badge>
+            <Badge variant="secondary">Pass: {passScore}</Badge>
           </div>
         </div>
         <CardDescription>{drill.description}</CardDescription>
@@ -725,9 +888,9 @@ function ScorableDrillCard({
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Score</label>
             <Input
-              type="number" min={0} max={drill.maxScore} step="0.5"
+              type="number" min={0} max={maxScore} step="0.5"
               value={score} onChange={e => setScore(e.target.value)}
-              placeholder={`0–${drill.maxScore}`}
+              placeholder={`0-${maxScore}`}
               className="w-24"
             />
           </div>
