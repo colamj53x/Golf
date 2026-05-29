@@ -56,14 +56,14 @@ const SETTINGS_SECTIONS = [
   },
   {
     href: '#settings-clubs',
-    title: 'Club Configuration',
-    description: 'Bag setup and tolerance bands.',
+    title: 'Club Distance Rules',
+    description: 'How on-course shots are judged.',
     icon: SlidersHorizontal,
   },
   {
     href: '#settings-shot-profiles',
-    title: 'Shot Profiles',
-    description: 'Practice and on-course shot options.',
+    title: 'Shot Options & Cues',
+    description: 'Where shots appear and what cues they use.',
     icon: Goal,
   },
   {
@@ -333,15 +333,15 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      {/* Club Configuration Card */}
+      {/* Club Distance Rules Card */}
       <Card id="settings-clubs" className="scroll-mt-6">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              Club Configuration
+              Club Distance Rules
             </CardTitle>
             <CardDescription>
-              Configure distance bands, acceptable tolerances, and metric settings for each club
+              Used by On Course and Playing Data to judge whether a shot was acceptable.
             </CardDescription>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -386,7 +386,7 @@ export function SettingsTab() {
                   </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="stock-dist" className="text-right">Stock Dist (m)</Label>
+                  <Label htmlFor="stock-dist" className="text-right">Stock Total (m)</Label>
                   <Input
                     id="stock-dist"
                     type="number"
@@ -396,7 +396,7 @@ export function SettingsTab() {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="dist-band" className="text-right">Dist Band (m)</Label>
+                  <Label htmlFor="dist-band" className="text-right">Short/Long Band (m)</Label>
                   <Input
                     id="dist-band"
                     type="number"
@@ -406,7 +406,7 @@ export function SettingsTab() {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="side-band" className="text-right">Side Band (m)</Label>
+                  <Label htmlFor="side-band" className="text-right">Left/Right Band (m)</Label>
                   <Input
                     id="side-band"
                     type="number"
@@ -416,7 +416,7 @@ export function SettingsTab() {
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label className="text-right">Dist-to-Target</Label>
+                  <Label className="text-right">Green Target Calc</Label>
                   <div className="col-span-3 flex items-center">
                     <Switch
                       checked={newClub.distanceToTargetEnabled}
@@ -436,16 +436,26 @@ export function SettingsTab() {
           </Dialog>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid gap-3 rounded-md border bg-muted/30 p-3 text-sm md:grid-cols-2">
+            <div>
+              <span className="font-medium text-foreground">Used for: </span>
+              on-course dashboards, playing reports, club selector recommendations, and green-targeted metrics.
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Controls: </span>
+              stock total distance, acceptable short/long misses, acceptable left/right misses, and whether distance-to-target is calculated.
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
                   <th className="min-w-[100px]">Club</th>
                   <th className="min-w-[140px]">Category</th>
-                  <th className="min-w-[100px]">Stock Dist (m)</th>
-                  <th className="min-w-[100px]">Dist Band (m)</th>
-                  <th className="min-w-[100px]">Side Band (m)</th>
-                  <th className="min-w-[130px]">Dist-to-Target</th>
+                  <th className="min-w-[110px]">Stock Total (m)</th>
+                  <th className="min-w-[130px]">Short/Long Band (m)</th>
+                  <th className="min-w-[130px]">Left/Right Band (m)</th>
+                  <th className="min-w-[140px]">Green Target Calc</th>
                   <th className="min-w-[80px]">Actions</th>
                 </tr>
               </thead>
@@ -560,13 +570,13 @@ export function SettingsTab() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <div>
-            <strong className="text-foreground">On-Target:</strong> Lateral finish within Acceptable Side Band
+            <strong className="text-foreground">On-Target:</strong> Lateral finish within the Left/Right Band
           </div>
           <div>
-            <strong className="text-foreground">Right/Left %:</strong> Shots finishing outside Acceptable Side Band in that direction
+            <strong className="text-foreground">Right/Left %:</strong> Shots finishing outside the Left/Right Band in that direction
           </div>
           <div>
-            <strong className="text-foreground">Short %:</strong> Total distance {"<"} (Stock Distance − Distance Band), unless "As Intended"
+            <strong className="text-foreground">Short %:</strong> Total distance {"<"} (Stock Total - Short/Long Band), unless "As Intended"
           </div>
           <div>
             <strong className="text-foreground">Bad Miss %:</strong> Penalty or Recovery required (punch-out, chip-out)
@@ -610,12 +620,22 @@ function ShotProfilesCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Shot Profiles</CardTitle>
+        <CardTitle>Shot Options & Cue Cards</CardTitle>
         <CardDescription>
-          One shared setup for Practice, On Course recommendations, wedge matrix, and future technique/routine cards.
+          One shared list of club/shot/power options for Practice, On Course recommendations, gapping, and reusable cue cards.
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 grid gap-3 rounded-md border bg-muted/30 p-3 text-sm md:grid-cols-2">
+          <div>
+            <span className="font-medium text-foreground">Used for: </span>
+            Practice summary/log options, practice plan selectors, Club Gapping rows, and On Course club selector options.
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Controls: </span>
+            whether a shot exists, where it appears, valid targets, and the short cue text you can reuse on practice cards.
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
@@ -627,8 +647,8 @@ function ShotProfilesCard() {
                 <th className="min-w-[120px]">Targets</th>
                 <th className="min-w-[100px]">Practice</th>
                 <th className="min-w-[100px]">On Course</th>
-                <th className="min-w-[220px]">Technique Cue</th>
-                <th className="min-w-[220px]">Routine Cue</th>
+                <th className="min-w-[220px]">Swing Cue</th>
+                <th className="min-w-[220px]">Pre-shot Cue</th>
               </tr>
             </thead>
             <tbody>
@@ -688,7 +708,7 @@ function ShotProfilesCard() {
                         value={profile.technique}
                         disabled={!profile.enabled}
                         onChange={(event) => updateShotProfile(profile.id, { technique: event.target.value })}
-                        placeholder="e.g. chest through, hold finish"
+                        placeholder="e.g. face first, chest through"
                         className="h-8 min-w-[210px] text-sm"
                       />
                     </td>
