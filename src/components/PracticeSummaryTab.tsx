@@ -3,6 +3,7 @@ import { differenceInCalendarDays, format } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
@@ -256,7 +257,13 @@ function clubOrderCompare(a: SummaryRow, b: SummaryRow): number {
   );
 }
 
-export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: string) => void } = {}) {
+export function PracticeSummaryTab({
+  onOpenLog,
+  onAddClubShot,
+}: {
+  onOpenLog?: (configKey: string) => void;
+  onAddClubShot?: () => void;
+} = {}) {
   const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
@@ -561,8 +568,13 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
         <CardTitle>Practice Summary</CardTitle>
+        {onAddClubShot && (
+          <Button variant="outline" size="sm" onClick={onAddClubShot}>
+            Add Club/Shot
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {sortedRows.length === 0 ? (

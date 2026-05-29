@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Calendar, Target, TrendingUp, TrendingDown, Minus, Settings, Pencil, ChevronsUpDown, Upload, CheckCircle2, Trash2, ListFilter, Copy, BarChart3 } from 'lucide-react';
+import { Plus, Calendar, Target, TrendingUp, TrendingDown, Minus, Settings, Pencil, ChevronsUpDown, Upload, CheckCircle2, ListFilter, Copy, BarChart3 } from 'lucide-react';
 
 import { format } from 'date-fns';
 import { ShotManagementDialog } from '@/components/ShotManagementDialog';
@@ -21,18 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +33,8 @@ import { usePracticeShots } from '@/hooks/usePracticeShots';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { useGolfData } from '@/context/GolfDataContext';
+import { getClubConfigId } from '@/lib/golfCalculations';
 import {
   Select,
   SelectContent,
@@ -128,7 +119,8 @@ function calculateStatus(
   value: PracticeMetricValue | null,
   targetMin: number | null,
   targetMax: number | null,
-  higherIsBetter: boolean
+  higherIsBetter: boolean,
+  tolerancePct = 10,
 ): MetricStatus {
   // Handle legacy 'value' property from DB alongside valueMin/valueMax
   const rawValue = value as PracticeMetricValue & { value?: number };
@@ -171,9 +163,9 @@ function calculateStatus(
       // Target is a single value, any range is inconsistent
       const midpoint = (effectiveMin! + effectiveMax!) / 2;
       const spreadPct = (userSpread / midpoint) * 100;
-      if (spreadPct > 15) {
+      if (spreadPct > tolerancePct * 1.5) {
         consistencyPenalty = 'red';
-      } else if (spreadPct > 10) {
+      } else if (spreadPct > tolerancePct) {
         consistencyPenalty = 'amber';
       }
     }
@@ -191,8 +183,8 @@ function calculateStatus(
     } else if (targetMin !== null && actualValue < targetMin) {
       // Below minimum is bad
       const deviationPct = (targetMin - actualValue) / targetMin;
-      if (deviationPct >= 0.2) valueStatus = 'red';
-      else if (deviationPct >= 0.1) valueStatus = 'amber';
+      if (deviationPct >= (tolerancePct / 100) * 2) valueStatus = 'red';
+      else if (deviationPct >= tolerancePct / 100) valueStatus = 'amber';
       else valueStatus = 'green'; // Very close
     } else {
       valueStatus = 'amber';
@@ -205,8 +197,8 @@ function calculateStatus(
     } else if (targetMax !== null && actualValue > targetMax) {
       // Above maximum is bad for lowerIsBetter
       const deviationPct = (actualValue - targetMax) / targetMax;
-      if (deviationPct >= 0.5) valueStatus = 'red';      // 50%+ above = red
-      else if (deviationPct >= 0.2) valueStatus = 'amber'; // 20%+ above = amber
+      if (deviationPct >= (tolerancePct / 100) * 2) valueStatus = 'red';
+      else if (deviationPct >= tolerancePct / 100) valueStatus = 'amber';
       else valueStatus = 'green'; // Very close (under 20%)
     } else if (targetMin !== null && actualValue < targetMin) {
       // Below minimum for lowerIsBetter could be too low
@@ -222,8 +214,25 @@ function calculateStatus(
   return 'green';
 }
 
+function getMetricTolerancePct(
+  category: string,
+  distanceTolerancePct: number,
+  ballFlightTolerancePct: number,
+  otherTolerancePct: number,
+): number {
+  if (category === 'distance') return distanceTolerancePct;
+  if (category === 'ball_flight') return ballFlightTolerancePct;
+  return otherTolerancePct;
+}
+
 export function PracticeDashboardTab() {
   const { user } = useAuth();
+  const {
+    shots,
+    practiceDistanceTolerancePct,
+    practiceBallFlightTolerancePct,
+    practiceOtherTolerancePct,
+  } = useGolfData();
   useEnabledCombos(); // re-render when enabled combos change
   const { 
     practiceConfigs, 
@@ -231,9 +240,6 @@ export function PracticeDashboardTab() {
     addPracticeSession, 
     updatePracticeSession, 
     updatePracticeConfig,
-    savePracticeConfig,
-    deletePracticeConfig,
-    hasStoredConfig,
     selectedClub,
     selectedShotType,
     selectedPower,
@@ -246,8 +252,6 @@ export function PracticeDashboardTab() {
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false);
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
   const [isEditTargetsOpen, setIsEditTargetsOpen] = useState(false);
-  const [isAddClubOpen, setIsAddClubOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     distance: true,
     ball_flight: true,
@@ -277,12 +281,6 @@ export function PracticeDashboardTab() {
   // Club info sheet state
   const [isClubInfoSheetOpen, setIsClubInfoSheetOpen] = useState(false);
   
-  // Add Club/Shot state
-  const [newClubSelection, setNewClubSelection] = useState(selectedClub);
-  const [newShotTypeSelection, setNewShotTypeSelection] = useState(selectedShotType);
-  const [newPowerSelection, setNewPowerSelection] = useState(selectedPower);
-  const [newClubTargets, setNewClubTargets] = useState<Record<string, { min: string; max: string }>>({});
-
   const config = practiceConfigs.find(c => c.clubId === currentConfigKey);
   const allSessions = getSessionsForClub(currentConfigKey);
   
@@ -341,6 +339,13 @@ export function PracticeDashboardTab() {
     acc[metric.category].push(metric);
     return acc;
   }, {} as Record<string, typeof config.metrics>);
+
+  const toleranceForMetric = (category: string) => getMetricTolerancePct(
+    category,
+    practiceDistanceTolerancePct,
+    practiceBallFlightTolerancePct,
+    practiceOtherTolerancePct,
+  );
 
   const handleAddSession = async () => {
     if (!user) {
@@ -616,95 +621,6 @@ export function PracticeDashboardTab() {
     }
   };
 
-  // Add Club/Shot handlers
-  const openAddClubDialog = () => {
-    setNewClubSelection(selectedClub);
-    setNewShotTypeSelection(selectedShotType);
-    setNewPowerSelection(selectedPower);
-    
-    // Initialize targets from current config
-    const targets: Record<string, { min: string; max: string }> = {};
-    config.metrics.forEach(m => {
-      targets[m.id] = {
-        min: m.targetMin !== null ? String(m.targetMin) : '',
-        max: m.targetMax !== null ? String(m.targetMax) : '',
-      };
-    });
-    setNewClubTargets(targets);
-    setIsAddClubOpen(true);
-  };
-
-  const handleSaveClubConfig = async () => {
-    // Calculate Smash Factor targets from Ball Speed and Swing Speed
-    const ballSpeedMin = parseFloat(newClubTargets['ball_speed']?.min || '0');
-    const ballSpeedMax = parseFloat(newClubTargets['ball_speed']?.max || '0');
-    const swingSpeedMin = parseFloat(newClubTargets['swing_speed']?.min || '0');
-    const swingSpeedMax = parseFloat(newClubTargets['swing_speed']?.max || '0');
-    
-    let smashFactorMin: number | null = null;
-    let smashFactorMax: number | null = null;
-    if (ballSpeedMin > 0 && swingSpeedMax > 0) {
-      smashFactorMin = parseFloat((ballSpeedMin / swingSpeedMax).toFixed(2));
-    }
-    if (ballSpeedMax > 0 && swingSpeedMin > 0) {
-      smashFactorMax = parseFloat((ballSpeedMax / swingSpeedMin).toFixed(2));
-    }
-    
-    const updatedMetrics = config.metrics.map(m => {
-      // For Smash Factor, use calculated values
-      if (m.id === 'smash_factor') {
-        let targetDisplay = '–';
-        if (smashFactorMin !== null && smashFactorMax !== null) {
-          targetDisplay = `${smashFactorMin}–${smashFactorMax}`;
-        } else if (smashFactorMin !== null) {
-          targetDisplay = `≥${smashFactorMin}`;
-        } else if (smashFactorMax !== null) {
-          targetDisplay = `≤${smashFactorMax}`;
-        }
-        return {
-          ...m,
-          targetMin: smashFactorMin,
-          targetMax: smashFactorMax,
-          targetDisplay,
-        };
-      }
-      
-      const target = newClubTargets[m.id];
-      const targetMin = target?.min ? parseFloat(target.min) : null;
-      const targetMax = target?.max ? parseFloat(target.max) : null;
-      
-      let targetDisplay = '–';
-      if (targetMin !== null && targetMax !== null) {
-        targetDisplay = `${targetMin}–${targetMax}`;
-      } else if (targetMin !== null) {
-        targetDisplay = `≥${targetMin}`;
-      } else if (targetMax !== null) {
-        targetDisplay = `≤${targetMax}`;
-      }
-      
-      return {
-        ...m,
-        targetMin: isNaN(targetMin as number) ? null : targetMin,
-        targetMax: isNaN(targetMax as number) ? null : targetMax,
-        targetDisplay,
-      };
-    });
-
-    await savePracticeConfig(newClubSelection, newShotTypeSelection, newPowerSelection, updatedMetrics);
-    
-    // Switch to the newly saved config
-    setSelectedClub(newClubSelection);
-    setSelectedShotType(newShotTypeSelection);
-    setSelectedPower(newPowerSelection);
-    
-    setIsAddClubOpen(false);
-  };
-
-  const handleDeleteClubConfig = async () => {
-    await deletePracticeConfig(currentConfigKey);
-    setIsDeleteConfirmOpen(false);
-  };
-
   // Helper to extract numeric value from metric (handles legacy 'value' field)
   const getMetricValues = (metric: PracticeMetricValue | undefined): { min: number | null; max: number | null } => {
     if (!metric) return { min: null, max: null };
@@ -923,14 +839,16 @@ export function PracticeDashboardTab() {
     allSessions,
     shotsBySession,
     currentConfigKey,
+    shots,
+    practiceDistanceTolerancePct,
+    practiceBallFlightTolerancePct,
+    practiceOtherTolerancePct,
   );
 
-  // Practice Report card — rendered at top until notes saved, then moves to bottom
-  const hasSavedNotes = !!(currentSession?.notes && currentSession.notes.trim().length > 0) && !reportNotesDirty;
   const reportCard = currentSession ? (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Practice Report</CardTitle>
+        <CardTitle className="text-lg">Club Report</CardTitle>
         <CardDescription>
           {clubReport.title} • Latest session {format(currentSession.date, 'dd MMM yyyy')}
         </CardDescription>
@@ -963,34 +881,6 @@ export function PracticeDashboardTab() {
             </ul>
           )}
         </div>
-
-        <div className="space-y-2 border-t pt-4">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Session notes</label>
-            <Button
-              size="sm"
-              variant={reportNotesDirty ? 'default' : 'outline'}
-              disabled={!reportNotesDirty}
-              onClick={async () => {
-                if (!currentSession) return;
-                await updatePracticeSession(currentSession.id, { notes: reportNotes });
-                setReportNotesDirty(false);
-              }}
-            >
-              Save notes
-            </Button>
-          </div>
-          <Textarea
-            value={reportNotes}
-            onChange={(e) => { setReportNotes(e.target.value); setReportNotesDirty(true); }}
-            placeholder="What worked, what didn't, swing thoughts, conditions…"
-            rows={8}
-            className="min-h-[200px]"
-          />
-          <p className="text-xs text-muted-foreground">
-            Saved notes also appear on this session in the All Sessions list below.
-          </p>
-        </div>
       </CardContent>
     </Card>
   ) : null;
@@ -1011,85 +901,89 @@ export function PracticeDashboardTab() {
                 {currentSession && ` • Last: ${format(currentSession.date, 'dd MMM yyyy')}`}
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={openAddClubDialog}>
-              <Plus className="h-4 w-4" />
-              Add Club/Shot
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Club</label>
-              <Select value={selectedClub} onValueChange={setSelectedClub}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Select club" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRACTICE_CLUBS.map(club => (
-                    <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex flex-wrap gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Club</label>
+                <Select value={selectedClub} onValueChange={setSelectedClub}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Select club" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRACTICE_CLUBS.map(club => (
+                      <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Shot Type</label>
+                <Select value={selectedShotType} onValueChange={setSelectedShotType}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getEnabledShotTypesForClub(selectedClub).map(type => (
+                      <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Power</label>
+                <Select value={selectedPower} onValueChange={setSelectedPower}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Select power" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
+                      <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Shot Type</label>
-              <Select value={selectedShotType} onValueChange={setSelectedShotType}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getEnabledShotTypesForClub(selectedClub).map(type => (
-                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Power</label>
-              <Select value={selectedPower} onValueChange={setSelectedPower}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Select power" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
-                    <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Header */}
-      <div className="flex items-center justify-start">
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-2"
-            onClick={() => setIsClubInfoSheetOpen(true)}
-          >
-            <BarChart3 className="h-4 w-4" />
-            View Report
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-2"
-            onClick={toggleAllCategories}
-          >
-            <ChevronsUpDown className="h-4 w-4" />
-            {allExpanded ? 'Collapse All' : 'Expand All'}
-          </Button>
-          <Dialog open={isEditTargetsOpen} onOpenChange={setIsEditTargetsOpen}>
-            <DialogTrigger asChild>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setIsClubInfoSheetOpen(true)}
+              >
+                <BarChart3 className="h-4 w-4" />
+                View Report
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={toggleAllCategories}
+              >
+                <ChevronsUpDown className="h-4 w-4" />
+                {allExpanded ? 'Collapse All' : 'Expand All'}
+              </Button>
               <Button variant="outline" size="sm" className="gap-2" onClick={openEditTargets}>
                 <Settings className="h-4 w-4" />
                 Edit Targets
               </Button>
-            </DialogTrigger>
+              <Button size="sm" className="gap-2" onClick={() => setIsAddSessionOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Add Session
+              </Button>
+              {currentSession && (
+                <Button variant="outline" size="sm" className="gap-2" onClick={openEditSession}>
+                  <Pencil className="h-4 w-4" />
+                  Edit Last
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      <Dialog open={isEditTargetsOpen} onOpenChange={setIsEditTargetsOpen}>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Edit Metric Targets</DialogTitle>
@@ -1216,12 +1110,6 @@ export function PracticeDashboardTab() {
             </DialogContent>
           </Dialog>
           <Dialog open={isAddSessionOpen} onOpenChange={setIsAddSessionOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Session
-              </Button>
-            </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Practice Session</DialogTitle>
@@ -1379,12 +1267,6 @@ export function PracticeDashboardTab() {
           {/* Edit Last Session */}
           {currentSession && (
             <Dialog open={isEditSessionOpen} onOpenChange={setIsEditSessionOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2" onClick={openEditSession}>
-                  <Pencil className="h-4 w-4" />
-                  Edit Last
-                </Button>
-              </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Edit Practice Session</DialogTitle>
@@ -1454,8 +1336,6 @@ export function PracticeDashboardTab() {
               </DialogContent>
             </Dialog>
           )}
-        </div>
-      </div>
 
       {/* Consistency Score Card */}
       {currentSession && (
@@ -1554,7 +1434,7 @@ export function PracticeDashboardTab() {
         </Card>
       )}
 
-      {/* Practice Report at top — until notes are saved, then it moves to the bottom */}
+      {/* Club report */}
       {reportCard}
 
       {/* Last Two Sessions Comparison */}
@@ -1601,13 +1481,13 @@ export function PracticeDashboardTab() {
                         <tr>
                           <th className="min-w-[140px]">Metric</th>
                           <th className="min-w-[100px]">Current</th>
-                          <th className="min-w-[60px]">Status</th>
                           <th className="min-w-[100px]">Previous</th>
-                          <th className="min-w-[60px]">Trend</th>
                           <th className="min-w-[100px]">Target</th>
-                          <th className="min-w-[90px]" title="% of shots within 5% of target band (current session)">In ±5%</th>
-                          <th className="min-w-[110px]" title="Change in In ±5% vs the average of the previous 2 sessions">vs Last 2</th>
-                          <th className="min-w-[110px]" title="Change in In ±5% vs the average across all sessions">vs All</th>
+                          <th className="min-w-[60px]">Status</th>
+                          <th className="min-w-[60px]">Trend</th>
+                          <th className="min-w-[90px]" title="Current session shots inside the metric tolerance window">In Target</th>
+                          <th className="min-w-[110px]" title="Change in In Target vs the average of the previous 2 sessions">vs Last 2</th>
+                          <th className="min-w-[110px]" title="Change in In Target vs the average across all sessions">vs All</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1615,21 +1495,22 @@ export function PracticeDashboardTab() {
                           const currentValue = getSessionMetricValue(currentSession, metric.id);
                           const previousValue = getSessionMetricValue(previousSession, metric.id);
                           const olderValues = olderSessions.map(s => getSessionMetricValue(s, metric.id));
+                          const tolerancePct = toleranceForMetric(metric.category);
 
-                          const currentStatus = calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter);
+                          const currentStatus = calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
                           const trend = calculateTrend(currentValue, [previousValue, ...olderValues], metric.higherIsBetter);
-                          const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax);
+                          const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct);
 
                           // Average within-5% across the previous 2 sessions
                           const prev2Values = prev2SessionIds
-                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax))
+                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
                             .filter((v): v is number => v !== null);
                           const prev2Avg = prev2Values.length ? prev2Values.reduce((a, b) => a + b, 0) / prev2Values.length : null;
 
                           // Average within-5% across ALL sessions except current
                           const allOtherValues = allSessionIds
                             .filter(id => id !== currentSession?.id)
-                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax))
+                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
                             .filter((v): v is number => v !== null);
                           const allAvg = allOtherValues.length ? allOtherValues.reduce((a, b) => a + b, 0) / allOtherValues.length : null;
 
@@ -1642,25 +1523,25 @@ export function PracticeDashboardTab() {
                                   <span className="text-muted-foreground ml-1">{metric.unit}</span>
                                 )}
                               </td>
-                              <td className="text-center">
-                                <span className="text-lg">{getStatusEmoji(currentStatus)}</span>
-                              </td>
                               <td className="text-muted-foreground">
                                 {previousValue?.valueDisplay || '–'}
                                 {metric.unit && previousValue?.valueDisplay && (
                                   <span className="ml-1">{metric.unit}</span>
                                 )}
                               </td>
-                              <td className="text-center">
-                                <div className="flex items-center justify-center" title={`Trend: ${trend}`}>
-                                  {getTrendIcon(trend)}
-                                </div>
-                              </td>
                               <td className="text-muted-foreground">
                                 {metric.targetDisplay}
                                 {metric.unit && metric.targetDisplay !== '–' && (
                                   <span className="ml-1">{metric.unit}</span>
                                 )}
+                              </td>
+                              <td className="text-center">
+                                <span className="text-lg" title={`${tolerancePct}% tolerance`}>{getStatusEmoji(currentStatus)}</span>
+                              </td>
+                              <td className="text-center">
+                                <div className="flex items-center justify-center" title={`Trend: ${trend}`}>
+                                  {getTrendIcon(trend)}
+                                </div>
                               </td>
                               <td className="text-center text-sm">
                                 {withinTarget === null ? (
@@ -1730,7 +1611,7 @@ export function PracticeDashboardTab() {
                           const statuses = session.metrics.map(m => {
                             const target = config.metrics.find(t => t.id === m.metricId);
                             if (!target) return null;
-                            return calculateStatus(m, target.targetMin, target.targetMax, target.higherIsBetter);
+                            return calculateStatus(m, target.targetMin, target.targetMax, target.higherIsBetter, toleranceForMetric(target.category));
                           }).filter(Boolean);
                           
                           const greenCount = statuses.filter(s => s === 'green').length;
@@ -1775,166 +1656,34 @@ export function PracticeDashboardTab() {
                   </div>
                 );
               })}
+              {currentSession && (
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Latest Session Notes</label>
+                    <Button
+                      size="sm"
+                      variant={reportNotesDirty ? 'default' : 'outline'}
+                      disabled={!reportNotesDirty}
+                      onClick={async () => {
+                        await updatePracticeSession(currentSession.id, { notes: reportNotes });
+                        setReportNotesDirty(false);
+                      }}
+                    >
+                      Save notes
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={reportNotes}
+                    onChange={(e) => { setReportNotes(e.target.value); setReportNotesDirty(true); }}
+                    placeholder="What worked, what did not, swing thoughts, conditions..."
+                    rows={4}
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
-
-
-
-      {/* Add Club/Shot Dialog */}
-      <Dialog open={isAddClubOpen} onOpenChange={setIsAddClubOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Club/Shot Configuration</DialogTitle>
-            <DialogDescription>
-              Select a club, shot type, and power level, then set your target metrics.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            {/* Club/Shot/Power Selection */}
-            <div className="flex flex-wrap gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Club</label>
-                <Select value={newClubSelection} onValueChange={setNewClubSelection}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Select club" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRACTICE_CLUBS.map(club => (
-                      <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Shot Type</label>
-                <Select value={newShotTypeSelection} onValueChange={setNewShotTypeSelection}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getEnabledShotTypesForClub(newClubSelection).map(type => (
-                      <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Power</label>
-                <Select value={newPowerSelection} onValueChange={setNewPowerSelection}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select power" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getEnabledPowersForClub(newClubSelection, newShotTypeSelection).map(power => (
-                      <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Target Metrics */}
-            {Object.entries(groupedMetrics).map(([category, metrics]) => (
-              <div key={category} className="space-y-2">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  {CATEGORY_LABELS[category] || category}
-                </h4>
-                <div className="grid gap-2">
-                  {metrics.map(metric => (
-                    <div key={metric.id} className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm">{metric.metricName}</span>
-                      {metric.id === 'bias_direction' ? (
-                        <Input
-                          type="text"
-                          placeholder="e.g. Draw, Fade, Neutral"
-                          value={newClubTargets[metric.id]?.min ?? ''}
-                          onChange={(e) => setNewClubTargets(prev => ({
-                            ...prev,
-                            [metric.id]: { min: e.target.value, max: e.target.value }
-                          }))}
-                          className="h-8 col-span-2"
-                        />
-                      ) : (
-                        <>
-                          <Input
-                            type="text"
-                            placeholder="Min"
-                            value={newClubTargets[metric.id]?.min ?? ''}
-                            onChange={(e) => setNewClubTargets(prev => ({
-                              ...prev,
-                              [metric.id]: { ...prev[metric.id], min: e.target.value }
-                            }))}
-                            className="h-8"
-                          />
-                          <Input
-                            type="text"
-                            placeholder="Max"
-                            value={newClubTargets[metric.id]?.max ?? ''}
-                            onChange={(e) => setNewClubTargets(prev => ({
-                              ...prev,
-                              [metric.id]: { ...prev[metric.id], max: e.target.value }
-                            }))}
-                            className="h-8"
-                          />
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter className="flex justify-between sm:justify-between">
-            <div>
-              {hasStoredConfig(currentConfigKey) && (
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  onClick={() => {
-                    setIsAddClubOpen(false);
-                    setIsDeleteConfirmOpen(true);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsAddClubOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveClubConfig}>
-                Save Configuration
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Club/Shot Configuration?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will delete the saved targets for "{getConfigDisplayName(currentConfigKey)}". 
-              The configuration will be reset to defaults. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteClubConfig} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Shot Management Dialog */}
       <ShotManagementDialog
         open={isShotManagementOpen}
@@ -1999,7 +1748,7 @@ function getShotMetricValue(metricId: string, shot: { metrics: Record<string, un
   }
 }
 
-// % of shots within 5% of the target band [targetMin, targetMax].
+// % of shots within the configured tolerance around the target band [targetMin, targetMax].
 // Special case for variation metrics: % of shots whose carry/total falls within a
 // window of width = target band (e.g. 20m, 30m), centred on the session mean.
 // Returns null when not computable (no shots, no target, or metric is aggregate-only).
@@ -2008,6 +1757,7 @@ function pctWithinTarget(
   shots: Array<{ metrics: Record<string, unknown> }>,
   targetMin: number | null,
   targetMax: number | null,
+  tolerancePct = 5,
 ): number | null {
   if (!shots || shots.length === 0) return null;
   if (targetMin === null && targetMax === null) return null;
@@ -2031,8 +1781,7 @@ function pctWithinTarget(
 
   const tMin = targetMin ?? targetMax!;
   const tMax = targetMax ?? targetMin!;
-  // 5% tolerance based on the larger absolute target bound
-  const tol = Math.max(Math.abs(tMin), Math.abs(tMax)) * 0.05;
+  const tol = Math.max(Math.abs(tMin), Math.abs(tMax)) * (tolerancePct / 100);
   const lo = Math.min(tMin, tMax) - tol;
   const hi = Math.max(tMin, tMax) + tol;
 
@@ -2048,7 +1797,7 @@ function pctWithinTarget(
   return Math.round((hits / considered) * 100);
 }
 
-// Render a comparison delta for "In ±5%" (higher = better). Green up = better, red down = worse.
+// Render a comparison delta for "In Target" (higher = better). Green up = better, red down = worse.
 function renderDelta(current: number | null, baseline: number | null): JSX.Element {
   if (current === null || baseline === null) {
     return <span className="text-muted-foreground">–</span>;
@@ -2280,6 +2029,10 @@ function buildClubPracticeReport(
   allSessions: PracticeSession[],
   shotsBySession: Record<string, Array<{ metrics: Record<string, unknown>; excluded: boolean }>>,
   configKey: string,
+  courseShots: Array<{ club: string; date: Date; endLie: string }>,
+  distanceTolerancePct: number,
+  ballFlightTolerancePct: number,
+  otherTolerancePct: number,
 ): PracticeReport {
   const clubName = (() => {
     try { return getConfigDisplayName(configKey); } catch { return configKey; }
@@ -2302,6 +2055,15 @@ function buildClubPracticeReport(
   const currentShots = (shotsBySession[currentSession.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>;
   const prevSessions = allSessions.filter(s => s.id !== currentSession.id);
   const prev2 = prevSessions.slice(0, 2);
+  const [baseClub] = configKey.split('_');
+  const matchingCourseShots = courseShots.filter(shot => getClubConfigId(shot.club) === baseClub);
+  const roundCount = new Set(courseShots.map(shot => format(shot.date, 'yyyy-MM-dd'))).size;
+  const coursePerRound = roundCount ? matchingCourseShots.length / roundCount : 0;
+  const safeCourseShots = matchingCourseShots.filter(shot => {
+    const lie = shot.endLie.toLowerCase();
+    return lie.includes('fairway') || lie.includes('green') || lie.includes('fringe') || lie.includes('hole');
+  }).length;
+  const dependability = matchingCourseShots.length ? Math.round((safeCourseShots / matchingCourseShots.length) * 100) : null;
 
   type MetricLine = {
     name: string;
@@ -2316,17 +2078,18 @@ function buildClubPracticeReport(
   const lines: MetricLine[] = [];
   for (const metric of config.metrics) {
     const v = getVal(currentSession, metric.id);
-    const status = v ? calculateStatus(v, metric.targetMin, metric.targetMax, metric.higherIsBetter) : 'amber';
-    const cur = pctWithinTarget(metric.id, currentShots, metric.targetMin, metric.targetMax);
+    const tolerancePct = getMetricTolerancePct(metric.category, distanceTolerancePct, ballFlightTolerancePct, otherTolerancePct);
+    const status = v ? calculateStatus(v, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct) : 'amber';
+    const cur = pctWithinTarget(metric.id, currentShots, metric.targetMin, metric.targetMax, tolerancePct);
     if (cur === null) continue;
 
     const prev2Vals = prev2
-      .map(s => pctWithinTarget(metric.id, (shotsBySession[s.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax))
+      .map(s => pctWithinTarget(metric.id, (shotsBySession[s.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
       .filter((x): x is number => x !== null);
     const prev2Avg = prev2Vals.length ? prev2Vals.reduce((a, b) => a + b, 0) / prev2Vals.length : null;
 
     const histVals = prevSessions
-      .map(s => pctWithinTarget(metric.id, (shotsBySession[s.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax))
+      .map(s => pctWithinTarget(metric.id, (shotsBySession[s.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
       .filter((x): x is number => x !== null);
     const histBest = histVals.length ? Math.max(...histVals) : null;
 
@@ -2352,7 +2115,8 @@ function buildClubPracticeReport(
     for (const metric of config.metrics) {
       const v = getVal(currentSession, metric.id);
       if (!v) continue;
-      const status = calculateStatus(v, metric.targetMin, metric.targetMax, metric.higherIsBetter);
+      const tolerancePct = getMetricTolerancePct(metric.category, distanceTolerancePct, ballFlightTolerancePct, otherTolerancePct);
+      const status = calculateStatus(v, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
       if (status === 'green') green++;
       else if (status === 'amber') amber++;
       else if (status === 'red') red++;
@@ -2389,6 +2153,21 @@ function buildClubPracticeReport(
   const bullets: PracticeReportBullet[] = [];
   const list = (arr: MetricLine[], fn: (l: MetricLine) => string) =>
     arr.map(fn).join(arr.length === 2 ? ' and ' : ', ');
+
+  if (matchingCourseShots.length) {
+    bullets.push({
+      label: 'Course use',
+      text: `${clubName} shows up about ${coursePerRound.toFixed(1)} time${coursePerRound === 1 ? '' : 's'} per round across ${matchingCourseShots.length} on-course shots, so this practice has ${coursePerRound >= 1 ? 'high' : coursePerRound >= 0.4 ? 'medium' : 'lower'} playing relevance.`,
+      tone: coursePerRound >= 1 ? 'negative' : 'neutral',
+    });
+    bullets.push({
+      label: 'Dependability',
+      text: dependability === null
+        ? 'There is not enough on-course outcome data to judge dependability yet.'
+        : `${dependability}% of on-course shots finished in a playable result, so use the practice metrics alongside that real-course reliability.`,
+      tone: dependability !== null && dependability >= 65 ? 'positive' : dependability !== null && dependability < 45 ? 'negative' : 'neutral',
+    });
+  }
 
   if (improved.length) {
     bullets.push({

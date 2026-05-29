@@ -118,7 +118,12 @@ export function PracticeTab() {
       </div>
 
       <TabsContent value="full-swing" className="mt-0">
-        {fullSwingTab === 'summary' && <PracticeSummaryTab onOpenLog={openLog} />}
+        {fullSwingTab === 'summary' && (
+          <PracticeSummaryTab
+            onOpenLog={openLog}
+            onAddClubShot={() => setFullSwingTab('types')}
+          />
+        )}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
         {fullSwingTab === 'types' && (

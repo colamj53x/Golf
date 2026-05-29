@@ -87,11 +87,30 @@ const SETTINGS_SECTIONS = [
 ];
 
 export function SettingsTab() {
-  const { clubs, setClubs, deleteClub, distanceToTargetTolerance, setDistanceToTargetTolerance, lowTargetExclusionThreshold, setLowTargetExclusionThreshold, gappingHcpTarget, setGappingHcpTarget } = useGolfData();
+  const {
+    clubs,
+    setClubs,
+    deleteClub,
+    distanceToTargetTolerance,
+    setDistanceToTargetTolerance,
+    lowTargetExclusionThreshold,
+    setLowTargetExclusionThreshold,
+    gappingHcpTarget,
+    setGappingHcpTarget,
+    practiceDistanceTolerancePct,
+    setPracticeDistanceTolerancePct,
+    practiceBallFlightTolerancePct,
+    setPracticeBallFlightTolerancePct,
+    practiceOtherTolerancePct,
+    setPracticeOtherTolerancePct,
+  } = useGolfData();
   const [editingClubs, setEditingClubs] = useState<ClubConfig[]>(clubs);
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
   const [editingGappingHcpTarget, setEditingGappingHcpTarget] = useState(gappingHcpTarget);
+  const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
+  const [editingPracticeBallFlightTolerancePct, setEditingPracticeBallFlightTolerancePct] = useState(practiceBallFlightTolerancePct);
+  const [editingPracticeOtherTolerancePct, setEditingPracticeOtherTolerancePct] = useState(practiceOtherTolerancePct);
   const [isEditing, setIsEditing] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newClub, setNewClub] = useState<Omit<ClubConfig, 'id'>>(DEFAULT_NEW_CLUB);
@@ -107,6 +126,9 @@ export function SettingsTab() {
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
     setGappingHcpTarget(editingGappingHcpTarget);
+    setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
+    setPracticeBallFlightTolerancePct(editingPracticeBallFlightTolerancePct);
+    setPracticeOtherTolerancePct(editingPracticeOtherTolerancePct);
     setIsEditing(false);
     toast.success('Settings saved successfully');
   };
@@ -138,6 +160,9 @@ export function SettingsTab() {
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
     setEditingGappingHcpTarget(gappingHcpTarget);
+    setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
+    setEditingPracticeBallFlightTolerancePct(practiceBallFlightTolerancePct);
+    setEditingPracticeOtherTolerancePct(practiceOtherTolerancePct);
     setIsEditing(false);
     toast.info('Changes reverted');
   };
@@ -255,6 +280,54 @@ export function SettingsTab() {
             />
             <span className="text-sm text-muted-foreground">
               Exclude shots from distance calcs if target is this % below stock distance (for punches/chips)
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="practiceDistanceTolerancePct" className="whitespace-nowrap min-w-[200px]">
+              Practice Distance Tolerance (%)
+            </Label>
+            <Input
+              id="practiceDistanceTolerancePct"
+              type="number"
+              value={editingPracticeDistanceTolerancePct}
+              onChange={(e) => setEditingPracticeDistanceTolerancePct(parseFloat(e.target.value) || 0)}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Status tolerance for carry, total, and distance variation metrics
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="practiceBallFlightTolerancePct" className="whitespace-nowrap min-w-[200px]">
+              Ball-Flight Tolerance (%)
+            </Label>
+            <Input
+              id="practiceBallFlightTolerancePct"
+              type="number"
+              value={editingPracticeBallFlightTolerancePct}
+              onChange={(e) => setEditingPracticeBallFlightTolerancePct(parseFloat(e.target.value) || 0)}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Status tolerance for launch, height, spin-style, and direction metrics
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="practiceOtherTolerancePct" className="whitespace-nowrap min-w-[200px]">
+              Other Practice Tolerance (%)
+            </Label>
+            <Input
+              id="practiceOtherTolerancePct"
+              type="number"
+              value={editingPracticeOtherTolerancePct}
+              onChange={(e) => setEditingPracticeOtherTolerancePct(parseFloat(e.target.value) || 0)}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Status tolerance for dispersion, swing, and tempo metrics
             </span>
           </div>
         </CardContent>

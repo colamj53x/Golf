@@ -23,6 +23,12 @@ interface GolfDataContextType {
   setLowTargetExclusionThreshold: React.Dispatch<React.SetStateAction<number>>;
   gappingHcpTarget: number;
   setGappingHcpTarget: React.Dispatch<React.SetStateAction<number>>;
+  practiceDistanceTolerancePct: number;
+  setPracticeDistanceTolerancePct: React.Dispatch<React.SetStateAction<number>>;
+  practiceBallFlightTolerancePct: number;
+  setPracticeBallFlightTolerancePct: React.Dispatch<React.SetStateAction<number>>;
+  practiceOtherTolerancePct: number;
+  setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   refreshShots: () => Promise<void>;
 }
 
@@ -50,6 +56,21 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('golf-gapping-hcp-target');
     return saved ? parseFloat(saved) : 10;
   });
+
+  const [practiceDistanceTolerancePct, setPracticeDistanceTolerancePct] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-practice-distance-tolerance-pct');
+    return saved ? parseFloat(saved) : 10;
+  });
+
+  const [practiceBallFlightTolerancePct, setPracticeBallFlightTolerancePct] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-practice-ball-flight-tolerance-pct');
+    return saved ? parseFloat(saved) : 5;
+  });
+
+  const [practiceOtherTolerancePct, setPracticeOtherTolerancePct] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-practice-other-tolerance-pct');
+    return saved ? parseFloat(saved) : 10;
+  });
   
   const [shots, setShots] = useState<Shot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +90,18 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('golf-gapping-hcp-target', gappingHcpTarget.toString());
   }, [gappingHcpTarget]);
+
+  useEffect(() => {
+    localStorage.setItem('golf-practice-distance-tolerance-pct', practiceDistanceTolerancePct.toString());
+  }, [practiceDistanceTolerancePct]);
+
+  useEffect(() => {
+    localStorage.setItem('golf-practice-ball-flight-tolerance-pct', practiceBallFlightTolerancePct.toString());
+  }, [practiceBallFlightTolerancePct]);
+
+  useEffect(() => {
+    localStorage.setItem('golf-practice-other-tolerance-pct', practiceOtherTolerancePct.toString());
+  }, [practiceOtherTolerancePct]);
 
   const loadShots = useCallback(async () => {
     if (!user) {
@@ -174,6 +207,12 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setLowTargetExclusionThreshold,
       gappingHcpTarget,
       setGappingHcpTarget,
+      practiceDistanceTolerancePct,
+      setPracticeDistanceTolerancePct,
+      practiceBallFlightTolerancePct,
+      setPracticeBallFlightTolerancePct,
+      practiceOtherTolerancePct,
+      setPracticeOtherTolerancePct,
       refreshShots
     }}>
       {children}
