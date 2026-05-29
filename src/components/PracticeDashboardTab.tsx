@@ -904,49 +904,47 @@ export function PracticeDashboardTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="flex flex-wrap gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Club</label>
-                <Select value={selectedClub} onValueChange={setSelectedClub}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Select club" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRACTICE_CLUBS.map(club => (
-                      <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Shot Type</label>
-                <Select value={selectedShotType} onValueChange={setSelectedShotType}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getEnabledShotTypesForClub(selectedClub).map(type => (
-                      <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Power</label>
-                <Select value={selectedPower} onValueChange={setSelectedPower}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select power" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
-                      <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Club</label>
+              <Select value={selectedClub} onValueChange={setSelectedClub}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Select club" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRACTICE_CLUBS.map(club => (
+                    <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Shot Type</label>
+              <Select value={selectedShotType} onValueChange={setSelectedShotType}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getEnabledShotTypesForClub(selectedClub).map(type => (
+                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Power</label>
+              <Select value={selectedPower} onValueChange={setSelectedPower}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Select power" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
+                    <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
