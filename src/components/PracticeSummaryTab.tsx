@@ -1,7 +1,7 @@
 import { useMemo, useState, Fragment } from 'react';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -47,6 +47,7 @@ type SortKey =
   | 'club'
   | 'shot'
   | 'last'
+  | 'priority'
   | 'carry'
   | 'total'
   | 'reliance'
@@ -121,6 +122,78 @@ function metricValueClass(isPrimary: boolean): string {
       ? 'border-green-600 bg-green-50 text-green-800'
       : 'border-transparent bg-transparent text-foreground',
   );
+}
+
+type PriorityLevel = 'high' | 'medium' | 'low' | 'none';
+
+function priorityBadgeClass(level: PriorityLevel): string {
+  if (level === 'high') return 'border-red-600 bg-red-50 text-red-800 hover:bg-red-50';
+  if (level === 'medium') return 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
+  if (level === 'low') return 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50';
+  return 'border-muted bg-muted/40 text-muted-foreground hover:bg-muted/40';
+}
+
+function priorityLabel(level: PriorityLevel): string {
+  if (level === 'high') return 'High';
+  if (level === 'medium') return 'Med';
+  if (level === 'low') return 'Low';
+  return 'No data';
+}
+
+function prioritySignal(row: SummaryRow): { level: PriorityLevel; score: number | null; title: string } {
+  const reliance = row.reliancePerRound ?? 0;
+  const hasAnySignal =
+    row.courseShotCount > 0 ||
+    row.last20Score !== null ||
+    row.lastPracticed !== null ||
+    row.last3PracticeScore !== null;
+
+  if (!hasAnySignal) {
+    return { level: 'none', score: null, title: 'No course or practice signal yet' };
+  }
+
+  let confidenceRisk = 0;
+  if (row.last20Score === null) {
+    confidenceRisk = reliance >= 0.25 ? 1 : 0;
+  } else if (row.last20Score < 40) {
+    confidenceRisk = 3;
+  } else if (row.last20Score < 65) {
+    confidenceRisk = 2;
+  }
+
+  let recencyRisk = 0;
+  if (row.lastPracticed === null) {
+    recencyRisk = reliance >= 0.25 ? 2 : 1;
+  } else {
+    const days = differenceInCalendarDays(new Date(), row.lastPracticed);
+    if (days > 62) recencyRisk = 2;
+    else if (days > 31) recencyRisk = 1;
+  }
+
+  let practiceRisk = 0;
+  if (row.last3PracticeScore === null) {
+    practiceRisk = reliance >= 0.25 ? 1 : 0;
+  } else if (row.last3PracticeScore < 60) {
+    practiceRisk = 2;
+  } else if (row.last3PracticeScore < 80) {
+    practiceRisk = 1;
+  }
+
+  const risk = confidenceRisk + recencyRisk + practiceRisk;
+  const relianceBoost = reliance >= 1 ? 1.25 : reliance >= 0.5 ? 1 : reliance >= 0.25 ? 0.75 : 0.35;
+  const score = risk * relianceBoost;
+  const level: PriorityLevel =
+    (reliance >= 1 && risk >= 4) || (reliance >= 0.5 && risk >= 5)
+      ? 'high'
+      : (reliance >= 0.25 && risk >= 2) || score >= 2.5
+        ? 'medium'
+        : 'low';
+
+  return {
+    level,
+    score,
+    title: `${priorityLabel(level)} priority · ${reliance.toFixed(1)} shots/round, confidence risk ${confidenceRisk}, recency risk ${recencyRisk}, practice risk ${practiceRisk}`,
+  };
 }
 
 function shotSafeScore(shot: Shot): boolean {
@@ -423,6 +496,8 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
             b.lastPracticed?.getTime() ?? null,
             dir,
           );
+        case 'priority':
+          return nullsLast(prioritySignal(a).score, prioritySignal(b).score, dir);
         case 'carry':
           return nullsLast(a.carryAvg, b.carryAvg, dir);
         case 'total':
@@ -444,7 +519,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     } else {
       setSortKey(key);
       // Default direction: alpha/club asc, numerics desc
-      setSortDir(['carry', 'total', 'reliance', 'last20', 'last3', 'last'].includes(key) ? 'desc' : 'asc');
+      setSortDir(['carry', 'total', 'reliance', 'last20', 'last3', 'last', 'priority'].includes(key) ? 'desc' : 'asc');
     }
   }
 
@@ -488,31 +563,30 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
     <Card>
       <CardHeader>
         <CardTitle>Practice Summary</CardTitle>
-        <CardDescription>
-          One line per gapping shot option. Distance and consistency come from practice logs; course use comes from on-course shots.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         {sortedRows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-auto min-w-[700px] text-sm border-separate border-spacing-0">
+            <table className="w-auto min-w-[820px] text-sm border-separate border-spacing-0">
               <colgroup>
-                <col className="w-32" />
-                <col className="w-24" />
+                <col className="w-36" />
                 <col className="w-28" />
-                <col className="w-16" />
-                <col className="w-16" />
-                <col className="w-16" />
+                <col className="w-28" />
                 <col className="w-24" />
-                <col className="w-24" />
+                <col className="w-20" />
+                <col className="w-20" />
+                <col className="w-20" />
+                <col className="w-28" />
+                <col className="w-28" />
               </colgroup>
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-muted-foreground">
                   <SortHeader label="Club" sKey="club" />
                   <SortHeader label="Shot" sKey="shot" />
                   <SortHeader label="Last" sKey="last" />
+                  <SortHeader label="Priority" sKey="priority" align="center" />
                   <SortHeader label="Reliance" sKey="reliance" align="center" />
                   <SortHeader label="Last 20" sKey="last20" align="center" />
                   <SortHeader label="Last 3" sKey="last3" align="center" />
@@ -520,13 +594,14 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                   <SortHeader label="Carry" sKey="carry" align="right" />
                 </tr>
                 <tr>
-                  <th colSpan={8} className="border-b border-border p-0" />
+                  <th colSpan={9} className="border-b border-border p-0" />
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((row, idx) => {
                   const prev = sortedRows[idx - 1];
                   const primaryMetric = primaryDistanceMetric(row);
+                  const priority = prioritySignal(row);
                   // Only insert a club-group gap when sorted by club
                   const showGap =
                     sortKey === 'club' && prev !== undefined && prev.clubId !== row.clubId;
@@ -535,7 +610,7 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                     <Fragment key={row.configKey}>
                       {showGap && (
                         <tr aria-hidden="true">
-                          <td colSpan={8} className="h-3" />
+                          <td colSpan={9} className="h-3" />
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
@@ -573,6 +648,15 @@ export function PracticeSummaryTab({ onOpenLog }: { onOpenLog?: (configKey: stri
                             className={cn('w-20 justify-center px-2 py-0.5 text-xs leading-none', recencyBadgeClass(row.lastPracticed))}
                           >
                             {row.lastPracticed ? format(row.lastPracticed, 'dd MMM yy') : 'No data'}
+                          </Badge>
+                        </td>
+                        <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                          <Badge
+                            variant="outline"
+                            className={cn('w-16 justify-center px-2 py-0.5 text-xs leading-none', priorityBadgeClass(priority.level))}
+                            title={priority.title}
+                          >
+                            {priorityLabel(priority.level)}
                           </Badge>
                         </td>
                         <td className="py-1.5 px-1.5 text-center whitespace-nowrap tabular-nums">
