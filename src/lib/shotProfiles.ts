@@ -40,6 +40,8 @@ export type ShotProfileMap = Record<string, ShotProfile>;
 const STORAGE_KEY = 'golf_shot_profiles_v1';
 const OLD_COMBOS_KEY = 'practice_enabled_combos_v1';
 const PUNCH_PROFILE_IDS = ['6i_punch_full', '7i_punch_full'];
+const LEGACY_HALF_POWER_IDS = ['730pm', '10pm'];
+const HALF_POWER_ID = '9pm';
 const EVENT = 'golf-shot-profiles-changed';
 
 function profileId(clubId: string, shotType: string, power: string): string {
@@ -86,25 +88,22 @@ function defaultProfiles(): ShotProfileMap {
     makeProfile('7i', 'punch', 'full', ['fairway', 'green']),
     makeProfile('8i', 'full', 'full', ['green']),
     makeProfile('8i', 'bump', 'full', ['green']),
-    makeProfile('8i', 'bump', '9pm', ['green']),
+    makeProfile('8i', 'bump', HALF_POWER_ID, ['green']),
     makeProfile('9i', 'full', 'full', ['green']),
     makeProfile('9i', 'bump', 'full', ['green']),
-    makeProfile('9i', 'bump', '9pm', ['green']),
+    makeProfile('9i', 'bump', HALF_POWER_ID, ['green']),
     makeProfile('pw', 'full', 'full', ['green']),
     makeProfile('gw', 'full', 'full', ['green']),
     makeProfile('sw', 'full', 'full', ['green']),
     makeProfile('pw', 'pitch', 'full', ['green']),
     makeProfile('gw', 'pitch', 'full', ['green']),
     makeProfile('sw', 'pitch', 'full', ['green']),
-    makeProfile('pw', 'pitch', '9pm', ['green']),
-    makeProfile('pw', 'pitch', '730pm', ['green']),
-    makeProfile('gw', 'pitch', '9pm', ['green']),
-    makeProfile('gw', 'pitch', '730pm', ['green']),
-    makeProfile('sw', 'pitch', '9pm', ['green']),
-    makeProfile('sw', 'pitch', '730pm', ['green']),
-    makeProfile('pw', 'chip', '730pm', ['green']),
-    makeProfile('gw', 'chip', '730pm', ['green']),
-    makeProfile('sw', 'chip', '730pm', ['green']),
+    makeProfile('pw', 'pitch', HALF_POWER_ID, ['green']),
+    makeProfile('gw', 'pitch', HALF_POWER_ID, ['green']),
+    makeProfile('sw', 'pitch', HALF_POWER_ID, ['green']),
+    makeProfile('pw', 'chip', HALF_POWER_ID, ['green']),
+    makeProfile('gw', 'chip', HALF_POWER_ID, ['green']),
+    makeProfile('sw', 'chip', HALF_POWER_ID, ['green']),
   ];
 
   return Object.fromEntries(profiles.map((profile) => [profile.id, profile]));
@@ -169,11 +168,44 @@ function enablePunchProfiles(profiles: ShotProfileMap): ShotProfileMap {
   return next;
 }
 
+function normalizeHalfPowerProfiles(profiles: ShotProfileMap): ShotProfileMap {
+  const next = { ...profiles };
+  for (const profile of Object.values(profiles)) {
+    if (!LEGACY_HALF_POWER_IDS.includes(profile.power)) continue;
+
+    const halfId = profileId(profile.clubId, profile.shotType, HALF_POWER_ID);
+    const halfProfile = next[halfId] ?? makeProfile(profile.clubId, profile.shotType, HALF_POWER_ID, profile.targets, false);
+    const shouldCarryForward = profile.enabled || profile.showInPractice || profile.showOnCourse;
+
+    next[halfId] = {
+      ...halfProfile,
+      enabled: halfProfile.enabled || shouldCarryForward,
+      showInPractice: halfProfile.showInPractice || shouldCarryForward,
+      showOnCourse: halfProfile.showOnCourse || shouldCarryForward,
+      targets: halfProfile.targets.length ? halfProfile.targets : profile.targets,
+      targetTotal: halfProfile.targetTotal ?? profile.targetTotal,
+      targetCarry: halfProfile.targetCarry ?? profile.targetCarry,
+      targetSideLeft: halfProfile.targetSideLeft ?? profile.targetSideLeft,
+      targetSideRight: halfProfile.targetSideRight ?? profile.targetSideRight,
+      targetVariationPct: halfProfile.targetVariationPct ?? profile.targetVariationPct,
+      targetQualityCutoff: halfProfile.targetQualityCutoff ?? profile.targetQualityCutoff,
+      targetOverrides: Object.keys(halfProfile.targetOverrides).length ? halfProfile.targetOverrides : profile.targetOverrides,
+    };
+    next[profile.id] = {
+      ...profile,
+      enabled: false,
+      showInPractice: false,
+      showOnCourse: false,
+    };
+  }
+  return next;
+}
+
 function readRaw(): ShotProfileMap {
   const known = allKnownProfiles();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return enablePunchProfiles(migrateOldCombos(known));
+    if (!raw) return normalizeHalfPowerProfiles(enablePunchProfiles(migrateOldCombos(known)));
 
     const stored = JSON.parse(raw) as Partial<ShotProfileMap>;
     const merged = { ...known };
@@ -189,9 +221,9 @@ function readRaw(): ShotProfileMap {
         targetOverrides: profile.targetOverrides ?? merged[id]?.targetOverrides ?? {},
       };
     }
-    return enablePunchProfiles(merged);
+    return normalizeHalfPowerProfiles(enablePunchProfiles(merged));
   } catch {
-    return enablePunchProfiles(migrateOldCombos(known));
+    return normalizeHalfPowerProfiles(enablePunchProfiles(migrateOldCombos(known)));
   }
 }
 
@@ -362,10 +394,15 @@ export function useShotProfiles(): ShotProfileMap {
           ...profile,
         };
       }
-      const migrated = enablePunchProfiles(next);
+      const migrated = normalizeHalfPowerProfiles(enablePunchProfiles(next));
       setShotProfiles(migrated);
       for (const id of PUNCH_PROFILE_IDS) {
         void persistProfile(migrated[id]);
+      }
+      for (const profile of Object.values(migrated)) {
+        if (profile.power === HALF_POWER_ID || LEGACY_HALF_POWER_IDS.includes(profile.power)) {
+          void persistProfile(profile);
+        }
       }
     })();
 

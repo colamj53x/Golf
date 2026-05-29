@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { DrillBankTab } from '@/components/DrillBankTab';
@@ -301,21 +302,35 @@ export function SettingsTab() {
 
 function ShotProfilesCard() {
   const profiles = useShotProfiles();
-  const profileList = Object.values(profiles).sort((a, b) => {
-    const clubA = PRACTICE_CLUBS.findIndex(club => club.id === a.clubId);
-    const clubB = PRACTICE_CLUBS.findIndex(club => club.id === b.clubId);
-    const shotA = SHOT_TYPES.findIndex(shot => shot.id === a.shotType);
-    const shotB = SHOT_TYPES.findIndex(shot => shot.id === b.shotType);
-    const powerA = POWER_OPTIONS.findIndex(power => power.id === a.power);
-    const powerB = POWER_OPTIONS.findIndex(power => power.id === b.power);
-    return clubA - clubB || shotA - shotB || powerA - powerB;
-  });
+  const enabledCountForClub = (clubId: string) => (
+    Object.values(profiles).filter(profile => profile.clubId === clubId && profile.enabled).length
+  );
 
-  const nameFor = (profile: ShotProfile) => ({
-    club: PRACTICE_CLUBS.find(club => club.id === profile.clubId)?.name ?? profile.clubId,
-    shot: SHOT_TYPES.find(shot => shot.id === profile.shotType)?.name ?? profile.shotType,
-    power: POWER_OPTIONS.find(power => power.id === profile.power)?.name ?? profile.power,
-  });
+  const profilesForClubShot = (clubId: string, shotType: string) => (
+    Object.values(profiles)
+      .filter(profile => (
+        profile.clubId === clubId &&
+        profile.shotType === shotType &&
+        POWER_OPTIONS.some(power => power.id === profile.power)
+      ))
+      .sort((a, b) => {
+        const powerA = POWER_OPTIONS.findIndex(power => power.id === a.power);
+        const powerB = POWER_OPTIONS.findIndex(power => power.id === b.power);
+        return powerA - powerB;
+      })
+  );
+
+  const powerNameFor = (powerId: string) => {
+    return POWER_OPTIONS.find(power => power.id === powerId)?.name ?? powerId;
+  };
+
+  const setProfileAvailable = (profile: ShotProfile, checked: boolean) => {
+    updateShotProfile(profile.id, {
+      enabled: checked,
+      showInPractice: checked,
+      showOnCourse: checked,
+    });
+  };
 
   const toggleTarget = (profile: ShotProfile, target: ProfileTarget, checked: boolean) => {
     const next = new Set(profile.targets);
@@ -326,113 +341,87 @@ function ShotProfilesCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Shot Options & Cue Cards</CardTitle>
+        <CardTitle>Club & Shot Selector</CardTitle>
         <CardDescription>
-          One shared list of club/shot/power options for Practice, On Course recommendations, gapping, and reusable cue cards.
+          One shared list of club, shot, and power options. Enabled options appear everywhere: Practice, Club Gapping, and On Course recommendations.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4 grid gap-3 rounded-md border bg-muted/30 p-3 text-sm md:grid-cols-2">
           <div>
-            <span className="font-medium text-foreground">Used for: </span>
-            Practice summary/log options, practice plan selectors, Club Gapping rows, and On Course club selector options.
+            <span className="font-medium text-foreground">Drives: </span>
+            Club and shot selectors across Practice, Club Gapping, and On Course recommendations.
           </div>
           <div>
-            <span className="font-medium text-foreground">Controls: </span>
-            whether a shot exists, where it appears, valid targets, and the short cue text you can reuse on practice cards.
+            <span className="font-medium text-foreground">Enabled means: </span>
+            the option appears everywhere. Target intent controls whether it maps to Green, Fairway, or both.
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="min-w-[90px]">Enabled</th>
-                <th className="min-w-[100px]">Club</th>
-                <th className="min-w-[110px]">Shot</th>
-                <th className="min-w-[90px]">Power</th>
-                <th className="min-w-[120px]">Targets</th>
-                <th className="min-w-[100px]">Practice</th>
-                <th className="min-w-[100px]">On Course</th>
-                <th className="min-w-[220px]">Swing Cue</th>
-                <th className="min-w-[220px]">Pre-shot Cue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {profileList.map(profile => {
-                const names = nameFor(profile);
-                return (
-                  <tr key={profile.id}>
-                    <td>
-                      <Checkbox
-                        checked={profile.enabled}
-                        onCheckedChange={(value) => updateShotProfile(profile.id, {
-                          enabled: !!value,
-                          showInPractice: value === true ? profile.showInPractice || !profile.showOnCourse : false,
-                          showOnCourse: value === true ? profile.showOnCourse || !profile.showInPractice : false,
-                        })}
-                      />
-                    </td>
-                    <td className="font-medium">{names.club}</td>
-                    <td>{names.shot}</td>
-                    <td>{names.power}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-3">
-                        <label className="flex items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={profile.targets.includes('green')}
-                            disabled={!profile.enabled}
-                            onCheckedChange={(value) => toggleTarget(profile, 'green', !!value)}
-                          />
-                          Green
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={profile.targets.includes('fairway')}
-                            disabled={!profile.enabled}
-                            onCheckedChange={(value) => toggleTarget(profile, 'fairway', !!value)}
-                          />
-                          Fairway
-                        </label>
-                      </div>
-                    </td>
-                    <td>
-                      <Checkbox
-                        checked={profile.showInPractice}
-                        disabled={!profile.enabled}
-                        onCheckedChange={(value) => updateShotProfile(profile.id, { showInPractice: !!value })}
-                      />
-                    </td>
-                    <td>
-                      <Checkbox
-                        checked={profile.showOnCourse}
-                        disabled={!profile.enabled}
-                        onCheckedChange={(value) => updateShotProfile(profile.id, { showOnCourse: !!value })}
-                      />
-                    </td>
-                    <td>
-                      <Input
-                        value={profile.technique}
-                        disabled={!profile.enabled}
-                        onChange={(event) => updateShotProfile(profile.id, { technique: event.target.value })}
-                        placeholder="e.g. face first, chest through"
-                        className="h-8 min-w-[210px] text-sm"
-                      />
-                    </td>
-                    <td>
-                      <Input
-                        value={profile.routine}
-                        disabled={!profile.enabled}
-                        onChange={(event) => updateShotProfile(profile.id, { routine: event.target.value })}
-                        placeholder="e.g. pick start line, one rehearsal"
-                        className="h-8 min-w-[210px] text-sm"
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Accordion type="multiple" className="rounded-md border">
+          {PRACTICE_CLUBS.map(club => {
+            const enabledCount = enabledCountForClub(club.id);
+            return (
+              <AccordionItem key={club.id} value={club.id} className="px-4 last:border-b-0">
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex flex-col items-start gap-1 text-left sm:flex-row sm:items-center sm:gap-3">
+                    <span>{club.name}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {enabledCount} enabled option{enabledCount === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4">
+                    {SHOT_TYPES.map(shot => {
+                      const shotProfiles = profilesForClubShot(club.id, shot.id);
+                      if (shotProfiles.length === 0) return null;
+
+                      return (
+                        <div key={shot.id} className="rounded-md border bg-background">
+                          <div className="border-b bg-muted/40 px-3 py-2 font-medium">
+                            {shot.name}
+                          </div>
+                          <div className="divide-y">
+                            {shotProfiles.map(profile => (
+                              <div key={profile.id} className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(120px,1fr)_minmax(220px,auto)] md:items-center">
+                                <label className="flex items-center gap-3">
+                                  <Checkbox
+                                    checked={profile.enabled}
+                                    onCheckedChange={(value) => setProfileAvailable(profile, !!value)}
+                                  />
+                                  <span className="font-medium">{powerNameFor(profile.power)}</span>
+                                  <span className="text-xs text-muted-foreground">Appears everywhere</span>
+                                </label>
+                                <div className="flex flex-wrap gap-3 md:justify-end">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                      checked={profile.targets.includes('green')}
+                                      disabled={!profile.enabled}
+                                      onCheckedChange={(value) => toggleTarget(profile, 'green', !!value)}
+                                    />
+                                    Green
+                                  </label>
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                      checked={profile.targets.includes('fairway')}
+                                      disabled={!profile.enabled}
+                                      onCheckedChange={(value) => toggleTarget(profile, 'fairway', !!value)}
+                                    />
+                                    Fairway
+                                  </label>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       </CardContent>
     </Card>
   );

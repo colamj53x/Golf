@@ -24,9 +24,7 @@ export const SHOT_TYPES = [
 
 export const POWER_OPTIONS = [
   { id: 'full', name: 'Full' },
-  { id: '730pm', name: '7.30' },
-  { id: '9pm', name: '9' },
-  { id: '10pm', name: '10' },
+  { id: '9pm', name: 'Half' },
 ] as const;
 
 export type PracticeClubId = typeof PRACTICE_CLUBS[number]['id'];
