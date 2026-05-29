@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PracticeDashboardTab } from '@/components/PracticeDashboardTab';
 import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
 import { PracticePlanTab } from '@/components/PracticePlanTab';
-import { DrillBankTab } from '@/components/DrillBankTab';
 import { PuttingHome, PuttingSection } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
 import { DriverPracticeView } from '@/components/DriverPracticeView';
@@ -20,8 +19,7 @@ const secondaryNavItems = [
   { value: 'summary', label: 'Summary' },
   { value: 'logs', label: 'Logs' },
   { value: 'plan', label: 'Plan' },
-  { value: 'drills', label: 'Drill Bank' },
-  { value: 'types', label: 'Types' },
+  { value: 'types', label: 'Shot Types' },
 ];
 
 const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
@@ -43,7 +41,7 @@ const fullSwingTiles = [
     view: 'driver' as FullSwingView,
   },
   {
-    title: 'Combines',
+    title: 'Combined Sets',
     description: 'Multi-club practice sets will live here once defined.',
     icon: Layers3,
   },
@@ -123,7 +121,6 @@ export function PracticeTab() {
         {fullSwingTab === 'summary' && <PracticeSummaryTab onOpenLog={openLog} />}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
-        {fullSwingTab === 'drills' && <DrillBankTab />}
         {fullSwingTab === 'types' && (
           <>
             {fullSwingView === 'home' && (

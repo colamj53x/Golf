@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings as SettingsIcon, Save, Pencil, Trash2, Plus } from 'lucide-react';
+import { BookOpen, CircleDot, Dumbbell, Goal, Settings as SettingsIcon, Save, Pencil, Trash2, Plus, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -33,6 +33,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { DrillBankTab } from '@/components/DrillBankTab';
+import { PuttingDrillBankTab } from '@/components/putting/PuttingDrillBankTab';
 
 const CATEGORIES: ClubCategory[] = ['Tee', 'Long Approach', 'Approach', 'Short / Scoring'];
 
@@ -44,6 +46,45 @@ const DEFAULT_NEW_CLUB: Omit<ClubConfig, 'id'> = {
   acceptableSideBand: 8,
   distanceToTargetEnabled: true,
 };
+
+const SETTINGS_SECTIONS = [
+  {
+    href: '#settings-global',
+    title: 'Global Settings',
+    description: 'Calculation rules and gapping targets.',
+    icon: SettingsIcon,
+  },
+  {
+    href: '#settings-clubs',
+    title: 'Club Configuration',
+    description: 'Bag setup and tolerance bands.',
+    icon: SlidersHorizontal,
+  },
+  {
+    href: '#settings-shot-profiles',
+    title: 'Shot Profiles',
+    description: 'Practice and on-course shot options.',
+    icon: Goal,
+  },
+  {
+    href: '#settings-full-swing-drills',
+    title: 'Full Swing Drill Bank',
+    description: 'Technique, baseline, and scored drills.',
+    icon: Dumbbell,
+  },
+  {
+    href: '#settings-putting-drills',
+    title: 'Putting Drill Bank',
+    description: 'Indoor putting sets and scored drills.',
+    icon: CircleDot,
+  },
+  {
+    href: '#settings-definitions',
+    title: 'Definitions',
+    description: 'Metric reference notes.',
+    icon: BookOpen,
+  },
+];
 
 export function SettingsTab() {
   const { clubs, setClubs, deleteClub, distanceToTargetTolerance, setDistanceToTargetTolerance, lowTargetExclusionThreshold, setLowTargetExclusionThreshold, gappingHcpTarget, setGappingHcpTarget } = useGolfData();
@@ -103,8 +144,31 @@ export function SettingsTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {SETTINGS_SECTIONS.map(section => {
+          const Icon = section.icon;
+          return (
+            <a
+              key={section.href}
+              href={section.href}
+              className="rounded-lg border bg-card p-4 text-card-foreground transition hover:border-primary/50 hover:shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-md bg-primary/10 p-2 text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold leading-tight">{section.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{section.description}</p>
+                </div>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+
       {/* Global Settings Card */}
-      <Card>
+      <Card id="settings-global" className="scroll-mt-6">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -197,7 +261,7 @@ export function SettingsTab() {
       </Card>
 
       {/* Club Configuration Card */}
-      <Card>
+      <Card id="settings-clubs" className="scroll-mt-6">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -405,11 +469,19 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      <ShotProfilesCard />
+      <section id="settings-shot-profiles" className="scroll-mt-6">
+        <ShotProfilesCard />
+      </section>
 
+      <section id="settings-full-swing-drills" className="scroll-mt-6">
+        <DrillBankTab />
+      </section>
 
+      <section id="settings-putting-drills" className="scroll-mt-6">
+        <PuttingDrillBankTab />
+      </section>
 
-      <Card>
+      <Card id="settings-definitions" className="scroll-mt-6">
         <CardHeader>
           <CardTitle className="text-lg">Definitions Reference</CardTitle>
         </CardHeader>
