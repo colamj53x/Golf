@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, RoundReflection } from '@/types/golf';
+import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, normalizeClubCode, RoundReflection } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
@@ -181,7 +181,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         .filter((row) => !(row.shot_type === '' && /^\d{4}-\d{2}-\d{2}$/.test(row.start_lie || '') && Number(row.target || 0) === 0 && Number(row.end_distance_from_target || 0) === 0))
         .map((row) => ({
           id: row.id,
-          club: row.club,
+          club: normalizeClubCode(row.club),
           type: row.shot_type || '',
           shotFamily: row.shot_family || '',
           swingEffort: row.swing_effort || '',

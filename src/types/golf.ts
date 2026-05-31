@@ -223,3 +223,18 @@ export const CLUB_CODE_MAP: Record<string, string> = {
   'SW': 'sw',
   'LW': 'lw',
 };
+
+export function normalizeClubCode(club: string): string {
+  const trimmed = club.trim();
+  const normalized = trimmed.toLowerCase();
+
+  if (normalized === 'dr' || normalized === 'driver') return 'Dr';
+  if (/^\d+[a-z]$/.test(normalized)) return normalized.toUpperCase();
+
+  const mapped = Object.entries(CLUB_CODE_MAP)
+    .find(([label]) => label.toLowerCase() === normalized)?.[1];
+
+  if (mapped === 'dr') return 'Dr';
+  if (mapped) return mapped.toUpperCase();
+  return trimmed.substring(0, 10);
+}

@@ -5,7 +5,7 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
 import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
-import { CLUB_CODE_MAP, Shot } from '@/types/golf';
+import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,7 +73,7 @@ type UploadShotInsert = {
 const PENDING_UPLOAD_STORAGE_KEY = 'golf-pending-upload-review-draft';
 
 const CLUB_OPTIONS = [
-  { value: 'DR', label: 'Driver' },
+  { value: 'Dr', label: 'Driver' },
   { value: '5W', label: '5 Wood' },
   { value: '4H', label: '4 Hybrid' },
   { value: '5H', label: '5 Hybrid' },
@@ -128,11 +128,7 @@ const SWING_EFFORT_OPTIONS = [
 ] as const;
 
 function normalizeClub(club: string): string {
-  const trimmed = club.trim();
-  if (/^[0-9]+[a-zA-Z]$/.test(trimmed)) return trimmed.toUpperCase();
-  const mapped = CLUB_CODE_MAP[trimmed] ?? CLUB_CODE_MAP[trimmed.toUpperCase()];
-  if (!mapped) return trimmed.substring(0, 10).toUpperCase();
-  return mapped.toUpperCase();
+  return normalizeClubCode(club);
 }
 
 function getClubId(club: string): string {
@@ -238,7 +234,7 @@ function getUploadShotFingerprint(shot: {
 }): string {
   return [
     shot.shot_date ?? '',
-    shot.club,
+    normalizeClubCode(shot.club),
     shot.shot_type ?? '',
     shot.total ?? '',
     shot.offline ?? '',
