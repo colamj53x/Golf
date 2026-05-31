@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, RoundReflection } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+import type { Database, Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
 import { parseDate } from '@/lib/golfCalculations';
@@ -44,6 +44,26 @@ type RoundReflectionInput = {
   mentalNotes: string;
   courseManagementNotes: string;
 };
+
+const ROUND_REFLECTION_CONFIG_PREFIX = 'round_reflection:';
+
+function isMissingRoundReflectionsTableError(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST205' || error?.code === '42P01';
+}
+
+function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
+  const draft = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    drivingNotes: typeof draft.drivingNotes === 'string' ? draft.drivingNotes : '',
+    ironsNotes: typeof draft.ironsNotes === 'string' ? draft.ironsNotes : '',
+    shortNotes: typeof draft.shortNotes === 'string' ? draft.shortNotes : '',
+    puttingNotes: typeof draft.puttingNotes === 'string' ? draft.puttingNotes : '',
+    mentalNotes: typeof draft.mentalNotes === 'string' ? draft.mentalNotes : '',
+    courseManagementNotes: typeof draft.courseManagementNotes === 'string' ? draft.courseManagementNotes : '',
+  };
+}
 
 const GolfDataContext = createContext<GolfDataContextType | undefined>(undefined);
 
@@ -203,13 +223,37 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id)
         .order('round_date', { ascending: false });
 
-      if (error) {
-        if (error.code === 'PGRST205' || error.code === '42P01') {
-          setRoundReflectionsAvailable(false);
-        }
+      if (error && !isMissingRoundReflectionsTableError(error)) {
         if (import.meta.env.DEV) {
           console.error('Failed to load round reflections:', getUserFriendlyError(error));
         }
+        return;
+      }
+
+      if (isMissingRoundReflectionsTableError(error)) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('practice_configs')
+          .select('id, config_key, metrics, created_at, updated_at')
+          .eq('user_id', user.id)
+          .like('config_key', `${ROUND_REFLECTION_CONFIG_PREFIX}%`)
+          .order('config_key', { ascending: false });
+
+        if (fallbackError) {
+          setRoundReflectionsAvailable(false);
+          if (import.meta.env.DEV) {
+            console.error('Failed to load fallback round reflections:', getUserFriendlyError(fallbackError));
+          }
+          return;
+        }
+
+        setRoundReflectionsAvailable(true);
+        setRoundReflections((fallbackData || []).map((row) => ({
+          id: row.id,
+          roundDate: row.config_key.slice(ROUND_REFLECTION_CONFIG_PREFIX.length),
+          ...parseRoundReflectionDraft(row.metrics),
+          createdAt: new Date(row.created_at),
+          updatedAt: new Date(row.updated_at),
+        })));
         return;
       }
 
@@ -264,10 +308,29 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       .from('round_reflections')
       .upsert(payload, { onConflict: 'user_id,round_date' });
 
-    if (error) {
-      if (error.code === 'PGRST205' || error.code === '42P01') {
+    if (isMissingRoundReflectionsTableError(error)) {
+      const { error: fallbackError } = await supabase
+        .from('practice_configs')
+        .upsert({
+          config_key: `${ROUND_REFLECTION_CONFIG_PREFIX}${roundDate}`,
+          club: '__round_reflection__',
+          shot_type: 'round_reflection',
+          power: roundDate,
+          metrics: updates as unknown as Json,
+          user_id: user.id,
+        }, { onConflict: 'user_id,config_key' });
+
+      if (fallbackError) {
         setRoundReflectionsAvailable(false);
+        throw fallbackError;
       }
+
+      setRoundReflectionsAvailable(true);
+      await loadRoundReflections();
+      return;
+    }
+
+    if (error) {
       throw error;
     }
 

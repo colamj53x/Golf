@@ -137,14 +137,16 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
 
         if (configsError) throw configsError;
 
-        const configs: StoredPracticeConfig[] = (configsData || []).map((row) => ({
-          id: row.id,
-          configKey: row.config_key,
-          club: row.club,
-          shotType: row.shot_type,
-          power: row.power,
-          metrics: row.metrics as unknown as PracticeMetricTarget[],
-        }));
+        const configs: StoredPracticeConfig[] = (configsData || [])
+          .filter((row) => !row.config_key.startsWith('round_reflection:'))
+          .map((row) => ({
+            id: row.id,
+            configKey: row.config_key,
+            club: row.club,
+            shotType: row.shot_type,
+            power: row.power,
+            metrics: row.metrics as unknown as PracticeMetricTarget[],
+          }));
 
         setStoredConfigs(configs);
 
