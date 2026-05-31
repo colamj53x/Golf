@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle, FileText, Trash2, Upload } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useGolfData } from '@/context/GolfDataContext';
@@ -45,6 +45,13 @@ type PendingUploadDraft = {
   skippedCount: number;
   reflectionsByDate: Record<string, RoundReflectionDraft>;
 };
+
+type StoredPendingUploadDraft = PendingUploadDraft & {
+  userId: string;
+  replaceAll: boolean;
+};
+
+const PENDING_UPLOAD_STORAGE_KEY = 'golf-pending-upload-review-draft';
 
 const CLUB_OPTIONS = [
   { value: 'DR', label: 'Driver' },
@@ -234,7 +241,61 @@ export function UploadTab() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<PendingUploadDraft | null>(null);
+  const [hasRestoredPendingUpload, setHasRestoredPendingUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!user || pendingUpload) {
+      setHasRestoredPendingUpload(true);
+      return;
+    }
+
+    const rawDraft = localStorage.getItem(PENDING_UPLOAD_STORAGE_KEY);
+    if (!rawDraft) {
+      setHasRestoredPendingUpload(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(rawDraft) as StoredPendingUploadDraft;
+      if (parsed.userId !== user.id) {
+        setHasRestoredPendingUpload(true);
+        return;
+      }
+
+      setPendingUpload({
+        fileName: parsed.fileName,
+        rows: parsed.rows,
+        skippedCount: parsed.skippedCount,
+        reflectionsByDate: parsed.reflectionsByDate,
+      });
+      setReplaceAll(parsed.replaceAll);
+      setUploadResult({
+        success: false,
+        message: 'Your unsaved upload draft was restored. You can keep reviewing and save again.',
+      });
+    } catch {
+      localStorage.removeItem(PENDING_UPLOAD_STORAGE_KEY);
+    } finally {
+      setHasRestoredPendingUpload(true);
+    }
+  }, [pendingUpload, user]);
+
+  useEffect(() => {
+    if (!hasRestoredPendingUpload) return;
+
+    if (!user || !pendingUpload) {
+      localStorage.removeItem(PENDING_UPLOAD_STORAGE_KEY);
+      return;
+    }
+
+    const payload: StoredPendingUploadDraft = {
+      ...pendingUpload,
+      userId: user.id,
+      replaceAll,
+    };
+    localStorage.setItem(PENDING_UPLOAD_STORAGE_KEY, JSON.stringify(payload));
+  }, [hasRestoredPendingUpload, pendingUpload, replaceAll, user]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -366,6 +427,11 @@ export function UploadTab() {
 
   const acceptedCount = pendingUpload?.rows.filter((row) => row.accepted).length ?? 0;
 
+  const clearPendingUpload = () => {
+    setPendingUpload(null);
+    localStorage.removeItem(PENDING_UPLOAD_STORAGE_KEY);
+  };
+
   const updateRoundReflection = (roundDate: string, next: RoundReflectionDraft) => {
     setPendingUpload((current) => {
       if (!current) return current;
@@ -459,7 +525,7 @@ export function UploadTab() {
         success: true,
         message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${legacyMsg}${reflectionMsg}`,
       });
-      setPendingUpload(null);
+      clearPendingUpload();
       await Promise.all([refreshShots(), refreshRoundReflections()]);
     } catch (error) {
       setUploadResult({
@@ -785,7 +851,7 @@ export function UploadTab() {
               <div className="text-sm text-muted-foreground sm:mr-auto sm:self-center">
                 {acceptedCount} of {pendingUpload.rows.length} shots accepted
               </div>
-              <Button variant="outline" onClick={() => setPendingUpload(null)} disabled={isUploading}>
+              <Button variant="outline" onClick={clearPendingUpload} disabled={isUploading}>
                 Cancel Review
               </Button>
               <Button onClick={() => void commitUpload()} disabled={isUploading || acceptedCount !== pendingUpload.rows.length}>

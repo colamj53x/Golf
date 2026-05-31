@@ -258,7 +258,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       .upsert(payload, { onConflict: 'user_id,round_date' });
 
     if (error) {
-      throw new Error(getUserFriendlyError(error));
+      throw error;
     }
 
     await loadRoundReflections();
