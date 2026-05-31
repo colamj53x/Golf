@@ -259,6 +259,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const latestRoundDateKey = processedData?.latestRoundDateKey;
     if (!userId || !latestRoundDateKey) return;
 
     if (!hasRoundReflectionContent(roundReflectionDraft)) {
@@ -272,7 +273,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
       value: roundReflectionDraft,
     };
     localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify(payload));
-  }, [latestRoundDateKey, roundReflectionDraft, userId]);
+  }, [processedData?.latestRoundDateKey, roundReflectionDraft, userId]);
 
   if (isLoading) {
     return (
