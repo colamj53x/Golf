@@ -21,6 +21,8 @@ interface RoundReflectionEditorProps {
   onSave?: () => Promise<void> | void;
   isSaving?: boolean;
   saveLabel?: string;
+  statusMessage?: string | null;
+  statusTone?: 'default' | 'destructive' | 'muted';
 }
 
 type ReflectionField = {
@@ -85,7 +87,15 @@ export function RoundReflectionEditor({
   onSave,
   isSaving = false,
   saveLabel = 'Save Round Thoughts',
+  statusMessage = null,
+  statusTone = 'muted',
 }: RoundReflectionEditorProps) {
+  const statusClassName = statusTone === 'destructive'
+    ? 'text-destructive'
+    : statusTone === 'default'
+      ? 'text-foreground'
+      : 'text-muted-foreground';
+
   return (
     <Card>
       <CardHeader>
@@ -110,6 +120,9 @@ export function RoundReflectionEditor({
             </div>
           ))}
         </div>
+        {statusMessage && (
+          <p className={`text-sm ${statusClassName}`}>{statusMessage}</p>
+        )}
         {onSave && (
           <div className="flex justify-end">
             <Button onClick={() => void onSave()} disabled={isSaving}>

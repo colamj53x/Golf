@@ -23,11 +23,26 @@ import { analyzeClubPerformance } from '@/lib/clubSummaryGenerator';
 import { ClubSummaryCard } from '@/components/ClubSummaryCard';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { LatestRoundTab } from '@/components/dashboard/LatestRoundTab';
-import { createEmptyRoundReflectionDraft, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
+import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
 }
+
+const ROUND_REFLECTION_DRAFT_STORAGE_KEY = 'golf-dashboard-round-reflection-draft';
+
+type StoredReflectionDraft = {
+  userId: string;
+  roundDate: string;
+  value: {
+    drivingNotes: string;
+    ironsNotes: string;
+    shortNotes: string;
+    puttingNotes: string;
+    mentalNotes: string;
+    courseManagementNotes: string;
+  };
+};
 
 export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const {
@@ -48,6 +63,9 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const [expandedCapabilityCategories, setExpandedCapabilityCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
   const [roundReflectionDraft, setRoundReflectionDraft] = useState(createEmptyRoundReflectionDraft());
   const [isSavingRoundReflection, setIsSavingRoundReflection] = useState(false);
+  const [roundReflectionStatus, setRoundReflectionStatus] = useState<string | null>(null);
+  const [roundReflectionStatusTone, setRoundReflectionStatusTone] = useState<'default' | 'destructive' | 'muted'>('muted');
+  const userId = user?.id ?? null;
 
   const toggleTrendCategory = (categoryKey: string) => {
     setExpandedTrendCategories(prev => {
@@ -191,19 +209,64 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     const latestRoundDateKey = processedData?.latestRoundDateKey;
     if (!latestRoundDateKey) {
       setRoundReflectionDraft(createEmptyRoundReflectionDraft());
+      setRoundReflectionStatus(null);
       return;
     }
 
     const existing = roundReflections.find((reflection) => reflection.roundDate === latestRoundDateKey);
-    setRoundReflectionDraft(existing ? {
+    const remoteDraft = existing ? {
       drivingNotes: existing.drivingNotes,
       ironsNotes: existing.ironsNotes,
       shortNotes: existing.shortNotes,
       puttingNotes: existing.puttingNotes,
       mentalNotes: existing.mentalNotes,
       courseManagementNotes: existing.courseManagementNotes,
-    } : createEmptyRoundReflectionDraft());
-  }, [processedData?.latestRoundDateKey, roundReflections]);
+    } : createEmptyRoundReflectionDraft();
+
+    let localDraft = createEmptyRoundReflectionDraft();
+    if (typeof window !== 'undefined' && userId) {
+      const rawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+      if (rawDraft) {
+        try {
+          const parsed = JSON.parse(rawDraft) as StoredReflectionDraft;
+          if (parsed.userId === userId && parsed.roundDate === latestRoundDateKey) {
+            localDraft = parsed.value;
+          }
+        } catch {
+          localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+        }
+      }
+    }
+
+    const nextDraft = hasRoundReflectionContent(localDraft) ? localDraft : remoteDraft;
+    setRoundReflectionDraft(nextDraft);
+    if (hasRoundReflectionContent(localDraft)) {
+      setRoundReflectionStatus('Local draft restored. Save when you are ready.');
+      setRoundReflectionStatusTone('default');
+    } else if (hasRoundReflectionContent(remoteDraft)) {
+      setRoundReflectionStatus('Saved to dashboard.');
+      setRoundReflectionStatusTone('muted');
+    } else {
+      setRoundReflectionStatus(null);
+    }
+  }, [processedData?.latestRoundDateKey, roundReflections, userId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!userId || !latestRoundDateKey) return;
+
+    if (!hasRoundReflectionContent(roundReflectionDraft)) {
+      localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    const payload: StoredReflectionDraft = {
+      userId,
+      roundDate: latestRoundDateKey,
+      value: roundReflectionDraft,
+    };
+    localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  }, [latestRoundDateKey, roundReflectionDraft, userId]);
 
   if (isLoading) {
     return (
@@ -247,8 +310,18 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const handleSaveRoundReflection = async () => {
     if (!latestRoundDateKey) return;
     setIsSavingRoundReflection(true);
+    setRoundReflectionStatus('Saving round thoughts...');
+    setRoundReflectionStatusTone('muted');
     try {
       await upsertRoundReflection(latestRoundDateKey, roundReflectionDraft);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+      }
+      setRoundReflectionStatus('Round thoughts saved.');
+      setRoundReflectionStatusTone('default');
+    } catch {
+      setRoundReflectionStatus('Save failed. Your text is still kept locally on this device, so you can retry without retyping.');
+      setRoundReflectionStatusTone('destructive');
     } finally {
       setIsSavingRoundReflection(false);
     }
@@ -346,9 +419,15 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
                 title={`Round Thoughts · ${latestRoundDateKey}`}
                 description="Capture what actually happened in the round so future training and feedback can use both the numbers and your own notes."
                 value={roundReflectionDraft}
-                onChange={setRoundReflectionDraft}
+                onChange={(next) => {
+                  setRoundReflectionDraft(next);
+                  setRoundReflectionStatus('Draft saved locally on this device.');
+                  setRoundReflectionStatusTone('default');
+                }}
                 onSave={handleSaveRoundReflection}
                 isSaving={isSavingRoundReflection}
+                statusMessage={roundReflectionStatus}
+                statusTone={roundReflectionStatusTone}
               />
             )}
           </div>
