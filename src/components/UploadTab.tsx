@@ -22,13 +22,13 @@ import {
 
 type UploadReviewRow = {
   id: string;
-  rowNumber: number;
   roundDate: string;
   club: string;
-  roundCategory: string;
+  sourceType: string;
   shotFamily: string;
   swingEffort: string;
-  target: number;
+  targetIntent: string;
+  accepted: boolean;
   total: number;
   side: number;
   startLie: string;
@@ -62,12 +62,9 @@ const CLUB_OPTIONS = [
   { value: 'LW', label: 'Lob Wedge' },
 ] as const;
 
-const ROUND_CATEGORY_OPTIONS = [
-  { value: 'Driving', label: 'Driving' },
-  { value: 'Approach', label: 'Approach' },
-  { value: 'Short', label: 'Short' },
-  { value: 'Recovery', label: 'Recovery' },
-  { value: 'Layup', label: 'Lay Up' },
+const TARGET_INTENT_OPTIONS = [
+  { value: 'fairway', label: 'Fairway' },
+  { value: 'green', label: 'Green' },
 ] as const;
 
 const SHOT_FAMILY_OPTIONS = [
@@ -151,39 +148,32 @@ function inferSwingEffort(shot: Shot, shotFamily: string): string {
   return 'full';
 }
 
-function inferRoundCategory(shot: Shot, shotFamily: string): string {
-  const text = `${shot.type} ${shot.notes}`.toLowerCase();
-  const lie = shot.startLie.toLowerCase();
-  const clubId = getClubId(normalizeClub(shot.club));
-
-  if (text.includes('driv') || (clubId === 'dr' && lie.includes('tee'))) return 'Driving';
-  if (text.includes('recovery') || text.includes('punch') || lie.includes('rough') || lie.includes('tree') || lie.includes('trouble')) {
-    return 'Recovery';
-  }
-  if (shotFamily === 'chip' || shotFamily === 'pitch' || shotFamily === 'bump' || shot.target <= 60) return 'Short';
-  if (text.includes('lay')) return 'Layup';
-  return 'Approach';
+function inferTargetIntent(shot: Shot, shotFamily: string): string {
+  const endLie = shot.endLie.toLowerCase();
+  if (endLie.includes('green') || endLie.includes('fringe') || endLie.includes('hole')) return 'green';
+  if (shotFamily === 'chip' || shotFamily === 'pitch' || shotFamily === 'bump') return 'green';
+  return 'fairway';
 }
 
-function getPredictedLabel(roundCategory: string, shotFamily: string, swingEffort: string): string {
-  return `${roundCategory} · ${getShotFamilyLabel(shotFamily)} · ${getSwingEffortLabel(swingEffort)}`;
+function getPredictedLabel(shotFamily: string, swingEffort: string): string {
+  return `${getShotFamilyLabel(shotFamily)} · ${getSwingEffortLabel(swingEffort)}`;
 }
 
-function buildReviewRow(shot: Shot, rowNumber: number): UploadReviewRow {
+function buildReviewRow(shot: Shot): UploadReviewRow {
   const club = normalizeClub(shot.club);
   const shotFamily = inferShotFamily({ ...shot, club });
   const swingEffort = inferSwingEffort({ ...shot, club }, shotFamily);
-  const roundCategory = inferRoundCategory({ ...shot, club }, shotFamily);
+  const targetIntent = inferTargetIntent({ ...shot, club }, shotFamily);
 
   return {
     id: shot.id,
-    rowNumber,
     roundDate: getShotDateKey(shot.date),
     club,
-    roundCategory,
+    sourceType: shot.type,
     shotFamily,
     swingEffort,
-    target: shot.target,
+    targetIntent,
+    accepted: false,
     total: shot.total,
     side: shot.side,
     startLie: shot.startLie,
@@ -192,7 +182,7 @@ function buildReviewRow(shot: Shot, rowNumber: number): UploadReviewRow {
     shotQuality: shot.shotQuality,
     endDistanceFromTarget: shot.endDistanceFromTarget,
     notes: shot.notes,
-    predictedLabel: getPredictedLabel(roundCategory, shotFamily, swingEffort),
+    predictedLabel: getPredictedLabel(shotFamily, swingEffort),
   };
 }
 
@@ -274,7 +264,7 @@ export function UploadTab() {
       }
 
       const validShots = parsedShots.filter((_, index) => !validationErrors.some((error) => error.row === index + 2));
-      const rows = validShots.map((shot, index) => buildReviewRow(shot, index + 2));
+      const rows = validShots.map((shot) => buildReviewRow(shot));
       const roundDates = [...new Set(rows.map((row) => row.roundDate))];
       const reflectionsByDate = Object.fromEntries(roundDates.map((roundDate) => {
         const existing = roundReflections.find((reflection) => reflection.roundDate === roundDate);
@@ -328,12 +318,15 @@ export function UploadTab() {
           const next = { ...row, ...updates };
           return {
             ...next,
-            predictedLabel: getPredictedLabel(next.roundCategory, next.shotFamily, next.swingEffort),
+            predictedLabel: getPredictedLabel(next.shotFamily, next.swingEffort),
+            accepted: updates.accepted ?? false,
           };
         }),
       };
     });
   };
+
+  const acceptedCount = pendingUpload?.rows.filter((row) => row.accepted).length ?? 0;
 
   const updateRoundReflection = (roundDate: string, next: RoundReflectionDraft) => {
     setPendingUpload((current) => {
@@ -362,10 +355,11 @@ export function UploadTab() {
 
       const dbShots = pendingUpload.rows.map((row) => ({
         club: row.club,
-        shot_type: row.roundCategory,
+        shot_type: row.sourceType,
         shot_family: row.shotFamily,
         swing_effort: row.swingEffort,
-        target: Math.max(0, Math.min(600, row.target)),
+        target_intent: row.targetIntent,
+        target: null,
         total: Math.max(0, Math.min(600, row.total)),
         offline: Math.max(-200, Math.min(200, row.side)),
         start_lie: row.startLie,
@@ -600,43 +594,38 @@ export function UploadTab() {
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/60">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium">Row</th>
-                    <th className="px-3 py-2 text-left font-medium">Date</th>
-                    <th className="px-3 py-2 text-left font-medium">Predicted</th>
                     <th className="px-3 py-2 text-left font-medium">Club</th>
-                    <th className="px-3 py-2 text-left font-medium">Round Type</th>
+                    <th className="px-3 py-2 text-left font-medium">Predicted Shot</th>
+                    <th className="px-3 py-2 text-left font-medium">Target</th>
+                    <th className="px-3 py-2 text-left font-medium">Start Lie</th>
+                    <th className="px-3 py-2 text-left font-medium">End Lie</th>
                     <th className="px-3 py-2 text-left font-medium">Shot Family</th>
                     <th className="px-3 py-2 text-left font-medium">Effort</th>
-                    <th className="px-3 py-2 text-left font-medium">Target</th>
-                    <th className="px-3 py-2 text-left font-medium">Context</th>
+                    <th className="px-3 py-2 text-left font-medium">Accept</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pendingUpload.rows.map((row) => {
                     const availableFamilies = availableShotFamiliesForClub(row.club);
                     return (
-                      <tr key={row.id} className="border-t align-top">
-                        <td className="px-3 py-3 text-muted-foreground">{row.rowNumber}</td>
-                        <td className="px-3 py-3 whitespace-nowrap">{row.roundDate}</td>
+                      <tr key={row.id} className={`border-t align-top ${row.accepted ? 'bg-primary/5' : ''}`}>
+                        <td className="px-3 py-3">
+                          <div className="font-medium">{getClubLabel(row.club)}</div>
+                          <div className="text-xs text-muted-foreground">{row.roundDate}</div>
+                        </td>
                         <td className="px-3 py-3">
                           <div className="font-medium">{row.predictedLabel}</div>
-                          <div className="text-xs text-muted-foreground">{getClubLabel(row.club)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Total {Math.round(row.total)}m • Side {Math.round(row.side)}m
+                          </div>
                         </td>
                         <td className="px-3 py-3">
-                          <Select
-                            value={row.club}
-                            onValueChange={(value) => {
-                              const nextFamily = availableShotFamiliesForClub(value).some((option) => option.value === row.shotFamily)
-                                ? row.shotFamily
-                                : availableShotFamiliesForClub(value)[0]?.value ?? 'full';
-                              updatePendingRow(row.id, { club: value, shotFamily: nextFamily });
-                            }}
-                          >
+                          <Select value={row.targetIntent} onValueChange={(value) => updatePendingRow(row.id, { targetIntent: value })}>
                             <SelectTrigger className="w-[140px]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {CLUB_OPTIONS.map((option) => (
+                              {TARGET_INTENT_OPTIONS.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
                                   {option.label}
                                 </SelectItem>
@@ -645,18 +634,18 @@ export function UploadTab() {
                           </Select>
                         </td>
                         <td className="px-3 py-3">
-                          <Select value={row.roundCategory} onValueChange={(value) => updatePendingRow(row.id, { roundCategory: value })}>
-                            <SelectTrigger className="w-[140px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ROUND_CATEGORY_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            value={row.startLie}
+                            onChange={(event) => updatePendingRow(row.id, { startLie: event.target.value })}
+                            className="w-[140px]"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            value={row.endLie}
+                            onChange={(event) => updatePendingRow(row.id, { endLie: event.target.value })}
+                            className="w-[140px]"
+                          />
                         </td>
                         <td className="px-3 py-3">
                           <Select value={row.shotFamily} onValueChange={(value) => updatePendingRow(row.id, { shotFamily: value })}>
@@ -687,16 +676,12 @@ export function UploadTab() {
                           </Select>
                         </td>
                         <td className="px-3 py-3">
-                          <Input
-                            type="number"
-                            value={row.target}
-                            onChange={(event) => updatePendingRow(row.id, { target: Number(event.target.value) || 0 })}
-                            className="w-[100px]"
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                          <div>{row.startLie} to {row.endLie}</div>
-                          <div>Total {Math.round(row.total)}m • Side {Math.round(row.side)}m</div>
+                          <Button
+                            variant={row.accepted ? 'secondary' : 'outline'}
+                            onClick={() => updatePendingRow(row.id, { accepted: !row.accepted })}
+                          >
+                            {row.accepted ? 'Accepted' : 'Accept'}
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -716,10 +701,13 @@ export function UploadTab() {
             ))}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="text-sm text-muted-foreground sm:mr-auto sm:self-center">
+                {acceptedCount} of {pendingUpload.rows.length} shots accepted
+              </div>
               <Button variant="outline" onClick={() => setPendingUpload(null)} disabled={isUploading}>
                 Cancel Review
               </Button>
-              <Button onClick={() => void commitUpload()} disabled={isUploading}>
+              <Button onClick={() => void commitUpload()} disabled={isUploading || acceptedCount !== pendingUpload.rows.length}>
                 {isUploading ? 'Saving...' : 'Save Reviewed Upload'}
               </Button>
             </div>

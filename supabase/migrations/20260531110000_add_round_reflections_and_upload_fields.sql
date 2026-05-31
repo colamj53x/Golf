@@ -1,6 +1,7 @@
 ALTER TABLE public.shots
   ADD COLUMN IF NOT EXISTS shot_family TEXT,
-  ADD COLUMN IF NOT EXISTS swing_effort TEXT;
+  ADD COLUMN IF NOT EXISTS swing_effort TEXT,
+  ADD COLUMN IF NOT EXISTS target_intent TEXT;
 
 CREATE TABLE IF NOT EXISTS public.round_reflections (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

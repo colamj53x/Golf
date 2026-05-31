@@ -410,6 +410,7 @@ export type Database = {
           start_line: string | null
           strike_quality: string | null
           swing_effort: string | null
+          target_intent: string | null
           target: number | null
           total: number | null
           user_id: string | null
@@ -432,6 +433,7 @@ export type Database = {
           start_line?: string | null
           strike_quality?: string | null
           swing_effort?: string | null
+          target_intent?: string | null
           target?: number | null
           total?: number | null
           user_id?: string | null
@@ -454,6 +456,7 @@ export type Database = {
           start_line?: string | null
           strike_quality?: string | null
           swing_effort?: string | null
+          target_intent?: string | null
           target?: number | null
           total?: number | null
           user_id?: string | null

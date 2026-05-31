@@ -163,6 +163,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           type: row.shot_type || '',
           shotFamily: row.shot_family || '',
           swingEffort: row.swing_effort || '',
+          targetIntent: row.target_intent || '',
           target: row.target || 0,
           total: row.total || 0,
           side: row.offline || 0,

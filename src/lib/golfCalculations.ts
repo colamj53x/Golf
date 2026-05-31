@@ -510,6 +510,7 @@ export function parseCSV(csvContent: string): CSVParseResult {
         type: type.trim(),
         shotFamily: '',
         swingEffort: '',
+        targetIntent: '',
         target: parseNumeric(target),
         total: parseNumeric(distanceHit),
         side: estimateDispersion(dispersion, shotNotes, shape),

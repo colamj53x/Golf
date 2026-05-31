@@ -16,6 +16,7 @@ export interface Shot {
   type: string;              // Shot type (e.g., practice, round)
   shotFamily: string;        // Intended shot family (full, pitch, chip, etc.)
   swingEffort: string;       // Intended effort (full, half, etc.)
+  targetIntent: string;      // Intended destination (fairway or green)
   target: number;            // Distance to hole when taking the shot
   total: number;             // Distance hit (how far the ball traveled)
   side: number;              // Dispersion: positive = right, negative = left
