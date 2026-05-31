@@ -9,7 +9,6 @@ import { CLUB_CODE_MAP, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -65,6 +64,28 @@ const CLUB_OPTIONS = [
 const TARGET_INTENT_OPTIONS = [
   { value: 'fairway', label: 'Fairway' },
   { value: 'green', label: 'Green' },
+] as const;
+
+const START_LIE_OPTIONS = [
+  { value: 'Tee', label: 'Tee' },
+  { value: 'Fairway', label: 'Fairway' },
+  { value: 'Rough', label: 'Rough' },
+  { value: 'Recovery', label: 'Recovery' },
+  { value: 'Sand', label: 'Sand' },
+  { value: 'Green', label: 'Green' },
+] as const;
+
+const END_LIE_OPTIONS = [
+  { value: 'Fairway', label: 'Fairway' },
+  { value: 'Rough', label: 'Rough' },
+  { value: 'Recovery', label: 'Recovery' },
+  { value: 'Sand', label: 'Sand' },
+  { value: 'Green', label: 'Green' },
+  { value: 'Fringe', label: 'Fringe' },
+  { value: 'Hole', label: 'Hole' },
+  { value: 'Penalty', label: 'Penalty' },
+  { value: 'Water', label: 'Water' },
+  { value: 'OB', label: 'OB' },
 ] as const;
 
 const SHOT_FAMILY_OPTIONS = [
@@ -634,18 +655,32 @@ export function UploadTab() {
                           </Select>
                         </td>
                         <td className="px-3 py-3">
-                          <Input
-                            value={row.startLie}
-                            onChange={(event) => updatePendingRow(row.id, { startLie: event.target.value })}
-                            className="w-[140px]"
-                          />
+                          <Select value={row.startLie} onValueChange={(value) => updatePendingRow(row.id, { startLie: value })}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Start lie" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {START_LIE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="px-3 py-3">
-                          <Input
-                            value={row.endLie}
-                            onChange={(event) => updatePendingRow(row.id, { endLie: event.target.value })}
-                            className="w-[140px]"
-                          />
+                          <Select value={row.endLie} onValueChange={(value) => updatePendingRow(row.id, { endLie: value })}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="End lie" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {END_LIE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="px-3 py-3">
                           <Select value={row.shotFamily} onValueChange={(value) => updatePendingRow(row.id, { shotFamily: value })}>
