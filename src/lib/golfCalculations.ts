@@ -314,6 +314,14 @@ export function parseDate(dateStr: string): DateParseResult {
     const isValid = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
     return { date: isValid ? date : new Date(NaN), hadIssue: !isValid, originalValue: trimmed };
   };
+
+  const fromLocalCalendarDate = (value: Date): DateParseResult => {
+    if (Number.isNaN(value.getTime())) {
+      return { date: new Date(NaN), hadIssue: true, originalValue: trimmed };
+    }
+
+    return fromParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  };
   
   // Try YYYY-MM-DD format first
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmed)) {
@@ -321,10 +329,21 @@ export function parseDate(dateStr: string): DateParseResult {
     return fromParts(year, month, day);
   }
 
-  // ParGolf exports full timestamps like "2026-05-23 20:52:16 +0000".
-  const ymdWithTime = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s/);
-  if (ymdWithTime) {
-    return fromParts(Number(ymdWithTime[1]), Number(ymdWithTime[2]), Number(ymdWithTime[3]));
+  // Parse full timestamps with timezone information and normalize them to the
+  // user's local calendar day so an early-morning local round does not end up
+  // grouped under the previous UTC date.
+  const timestampWithZone = trimmed.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*([+-]\d{2}):?(\d{2})$/
+  );
+  if (timestampWithZone) {
+    const [, year, month, day, hour, minute, second = '00', zoneHour, zoneMinute] = timestampWithZone;
+    const isoString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}${zoneHour}:${zoneMinute}`;
+    return fromLocalCalendarDate(new Date(isoString));
+  }
+
+  const isoTimestamp = new Date(trimmed);
+  if (!Number.isNaN(isoTimestamp.getTime()) && /[tT ]\d{1,2}:\d{2}/.test(trimmed)) {
+    return fromLocalCalendarDate(isoTimestamp);
   }
   
   // Try DD/MM/YYYY, D/M/YYYY, DD-MM-YYYY, or D-M-YYYY format
