@@ -180,6 +180,23 @@ function getPredictedLabel(shotFamily: string, swingEffort: string): string {
   return `${getShotFamilyLabel(shotFamily)} · ${getSwingEffortLabel(swingEffort)}`;
 }
 
+function isMissingReviewedUploadSchemaError(error: unknown): boolean {
+  const errorObj = error as { code?: string; message?: string };
+  const code = errorObj?.code ?? '';
+  const message = (errorObj?.message ?? '').toLowerCase();
+
+  return (
+    code === '42P01' ||
+    code === '42703' ||
+    code === 'PGRST204' ||
+    code === 'PGRST205' ||
+    message.includes('schema cache') ||
+    message.includes('could not find the') ||
+    message.includes('column') ||
+    message.includes('round_reflections')
+  );
+}
+
 function buildReviewRow(shot: Shot): UploadReviewRow {
   const club = normalizeClub(shot.club);
   const shotFamily = inferShotFamily({ ...shot, club });
@@ -374,7 +391,7 @@ export function UploadTab() {
         if (deleteError) throw new Error(getUserFriendlyError(deleteError));
       }
 
-      const dbShots = pendingUpload.rows.map((row) => ({
+      const reviewedShots = pendingUpload.rows.map((row) => ({
         club: row.club,
         shot_type: row.sourceType,
         shot_family: row.shotFamily,
@@ -393,25 +410,54 @@ export function UploadTab() {
         user_id: user.id,
       }));
 
+      const legacyShots = reviewedShots.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
+
       const batchSize = 100;
       let insertedCount = 0;
+      let usedLegacyShotInsert = false;
 
-      for (let index = 0; index < dbShots.length; index += batchSize) {
-        const batch = dbShots.slice(index, index + batchSize);
-        const { error } = await supabase.from('shots').insert(batch);
-        if (error) throw new Error(getUserFriendlyError(error));
-        insertedCount += batch.length;
+      for (let index = 0; index < reviewedShots.length; index += batchSize) {
+        const modernBatch = reviewedShots.slice(index, index + batchSize);
+        const legacyBatch = legacyShots.slice(index, index + batchSize);
+
+        const { error } = await supabase.from('shots').insert(usedLegacyShotInsert ? legacyBatch : modernBatch);
+        if (error) {
+          if (!usedLegacyShotInsert && isMissingReviewedUploadSchemaError(error)) {
+            const { error: retryError } = await supabase.from('shots').insert(legacyBatch);
+            if (retryError) throw retryError;
+            usedLegacyShotInsert = true;
+          } else {
+            throw error;
+          }
+        }
+
+        insertedCount += modernBatch.length;
       }
 
+      let skippedReflectionSave = false;
       for (const [roundDate, reflection] of Object.entries(pendingUpload.reflectionsByDate)) {
         if (!hasRoundReflectionContent(reflection)) continue;
-        await upsertRoundReflection(roundDate, reflection);
+        try {
+          await upsertRoundReflection(roundDate, reflection);
+        } catch (error) {
+          if (isMissingReviewedUploadSchemaError(error)) {
+            skippedReflectionSave = true;
+            break;
+          }
+          throw error;
+        }
       }
 
       const skippedMsg = pendingUpload.skippedCount > 0 ? ` (${pendingUpload.skippedCount} invalid shots skipped)` : '';
+      const legacyMsg = usedLegacyShotInsert
+        ? ' Saved the reviewed shots using the existing database fields.'
+        : '';
+      const reflectionMsg = skippedReflectionSave
+        ? ' Round thoughts could not be saved yet because the database is missing the latest reflections table.'
+        : '';
       setUploadResult({
         success: true,
-        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}`,
+        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${legacyMsg}${reflectionMsg}`,
       });
       setPendingUpload(null);
       await Promise.all([refreshShots(), refreshRoundReflections()]);

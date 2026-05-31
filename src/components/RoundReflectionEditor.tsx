@@ -37,8 +37,8 @@ const FIELDS: ReflectionField[] = [
   },
   {
     key: 'ironsNotes',
-    label: 'Irons',
-    placeholder: 'Distance control, contact, start line, and approach patterns.',
+    label: 'Irons and Hybrids',
+    placeholder: 'Distance control, contact, start line, and patterns with irons and hybrids.',
   },
   {
     key: 'shortNotes',

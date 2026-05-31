@@ -25,7 +25,11 @@ export function getUserFriendlyError(error: unknown): string {
   if (code === '23514') return 'Data validation failed. Please check your input.';
   if (code === '42501') return 'Permission denied.';
   if (code === '42P01') return 'Operation failed. Please try again.';
+  if (code === '42703') return 'The app is waiting on a database update. Please try again in a moment.';
   if (code === 'PGRST116') return 'No data found.';
+  if (code === 'PGRST204' || code === 'PGRST205') {
+    return 'The app is waiting on a database update. Please refresh and try again.';
+  }
 
   // Check error message patterns (without exposing details)
   if (message.includes('JWT')) return 'Session expired. Please refresh the page and log in again.';
@@ -33,6 +37,9 @@ export function getUserFriendlyError(error: unknown): string {
   if (message.includes('duplicate')) return 'This record already exists.';
   if (message.includes('foreign key')) return 'Invalid reference to related data.';
   if (message.includes('not null')) return 'Required field is missing.';
+  if (message.toLowerCase().includes('schema cache') || message.toLowerCase().includes('could not find the')) {
+    return 'The app is waiting on a database update. Please refresh and try again.';
+  }
   if (message.includes('permission') || message.includes('denied')) return 'Permission denied.';
   if (message.includes('network') || message.includes('fetch')) return 'Network error. Please check your connection.';
 
