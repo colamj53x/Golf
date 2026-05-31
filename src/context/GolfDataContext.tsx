@@ -30,6 +30,7 @@ interface GolfDataContextType {
   practiceOtherTolerancePct: number;
   setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   roundReflections: RoundReflection[];
+  roundReflectionsAvailable: boolean;
   upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
   refreshRoundReflections: () => Promise<void>;
   refreshShots: () => Promise<void>;
@@ -86,6 +87,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   
   const [shots, setShots] = useState<Shot[]>([]);
   const [roundReflections, setRoundReflections] = useState<RoundReflection[]>([]);
+  const [roundReflectionsAvailable, setRoundReflectionsAvailable] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -190,6 +192,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   const loadRoundReflections = useCallback(async () => {
     if (!user) {
       setRoundReflections([]);
+      setRoundReflectionsAvailable(true);
       return;
     }
 
@@ -201,12 +204,16 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         .order('round_date', { ascending: false });
 
       if (error) {
+        if (error.code === 'PGRST205' || error.code === '42P01') {
+          setRoundReflectionsAvailable(false);
+        }
         if (import.meta.env.DEV) {
           console.error('Failed to load round reflections:', getUserFriendlyError(error));
         }
         return;
       }
 
+      setRoundReflectionsAvailable(true);
       setRoundReflections((data || []).map((row) => ({
         id: row.id,
         roundDate: row.round_date,
@@ -258,9 +265,13 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       .upsert(payload, { onConflict: 'user_id,round_date' });
 
     if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01') {
+        setRoundReflectionsAvailable(false);
+      }
       throw error;
     }
 
+    setRoundReflectionsAvailable(true);
     await loadRoundReflections();
   }, [loadRoundReflections, user]);
 
@@ -300,6 +311,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       practiceOtherTolerancePct,
       setPracticeOtherTolerancePct,
       roundReflections,
+      roundReflectionsAvailable,
       upsertRoundReflection,
       refreshRoundReflections,
       refreshShots

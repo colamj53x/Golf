@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { useGolfData } from '@/context/GolfDataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,6 +46,7 @@ type StoredReflectionDraft = {
 };
 
 export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
+  const { user } = useAuth();
   const {
     clubs,
     shots,
@@ -53,6 +55,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     availableStartLies,
     distanceToTargetTolerance,
     roundReflections,
+    roundReflectionsAvailable,
     upsertRoundReflection,
   } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
@@ -243,13 +246,16 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     if (hasRoundReflectionContent(localDraft)) {
       setRoundReflectionStatus('Local draft restored. Save when you are ready.');
       setRoundReflectionStatusTone('default');
+    } else if (!roundReflectionsAvailable) {
+      setRoundReflectionStatus('Round thoughts database is not available on the live project yet. Your text can still be kept locally on this device.');
+      setRoundReflectionStatusTone('destructive');
     } else if (hasRoundReflectionContent(remoteDraft)) {
       setRoundReflectionStatus('Saved to dashboard.');
       setRoundReflectionStatusTone('muted');
     } else {
       setRoundReflectionStatus(null);
     }
-  }, [processedData?.latestRoundDateKey, roundReflections, userId]);
+  }, [processedData?.latestRoundDateKey, roundReflections, roundReflectionsAvailable, userId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -421,13 +427,16 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
                 value={roundReflectionDraft}
                 onChange={(next) => {
                   setRoundReflectionDraft(next);
-                  setRoundReflectionStatus('Draft saved locally on this device.');
-                  setRoundReflectionStatusTone('default');
+                  setRoundReflectionStatus(roundReflectionsAvailable
+                    ? 'Draft saved locally on this device.'
+                    : 'Draft saved locally on this device. Database save is not available on the live project yet.');
+                  setRoundReflectionStatusTone(roundReflectionsAvailable ? 'default' : 'destructive');
                 }}
-                onSave={handleSaveRoundReflection}
+                onSave={roundReflectionsAvailable ? handleSaveRoundReflection : undefined}
                 isSaving={isSavingRoundReflection}
                 statusMessage={roundReflectionStatus}
                 statusTone={roundReflectionStatusTone}
+                saveLabel="Save Round Thoughts"
               />
             )}
           </div>
