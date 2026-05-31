@@ -1,25 +1,211 @@
-import { useState, useRef } from 'react';
+import { useRef, useState } from 'react';
+import { AlertCircle, CheckCircle, FileText, Trash2, Upload } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useGolfData } from '@/context/GolfDataContext';
+import { supabase } from '@/integrations/supabase/client';
+import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
+import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
+import { CLUB_CODE_MAP, Shot } from '@/types/golf';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, Trash2, FileText, CheckCircle, AlertCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useGolfData } from '@/context/GolfDataContext';
-import { useAuth } from '@/context/AuthContext';
-import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
-import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import {
+  createEmptyRoundReflectionDraft,
+  hasRoundReflectionContent,
+  RoundReflectionDraft,
+  RoundReflectionEditor,
+} from '@/components/RoundReflectionEditor';
+
+type UploadReviewRow = {
+  id: string;
+  rowNumber: number;
+  roundDate: string;
+  club: string;
+  roundCategory: string;
+  shotFamily: string;
+  swingEffort: string;
+  target: number;
+  total: number;
+  side: number;
+  startLie: string;
+  endLie: string;
+  strikeQuality: string;
+  shotQuality: string;
+  endDistanceFromTarget: number;
+  notes: string;
+  predictedLabel: string;
+};
+
+type PendingUploadDraft = {
+  fileName: string;
+  rows: UploadReviewRow[];
+  skippedCount: number;
+  reflectionsByDate: Record<string, RoundReflectionDraft>;
+};
+
+const CLUB_OPTIONS = [
+  { value: 'DR', label: 'Driver' },
+  { value: '5W', label: '5 Wood' },
+  { value: '4H', label: '4 Hybrid' },
+  { value: '5H', label: '5 Hybrid' },
+  { value: '6I', label: '6 Iron' },
+  { value: '7I', label: '7 Iron' },
+  { value: '8I', label: '8 Iron' },
+  { value: '9I', label: '9 Iron' },
+  { value: 'PW', label: 'Pitching Wedge' },
+  { value: 'GW', label: 'Gap Wedge' },
+  { value: 'SW', label: 'Sand Wedge' },
+  { value: 'LW', label: 'Lob Wedge' },
+] as const;
+
+const ROUND_CATEGORY_OPTIONS = [
+  { value: 'Driving', label: 'Driving' },
+  { value: 'Approach', label: 'Approach' },
+  { value: 'Short', label: 'Short' },
+  { value: 'Recovery', label: 'Recovery' },
+  { value: 'Layup', label: 'Lay Up' },
+] as const;
+
+const SHOT_FAMILY_OPTIONS = [
+  { value: 'full', label: 'Full' },
+  { value: 'punch', label: 'Punch' },
+  { value: 'pitch', label: 'Pitch' },
+  { value: 'chip', label: 'Chip' },
+  { value: 'bump', label: 'Bump and Run' },
+] as const;
+
+const SWING_EFFORT_OPTIONS = [
+  { value: 'full', label: 'Full' },
+  { value: '9pm', label: 'Half' },
+] as const;
+
+function normalizeClub(club: string): string {
+  const trimmed = club.trim();
+  if (/^[0-9]+[a-zA-Z]$/.test(trimmed)) return trimmed.toUpperCase();
+  const mapped = CLUB_CODE_MAP[trimmed] ?? CLUB_CODE_MAP[trimmed.toUpperCase()];
+  if (!mapped) return trimmed.substring(0, 10).toUpperCase();
+  return mapped.toUpperCase();
+}
+
+function getClubId(club: string): string {
+  return (CLUB_CODE_MAP[club] ?? CLUB_CODE_MAP[club.toUpperCase()] ?? club).toLowerCase();
+}
+
+function getClubLabel(club: string): string {
+  return CLUB_OPTIONS.find((option) => option.value === club)?.label ?? club;
+}
+
+function availableShotFamiliesForClub(club: string) {
+  const clubId = getClubId(club);
+  if (clubId === 'dr' || clubId === '5w' || clubId === '4h' || clubId === '5h') {
+    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full');
+  }
+  if (clubId === '6i' || clubId === '7i') {
+    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'punch');
+  }
+  if (clubId === '8i' || clubId === '9i') {
+    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'bump');
+  }
+  return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'pitch' || option.value === 'chip');
+}
+
+function getShotFamilyLabel(value: string): string {
+  return SHOT_FAMILY_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
+function getSwingEffortLabel(value: string): string {
+  return SWING_EFFORT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
+function inferShotFamily(shot: Shot): string {
+  const text = `${shot.type} ${shot.notes} ${shot.startLie} ${shot.endLie}`.toLowerCase();
+  const clubId = getClubId(normalizeClub(shot.club));
+
+  if (text.includes('punch')) return 'punch';
+  if (text.includes('chip')) return 'chip';
+  if (text.includes('pitch')) return 'pitch';
+  if (text.includes('bump')) return 'bump';
+
+  if (clubId === '8i' || clubId === '9i') {
+    if (shot.target <= 35) return 'bump';
+  }
+
+  if (clubId === '6i' || clubId === '7i') {
+    if (text.includes('recovery') || shot.startLie.toLowerCase().includes('rough')) return 'punch';
+  }
+
+  if (shot.target <= 20) return 'chip';
+  if (shot.target <= 50) return 'pitch';
+  return 'full';
+}
+
+function inferSwingEffort(shot: Shot, shotFamily: string): string {
+  const text = `${shot.type} ${shot.notes}`.toLowerCase();
+  if (text.includes('half') || text.includes('partial') || text.includes('9pm')) return '9pm';
+  if (shotFamily === 'chip' || shotFamily === 'bump') return '9pm';
+  if (shotFamily === 'pitch' && shot.target <= 45) return '9pm';
+  return 'full';
+}
+
+function inferRoundCategory(shot: Shot, shotFamily: string): string {
+  const text = `${shot.type} ${shot.notes}`.toLowerCase();
+  const lie = shot.startLie.toLowerCase();
+  const clubId = getClubId(normalizeClub(shot.club));
+
+  if (text.includes('driv') || (clubId === 'dr' && lie.includes('tee'))) return 'Driving';
+  if (text.includes('recovery') || text.includes('punch') || lie.includes('rough') || lie.includes('tree') || lie.includes('trouble')) {
+    return 'Recovery';
+  }
+  if (shotFamily === 'chip' || shotFamily === 'pitch' || shotFamily === 'bump' || shot.target <= 60) return 'Short';
+  if (text.includes('lay')) return 'Layup';
+  return 'Approach';
+}
+
+function getPredictedLabel(roundCategory: string, shotFamily: string, swingEffort: string): string {
+  return `${roundCategory} · ${getShotFamilyLabel(shotFamily)} · ${getSwingEffortLabel(swingEffort)}`;
+}
+
+function buildReviewRow(shot: Shot, rowNumber: number): UploadReviewRow {
+  const club = normalizeClub(shot.club);
+  const shotFamily = inferShotFamily({ ...shot, club });
+  const swingEffort = inferSwingEffort({ ...shot, club }, shotFamily);
+  const roundCategory = inferRoundCategory({ ...shot, club }, shotFamily);
+
+  return {
+    id: shot.id,
+    rowNumber,
+    roundDate: getShotDateKey(shot.date),
+    club,
+    roundCategory,
+    shotFamily,
+    swingEffort,
+    target: shot.target,
+    total: shot.total,
+    side: shot.side,
+    startLie: shot.startLie,
+    endLie: shot.endLie,
+    strikeQuality: shot.strikeQuality,
+    shotQuality: shot.shotQuality,
+    endDistanceFromTarget: shot.endDistanceFromTarget,
+    notes: shot.notes,
+    predictedLabel: getPredictedLabel(roundCategory, shotFamily, swingEffort),
+  };
+}
 
 export function UploadTab() {
   const { user } = useAuth();
-  const { refreshShots, shots } = useGolfData();
+  const { refreshShots, refreshRoundReflections, roundReflections, upsertRoundReflection, shots } = useGolfData();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<{ row: number; issue: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState<PendingUploadDraft | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -37,7 +223,7 @@ export function UploadTab() {
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
     if (file && file.name.endsWith('.csv')) {
-      processFile(file);
+      void processFile(file);
     } else {
       setUploadResult({ success: false, message: 'Please drop a CSV file.' });
     }
@@ -56,7 +242,6 @@ export function UploadTab() {
     try {
       const text = await file.text();
       const { shots: parsedShots, warnings } = parseCSV(text);
-      
       setUploadWarnings(warnings);
 
       if (parsedShots.length === 0) {
@@ -64,7 +249,6 @@ export function UploadTab() {
         return;
       }
 
-      // Validate all shots before processing
       const validationErrors: { row: number; issue: string }[] = [];
       for (let i = 0; i < parsedShots.length; i++) {
         const shot = parsedShots[i];
@@ -77,88 +261,50 @@ export function UploadTab() {
           endDistanceFromTarget: shot.endDistanceFromTarget,
         });
         if (error) {
-          validationErrors.push({ row: i + 2, issue: error }); // +2 for header row and 0-index
+          validationErrors.push({ row: i + 2, issue: error });
         }
       }
 
       if (validationErrors.length > 0) {
-        setUploadWarnings(prev => [...prev, ...validationErrors]);
+        setUploadWarnings((prev) => [...prev, ...validationErrors]);
         if (validationErrors.length === parsedShots.length) {
           setUploadResult({ success: false, message: 'All shots failed validation. Please check your data.' });
           return;
         }
       }
 
-      // Filter out invalid shots
-      const validShots = parsedShots.filter((shot, i) => {
-        return !validationErrors.some(e => e.row === i + 2);
-      });
-
-      // If replace mode, delete existing data first
-      if (replaceAll) {
-        const { error: deleteError } = await supabase.from('shots').delete().eq('user_id', user.id);
-        if (deleteError) {
-          setUploadResult({ success: false, message: getUserFriendlyError(deleteError) });
-          return;
-        }
-      }
-
-      // Transform valid shots to database format - include user_id
-      const dbShots = validShots.map(shot => ({
-        club: (/^[0-9]+[a-zA-Z]$/.test(shot.club.trim()) ? shot.club.trim().toUpperCase() : shot.club).substring(0, 10), // Normalize codes like 6i -> 6I
-        shot_type: shot.type,
-        target: Math.max(0, Math.min(600, shot.target)), // Clamp values
-        total: Math.max(0, Math.min(600, shot.total)),
-        offline: Math.max(-200, Math.min(200, shot.side)),
-        start_lie: shot.startLie,
-        end_lie: shot.endLie,
-        strike_quality: shot.strikeQuality,
-        shot_quality: shot.shotQuality,
-        end_distance_from_target: shot.endDistanceFromTarget !== undefined 
-          ? Math.max(0, Math.min(600, shot.endDistanceFromTarget)) 
-          : null,
-        notes: shot.notes,
-        shot_date: getShotDateKey(shot.date),
-        user_id: user.id,
+      const validShots = parsedShots.filter((_, index) => !validationErrors.some((error) => error.row === index + 2));
+      const rows = validShots.map((shot, index) => buildReviewRow(shot, index + 2));
+      const roundDates = [...new Set(rows.map((row) => row.roundDate))];
+      const reflectionsByDate = Object.fromEntries(roundDates.map((roundDate) => {
+        const existing = roundReflections.find((reflection) => reflection.roundDate === roundDate);
+        return [roundDate, existing ? {
+          drivingNotes: existing.drivingNotes,
+          ironsNotes: existing.ironsNotes,
+          shortNotes: existing.shortNotes,
+          puttingNotes: existing.puttingNotes,
+          mentalNotes: existing.mentalNotes,
+          courseManagementNotes: existing.courseManagementNotes,
+        } : createEmptyRoundReflectionDraft()];
       }));
 
-      // Insert in batches of 100
-      const batchSize = 100;
-      let insertedCount = 0;
-      
-      for (let i = 0; i < dbShots.length; i += batchSize) {
-        const batch = dbShots.slice(i, i + batchSize);
-        const { error } = await supabase.from('shots').insert(batch);
-        
-        if (error) {
-          setUploadResult({ 
-            success: false, 
-            message: getUserFriendlyError(error)
-          });
-          return;
-        }
-        insertedCount += batch.length;
-      }
-
-      const skippedCount = parsedShots.length - validShots.length;
-      const skippedMsg = skippedCount > 0 ? ` (${skippedCount} invalid shots skipped)` : '';
-      
-      setUploadResult({ 
-        success: true, 
-        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} shots.${skippedMsg}` 
+      setPendingUpload({
+        fileName: file.name,
+        rows,
+        skippedCount: parsedShots.length - validShots.length,
+        reflectionsByDate,
       });
-      
-      // Refresh the shots data
-      await refreshShots();
-
+      setUploadResult({
+        success: true,
+        message: `Parsed ${rows.length} shots from ${file.name}. Review the classification before saving.`,
+      });
     } catch (error) {
-      setUploadResult({ 
-        success: false, 
-        message: getUserFriendlyError(error)
+      setUploadResult({
+        success: false,
+        message: getUserFriendlyError(error),
       });
     } finally {
       setIsUploading(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -168,7 +314,99 @@ export function UploadTab() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      processFile(file);
+      void processFile(file);
+    }
+  };
+
+  const updatePendingRow = (rowId: string, updates: Partial<UploadReviewRow>) => {
+    setPendingUpload((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        rows: current.rows.map((row) => {
+          if (row.id !== rowId) return row;
+          const next = { ...row, ...updates };
+          return {
+            ...next,
+            predictedLabel: getPredictedLabel(next.roundCategory, next.shotFamily, next.swingEffort),
+          };
+        }),
+      };
+    });
+  };
+
+  const updateRoundReflection = (roundDate: string, next: RoundReflectionDraft) => {
+    setPendingUpload((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        reflectionsByDate: {
+          ...current.reflectionsByDate,
+          [roundDate]: next,
+        },
+      };
+    });
+  };
+
+  const commitUpload = async () => {
+    if (!user || !pendingUpload) return;
+
+    setIsUploading(true);
+    setUploadResult(null);
+
+    try {
+      if (replaceAll) {
+        const { error: deleteError } = await supabase.from('shots').delete().eq('user_id', user.id);
+        if (deleteError) throw new Error(getUserFriendlyError(deleteError));
+      }
+
+      const dbShots = pendingUpload.rows.map((row) => ({
+        club: row.club,
+        shot_type: row.roundCategory,
+        shot_family: row.shotFamily,
+        swing_effort: row.swingEffort,
+        target: Math.max(0, Math.min(600, row.target)),
+        total: Math.max(0, Math.min(600, row.total)),
+        offline: Math.max(-200, Math.min(200, row.side)),
+        start_lie: row.startLie,
+        end_lie: row.endLie,
+        strike_quality: row.strikeQuality,
+        shot_quality: row.shotQuality,
+        end_distance_from_target: Math.max(0, Math.min(600, row.endDistanceFromTarget)),
+        notes: row.notes,
+        shot_date: row.roundDate,
+        user_id: user.id,
+      }));
+
+      const batchSize = 100;
+      let insertedCount = 0;
+
+      for (let index = 0; index < dbShots.length; index += batchSize) {
+        const batch = dbShots.slice(index, index + batchSize);
+        const { error } = await supabase.from('shots').insert(batch);
+        if (error) throw new Error(getUserFriendlyError(error));
+        insertedCount += batch.length;
+      }
+
+      for (const [roundDate, reflection] of Object.entries(pendingUpload.reflectionsByDate)) {
+        if (!hasRoundReflectionContent(reflection)) continue;
+        await upsertRoundReflection(roundDate, reflection);
+      }
+
+      const skippedMsg = pendingUpload.skippedCount > 0 ? ` (${pendingUpload.skippedCount} invalid shots skipped)` : '';
+      setUploadResult({
+        success: true,
+        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}`,
+      });
+      setPendingUpload(null);
+      await Promise.all([refreshShots(), refreshRoundReflections()]);
+    } catch (error) {
+      setUploadResult({
+        success: false,
+        message: getUserFriendlyError(error),
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -187,7 +425,6 @@ export function UploadTab() {
 
     try {
       const { error } = await supabase.from('shots').delete().eq('user_id', user.id);
-      
       if (error) {
         setUploadResult({ success: false, message: getUserFriendlyError(error) });
       } else {
@@ -195,9 +432,9 @@ export function UploadTab() {
         await refreshShots();
       }
     } catch (error) {
-      setUploadResult({ 
-        success: false, 
-        message: getUserFriendlyError(error)
+      setUploadResult({
+        success: false,
+        message: getUserFriendlyError(error),
       });
     } finally {
       setIsDeleting(false);
@@ -226,7 +463,6 @@ export function UploadTab() {
       }
 
       const latestTs = latest[0].created_at as string;
-      // 5-second window to capture the whole batch insert
       const start = new Date(new Date(latestTs).getTime() - 5000).toISOString();
       const end = new Date(new Date(latestTs).getTime() + 5000).toISOString();
 
@@ -268,7 +504,6 @@ export function UploadTab() {
 
   return (
     <div className="space-y-6">
-      {/* Upload Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -281,13 +516,8 @@ export function UploadTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Replace toggle */}
           <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3">
-            <Switch
-              id="replace-mode"
-              checked={replaceAll}
-              onCheckedChange={setReplaceAll}
-            />
+            <Switch id="replace-mode" checked={replaceAll} onCheckedChange={setReplaceAll} />
             <div className="space-y-1">
               <Label htmlFor="replace-mode">Replace existing shot history</Label>
               <p className="text-xs text-muted-foreground">
@@ -296,16 +526,13 @@ export function UploadTab() {
             </div>
           </div>
 
-          {/* Drag and drop zone */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-              isDragOver 
-                ? 'border-primary bg-primary/5' 
-                : 'border-muted-foreground/25 hover:border-primary/50'
+            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+              isDragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'
             }`}
           >
             <input
@@ -314,38 +541,29 @@ export function UploadTab() {
               accept=".csv"
               onChange={handleFileSelect}
               className="hidden"
-              id="csv-upload"
             />
-            <Upload className={`h-10 w-10 mx-auto mb-3 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
+            <Upload className={`mx-auto mb-3 h-10 w-10 ${isDragOver ? 'text-primary' : 'text-muted-foreground'}`} />
             <p className="text-sm font-medium">
-              {isUploading ? 'Uploading...' : 'Drag and drop your CSV file here'}
+              {isUploading ? 'Preparing upload...' : 'Drag and drop your CSV file here'}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              or click to browse
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">or click to browse</p>
           </div>
 
-          {/* Result message */}
           {uploadResult && (
             <Alert variant={uploadResult.success ? 'default' : 'destructive'}>
-              {uploadResult.success ? (
-                <CheckCircle className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
+              {uploadResult.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
               <AlertDescription>{uploadResult.message}</AlertDescription>
             </Alert>
           )}
 
-          {/* Warnings for rows with issues */}
           {uploadWarnings.length > 0 && (
-            <Alert variant="default" className="border-yellow-500/50 bg-yellow-500/10">
+            <Alert className="border-yellow-500/50 bg-yellow-500/10">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
               <AlertDescription>
-                <p className="font-medium mb-2">{uploadWarnings.length} row(s) had issues:</p>
-                <ul className="text-xs space-y-1 max-h-32 overflow-y-auto">
-                  {uploadWarnings.slice(0, 10).map((w, i) => (
-                    <li key={i}>Row {w.row}: {w.issue}</li>
+                <p className="mb-2 font-medium">{uploadWarnings.length} row(s) had issues:</p>
+                <ul className="max-h-32 space-y-1 overflow-y-auto text-xs">
+                  {uploadWarnings.slice(0, 10).map((warning, index) => (
+                    <li key={`${warning.row}-${index}`}>Row {warning.row}: {warning.issue}</li>
                   ))}
                   {uploadWarnings.length > 10 && (
                     <li className="text-muted-foreground">...and {uploadWarnings.length - 10} more</li>
@@ -355,9 +573,8 @@ export function UploadTab() {
             </Alert>
           )}
 
-          {/* CSV Format Info */}
-          <div className="text-sm text-muted-foreground border-t pt-4 mt-4">
-            <p className="font-medium text-foreground mb-2">Accepted CSV columns</p>
+          <div className="border-t pt-4 text-sm text-muted-foreground">
+            <p className="mb-2 font-medium text-foreground">Accepted CSV columns</p>
             <p className="mb-2">
               Full ParGolf exports are supported. If offline distance is blank, the app estimates it from tags like
               #pull, #push, #slice, #hook, #fade, and #draw.
@@ -369,7 +586,147 @@ export function UploadTab() {
         </CardContent>
       </Card>
 
-      {/* Current Data Status */}
+      {pendingUpload && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Review Upload Before Save</CardTitle>
+            <CardDescription>
+              {pendingUpload.rows.length} shots parsed from {pendingUpload.fileName}. Accept the prediction or adjust the
+              club, type, effort, and target before these shots are stored.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead className="bg-muted/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Row</th>
+                    <th className="px-3 py-2 text-left font-medium">Date</th>
+                    <th className="px-3 py-2 text-left font-medium">Predicted</th>
+                    <th className="px-3 py-2 text-left font-medium">Club</th>
+                    <th className="px-3 py-2 text-left font-medium">Round Type</th>
+                    <th className="px-3 py-2 text-left font-medium">Shot Family</th>
+                    <th className="px-3 py-2 text-left font-medium">Effort</th>
+                    <th className="px-3 py-2 text-left font-medium">Target</th>
+                    <th className="px-3 py-2 text-left font-medium">Context</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUpload.rows.map((row) => {
+                    const availableFamilies = availableShotFamiliesForClub(row.club);
+                    return (
+                      <tr key={row.id} className="border-t align-top">
+                        <td className="px-3 py-3 text-muted-foreground">{row.rowNumber}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">{row.roundDate}</td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium">{row.predictedLabel}</div>
+                          <div className="text-xs text-muted-foreground">{getClubLabel(row.club)}</div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Select
+                            value={row.club}
+                            onValueChange={(value) => {
+                              const nextFamily = availableShotFamiliesForClub(value).some((option) => option.value === row.shotFamily)
+                                ? row.shotFamily
+                                : availableShotFamiliesForClub(value)[0]?.value ?? 'full';
+                              updatePendingRow(row.id, { club: value, shotFamily: nextFamily });
+                            }}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CLUB_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Select value={row.roundCategory} onValueChange={(value) => updatePendingRow(row.id, { roundCategory: value })}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROUND_CATEGORY_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Select value={row.shotFamily} onValueChange={(value) => updatePendingRow(row.id, { shotFamily: value })}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableFamilies.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Select value={row.swingEffort} onValueChange={(value) => updatePendingRow(row.id, { swingEffort: value })}>
+                            <SelectTrigger className="w-[120px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SWING_EFFORT_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            value={row.target}
+                            onChange={(event) => updatePendingRow(row.id, { target: Number(event.target.value) || 0 })}
+                            className="w-[100px]"
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          <div>{row.startLie} to {row.endLie}</div>
+                          <div>Total {Math.round(row.total)}m • Side {Math.round(row.side)}m</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {Object.entries(pendingUpload.reflectionsByDate).map(([roundDate, reflection]) => (
+              <RoundReflectionEditor
+                key={roundDate}
+                title={`Round Thoughts · ${roundDate}`}
+                description="Add your round reflection now or leave it blank and fill it in later from the dashboard."
+                value={reflection}
+                onChange={(next) => updateRoundReflection(roundDate, next)}
+              />
+            ))}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setPendingUpload(null)} disabled={isUploading}>
+                Cancel Review
+              </Button>
+              <Button onClick={() => void commitUpload()} disabled={isUploading}>
+                {isUploading ? 'Saving...' : 'Save Reviewed Upload'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-destructive/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -390,8 +747,8 @@ export function UploadTab() {
             <Trash2 className="h-4 w-4" />
             {isDeleting ? 'Deleting...' : 'Delete Last Upload'}
           </Button>
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             onClick={handleDeleteAll}
             disabled={isDeleting || shots.length === 0}
             className="gap-2"

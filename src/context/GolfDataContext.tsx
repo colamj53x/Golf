@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS } from '@/types/golf';
+import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, RoundReflection } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
@@ -29,8 +29,20 @@ interface GolfDataContextType {
   setPracticeBallFlightTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   practiceOtherTolerancePct: number;
   setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
+  roundReflections: RoundReflection[];
+  upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
+  refreshRoundReflections: () => Promise<void>;
   refreshShots: () => Promise<void>;
 }
+
+type RoundReflectionInput = {
+  drivingNotes: string;
+  ironsNotes: string;
+  shortNotes: string;
+  puttingNotes: string;
+  mentalNotes: string;
+  courseManagementNotes: string;
+};
 
 const GolfDataContext = createContext<GolfDataContextType | undefined>(undefined);
 
@@ -73,6 +85,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   });
   
   const [shots, setShots] = useState<Shot[]>([]);
+  const [roundReflections, setRoundReflections] = useState<RoundReflection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -105,6 +118,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
 
   const loadShots = useCallback(async () => {
     if (!user) {
+      setShots([]);
       setIsLoading(false);
       return;
     }
@@ -147,6 +161,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           id: row.id,
           club: row.club,
           type: row.shot_type || '',
+          shotFamily: row.shot_family || '',
+          swingEffort: row.swing_effort || '',
           target: row.target || 0,
           total: row.total || 0,
           side: row.offline || 0,
@@ -170,13 +186,82 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const loadRoundReflections = useCallback(async () => {
+    if (!user) {
+      setRoundReflections([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('round_reflections')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('round_date', { ascending: false });
+
+      if (error) {
+        if (import.meta.env.DEV) {
+          console.error('Failed to load round reflections:', getUserFriendlyError(error));
+        }
+        return;
+      }
+
+      setRoundReflections((data || []).map((row) => ({
+        id: row.id,
+        roundDate: row.round_date,
+        drivingNotes: row.driving_notes || '',
+        ironsNotes: row.irons_notes || '',
+        shortNotes: row.short_notes || '',
+        puttingNotes: row.putting_notes || '',
+        mentalNotes: row.mental_notes || '',
+        courseManagementNotes: row.course_management_notes || '',
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      })));
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('Failed to load round reflections:', getUserFriendlyError(error));
+      }
+    }
+  }, [user]);
+
   useEffect(() => {
     loadShots();
-  }, [loadShots]);
+    loadRoundReflections();
+  }, [loadShots, loadRoundReflections]);
 
   const refreshShots = useCallback(async () => {
     await loadShots();
   }, [loadShots]);
+
+  const refreshRoundReflections = useCallback(async () => {
+    await loadRoundReflections();
+  }, [loadRoundReflections]);
+
+  const upsertRoundReflection = useCallback(async (roundDate: string, updates: RoundReflectionInput) => {
+    if (!user) return;
+
+    const payload = {
+      user_id: user.id,
+      round_date: roundDate,
+      driving_notes: updates.drivingNotes,
+      irons_notes: updates.ironsNotes,
+      short_notes: updates.shortNotes,
+      putting_notes: updates.puttingNotes,
+      mental_notes: updates.mentalNotes,
+      course_management_notes: updates.courseManagementNotes,
+    };
+
+    const { error } = await supabase
+      .from('round_reflections')
+      .upsert(payload, { onConflict: 'user_id,round_date' });
+
+    if (error) {
+      throw new Error(getUserFriendlyError(error));
+    }
+
+    await loadRoundReflections();
+  }, [loadRoundReflections, user]);
 
   const updateClub = (id: string, updates: Partial<ClubConfig>) => {
     setClubs(prev => prev.map(club => 
@@ -213,6 +298,9 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setPracticeBallFlightTolerancePct,
       practiceOtherTolerancePct,
       setPracticeOtherTolerancePct,
+      roundReflections,
+      upsertRoundReflection,
+      refreshRoundReflections,
       refreshShots
     }}>
       {children}

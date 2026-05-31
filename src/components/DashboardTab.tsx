@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,19 +23,31 @@ import { analyzeClubPerformance } from '@/lib/clubSummaryGenerator';
 import { ClubSummaryCard } from '@/components/ClubSummaryCard';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { LatestRoundTab } from '@/components/dashboard/LatestRoundTab';
+import { createEmptyRoundReflectionDraft, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
 }
 
 export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
-  const { clubs, shots, isLoading, availableClubs, availableStartLies, distanceToTargetTolerance } = useGolfData();
+  const {
+    clubs,
+    shots,
+    isLoading,
+    availableClubs,
+    availableStartLies,
+    distanceToTargetTolerance,
+    roundReflections,
+    upsertRoundReflection,
+  } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState<string>('all');
   const [dashboardView, setDashboardView] = useState<string>('latest-round');
   const [expandedTrendCategories, setExpandedTrendCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
   const [expandedCapabilityCategories, setExpandedCapabilityCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
+  const [roundReflectionDraft, setRoundReflectionDraft] = useState(createEmptyRoundReflectionDraft());
+  const [isSavingRoundReflection, setIsSavingRoundReflection] = useState(false);
 
   const toggleTrendCategory = (categoryKey: string) => {
     setExpandedTrendCategories(prev => {
@@ -167,12 +179,31 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
       overall,
       lastRound,
       last5Rounds,
+      latestRoundDateKey: latestRoundDateKeys[0] ?? null,
       distanceToTargetEnabled: distanceEnabled,
       ratings,
       analysis,
       clubName: selectedClub !== 'all' ? selectedClub : 'All Clubs',
     };
   }, [shots, selectedClub, selectedStartLie, selectedDistanceFilter, clubs, distanceToTargetTolerance]);
+
+  useEffect(() => {
+    const latestRoundDateKey = processedData?.latestRoundDateKey;
+    if (!latestRoundDateKey) {
+      setRoundReflectionDraft(createEmptyRoundReflectionDraft());
+      return;
+    }
+
+    const existing = roundReflections.find((reflection) => reflection.roundDate === latestRoundDateKey);
+    setRoundReflectionDraft(existing ? {
+      drivingNotes: existing.drivingNotes,
+      ironsNotes: existing.ironsNotes,
+      shortNotes: existing.shortNotes,
+      puttingNotes: existing.puttingNotes,
+      mentalNotes: existing.mentalNotes,
+      courseManagementNotes: existing.courseManagementNotes,
+    } : createEmptyRoundReflectionDraft());
+  }, [processedData?.latestRoundDateKey, roundReflections]);
 
   if (isLoading) {
     return (
@@ -211,7 +242,17 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     );
   }
 
-  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, distanceToTargetEnabled, ratings, analysis, clubName } = processedData;
+  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, latestRoundDateKey, distanceToTargetEnabled, ratings, analysis, clubName } = processedData;
+
+  const handleSaveRoundReflection = async () => {
+    if (!latestRoundDateKey) return;
+    setIsSavingRoundReflection(true);
+    try {
+      await upsertRoundReflection(latestRoundDateKey, roundReflectionDraft);
+    } finally {
+      setIsSavingRoundReflection(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -293,12 +334,24 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
 
         {/* Latest Round Tab */}
         <TabsContent value="latest-round" className="mt-6">
-          <LatestRoundTab 
-            lastRound={lastRound}
-            last5Rounds={last5Rounds}
-            mostRecentThird={trendMetrics.mostRecent}
-            distanceToTargetEnabled={distanceToTargetEnabled}
-          />
+          <div className="space-y-6">
+            <LatestRoundTab 
+              lastRound={lastRound}
+              last5Rounds={last5Rounds}
+              mostRecentThird={trendMetrics.mostRecent}
+              distanceToTargetEnabled={distanceToTargetEnabled}
+            />
+            {latestRoundDateKey && (
+              <RoundReflectionEditor
+                title={`Round Thoughts · ${latestRoundDateKey}`}
+                description="Capture what actually happened in the round so future training and feedback can use both the numbers and your own notes."
+                value={roundReflectionDraft}
+                onChange={setRoundReflectionDraft}
+                onSave={handleSaveRoundReflection}
+                isSaving={isSavingRoundReflection}
+              />
+            )}
+          </div>
         </TabsContent>
 
         {/* Overview Tab - Original Dashboard Content */}

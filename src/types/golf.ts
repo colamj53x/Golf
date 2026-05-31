@@ -14,6 +14,8 @@ export interface Shot {
   id: string;
   club: string;
   type: string;              // Shot type (e.g., practice, round)
+  shotFamily: string;        // Intended shot family (full, pitch, chip, etc.)
+  swingEffort: string;       // Intended effort (full, half, etc.)
   target: number;            // Distance to hole when taking the shot
   total: number;             // Distance hit (how far the ball traveled)
   side: number;              // Dispersion: positive = right, negative = left
@@ -24,6 +26,19 @@ export interface Shot {
   strikeQuality: string;     // Strike quality rating
   endDistanceFromTarget: number; // Distance from hole after shot
   notes: string;
+}
+
+export interface RoundReflection {
+  id: string;
+  roundDate: string;
+  drivingNotes: string;
+  ironsNotes: string;
+  shortNotes: string;
+  puttingNotes: string;
+  mentalNotes: string;
+  courseManagementNotes: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ProcessedShot extends Shot {

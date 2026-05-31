@@ -508,6 +508,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
         id: `shot-${i}`,
         club: club.trim(),
         type: type.trim(),
+        shotFamily: '',
+        swingEffort: '',
         target: parseNumeric(target),
         total: parseNumeric(distanceHit),
         side: estimateDispersion(dispersion, shotNotes, shape),

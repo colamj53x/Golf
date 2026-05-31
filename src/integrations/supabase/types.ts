@@ -403,11 +403,13 @@ export type Database = {
           notes: string | null
           offline: number | null
           shot_date: string | null
+          shot_family: string | null
           shot_quality: string | null
           shot_type: string | null
           start_lie: string | null
           start_line: string | null
           strike_quality: string | null
+          swing_effort: string | null
           target: number | null
           total: number | null
           user_id: string | null
@@ -423,11 +425,13 @@ export type Database = {
           notes?: string | null
           offline?: number | null
           shot_date?: string | null
+          shot_family?: string | null
           shot_quality?: string | null
           shot_type?: string | null
           start_lie?: string | null
           start_line?: string | null
           strike_quality?: string | null
+          swing_effort?: string | null
           target?: number | null
           total?: number | null
           user_id?: string | null
@@ -443,14 +447,58 @@ export type Database = {
           notes?: string | null
           offline?: number | null
           shot_date?: string | null
+          shot_family?: string | null
           shot_quality?: string | null
           shot_type?: string | null
           start_lie?: string | null
           start_line?: string | null
           strike_quality?: string | null
+          swing_effort?: string | null
           target?: number | null
           total?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      round_reflections: {
+        Row: {
+          course_management_notes: string | null
+          created_at: string
+          driving_notes: string | null
+          id: string
+          irons_notes: string | null
+          mental_notes: string | null
+          putting_notes: string | null
+          round_date: string
+          short_notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_management_notes?: string | null
+          created_at?: string
+          driving_notes?: string | null
+          id?: string
+          irons_notes?: string | null
+          mental_notes?: string | null
+          putting_notes?: string | null
+          round_date: string
+          short_notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_management_notes?: string | null
+          created_at?: string
+          driving_notes?: string | null
+          id?: string
+          irons_notes?: string | null
+          mental_notes?: string | null
+          putting_notes?: string | null
+          round_date?: string
+          short_notes?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
