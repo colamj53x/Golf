@@ -51,6 +51,25 @@ type StoredPendingUploadDraft = PendingUploadDraft & {
   replaceAll: boolean;
 };
 
+type UploadShotInsert = {
+  club: string;
+  shot_type: string;
+  shot_family: string;
+  swing_effort: string;
+  target_intent: string;
+  target: null;
+  total: number;
+  offline: number;
+  start_lie: string;
+  end_lie: string;
+  strike_quality: string;
+  shot_quality: string;
+  end_distance_from_target: number;
+  notes: string;
+  shot_date: string;
+  user_id: string;
+};
+
 const PENDING_UPLOAD_STORAGE_KEY = 'golf-pending-upload-review-draft';
 
 const CLUB_OPTIONS = [
@@ -202,6 +221,34 @@ function isMissingReviewedUploadSchemaError(error: unknown): boolean {
     message.includes('column') ||
     message.includes('round_reflections')
   );
+}
+
+function getUploadShotFingerprint(shot: {
+  club: string;
+  shot_type?: string | null;
+  total?: number | null;
+  offline?: number | null;
+  start_lie?: string | null;
+  end_lie?: string | null;
+  strike_quality?: string | null;
+  shot_quality?: string | null;
+  end_distance_from_target?: number | null;
+  notes?: string | null;
+  shot_date?: string | null;
+}): string {
+  return [
+    shot.shot_date ?? '',
+    shot.club,
+    shot.shot_type ?? '',
+    shot.total ?? '',
+    shot.offline ?? '',
+    shot.start_lie ?? '',
+    shot.end_lie ?? '',
+    shot.strike_quality ?? '',
+    shot.shot_quality ?? '',
+    shot.end_distance_from_target ?? '',
+    shot.notes ?? '',
+  ].join('|');
 }
 
 function buildReviewRow(shot: Shot): UploadReviewRow {
@@ -457,7 +504,7 @@ export function UploadTab() {
         if (deleteError) throw new Error(getUserFriendlyError(deleteError));
       }
 
-      const reviewedShots = pendingUpload.rows.map((row) => ({
+      const reviewedShots: UploadShotInsert[] = pendingUpload.rows.map((row) => ({
         club: row.club,
         shot_type: row.sourceType,
         shot_family: row.shotFamily,
@@ -477,14 +524,55 @@ export function UploadTab() {
       }));
 
       const legacyShots = reviewedShots.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
+      let duplicateCount = 0;
+
+      let shotsToInsert = reviewedShots;
+      let legacyShotsToInsert = legacyShots;
+
+      if (!replaceAll) {
+        const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
+        const { data: existingShots, error: existingShotsError } = await supabase
+          .from('shots')
+          .select('club, shot_type, total, offline, start_lie, end_lie, strike_quality, shot_quality, end_distance_from_target, notes, shot_date')
+          .eq('user_id', user.id)
+          .in('shot_date', relevantDates);
+
+        if (existingShotsError) throw existingShotsError;
+
+        const existingCounts = new Map<string, number>();
+        for (const existingShot of existingShots || []) {
+          const fingerprint = getUploadShotFingerprint(existingShot);
+          existingCounts.set(fingerprint, (existingCounts.get(fingerprint) ?? 0) + 1);
+        }
+
+        const filteredReviewedShots: UploadShotInsert[] = [];
+        const filteredLegacyShots: typeof legacyShots = [];
+
+        reviewedShots.forEach((shot, index) => {
+          const fingerprint = getUploadShotFingerprint(shot);
+          const remainingCount = existingCounts.get(fingerprint) ?? 0;
+
+          if (remainingCount > 0) {
+            existingCounts.set(fingerprint, remainingCount - 1);
+            duplicateCount += 1;
+            return;
+          }
+
+          filteredReviewedShots.push(shot);
+          filteredLegacyShots.push(legacyShots[index]);
+        });
+
+        shotsToInsert = filteredReviewedShots;
+        legacyShotsToInsert = filteredLegacyShots;
+      }
 
       const batchSize = 100;
       let insertedCount = 0;
       let usedLegacyShotInsert = false;
 
-      for (let index = 0; index < reviewedShots.length; index += batchSize) {
-        const modernBatch = reviewedShots.slice(index, index + batchSize);
-        const legacyBatch = legacyShots.slice(index, index + batchSize);
+      for (let index = 0; index < shotsToInsert.length; index += batchSize) {
+        const modernBatch = shotsToInsert.slice(index, index + batchSize);
+        const legacyBatch = legacyShotsToInsert.slice(index, index + batchSize);
 
         const { error } = await supabase.from('shots').insert(usedLegacyShotInsert ? legacyBatch : modernBatch);
         if (error) {
@@ -506,24 +594,24 @@ export function UploadTab() {
         try {
           await upsertRoundReflection(roundDate, reflection);
         } catch (error) {
-          if (isMissingReviewedUploadSchemaError(error)) {
-            skippedReflectionSave = true;
-            break;
+          skippedReflectionSave = true;
+          if (import.meta.env.DEV) {
+            console.error('Round reflection save skipped after shot upload:', error);
           }
-          throw error;
         }
       }
 
       const skippedMsg = pendingUpload.skippedCount > 0 ? ` (${pendingUpload.skippedCount} invalid shots skipped)` : '';
+      const duplicateMsg = duplicateCount > 0 ? ` ${duplicateCount} duplicate shot${duplicateCount === 1 ? '' : 's'} already existed and were skipped.` : '';
       const legacyMsg = usedLegacyShotInsert
         ? ' Saved the reviewed shots using the existing database fields.'
         : '';
       const reflectionMsg = skippedReflectionSave
-        ? ' Round thoughts could not be saved yet because the database is missing the latest reflections table.'
+        ? ' Round thoughts could not be saved yet, but the shot upload did complete.'
         : '';
       setUploadResult({
         success: true,
-        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${legacyMsg}${reflectionMsg}`,
+        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${duplicateMsg}${legacyMsg}${reflectionMsg}`,
       });
       clearPendingUpload();
       await Promise.all([refreshShots(), refreshRoundReflections()]);
