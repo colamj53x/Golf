@@ -1,17 +1,35 @@
-import { DashboardTab } from '@/components/DashboardTab';
-import { AllClubsTab } from '@/components/AllClubsTab';
-import { SettingsTab } from '@/components/SettingsTab';
-import { UploadTab } from '@/components/UploadTab';
-import { PracticeTab } from '@/components/PracticeTab';
-import { ClubSelectorTab } from '@/components/ClubSelectorTab';
-import { ClubGappingTab } from '@/components/ClubGappingTab';
-import { ReportsTab } from '@/components/reports/ReportsTab';
-
+import { Suspense, lazy } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Settings, Target, LogOut, TrendingUp, Database, Goal, Crosshair, Gauge } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+
+const DashboardTab = lazy(async () => ({
+  default: (await import('@/components/DashboardTab')).DashboardTab,
+}));
+const AllClubsTab = lazy(async () => ({
+  default: (await import('@/components/AllClubsTab')).AllClubsTab,
+}));
+const SettingsTab = lazy(async () => ({
+  default: (await import('@/components/SettingsTab')).SettingsTab,
+}));
+const UploadTab = lazy(async () => ({
+  default: (await import('@/components/UploadTab')).UploadTab,
+}));
+const PracticeTab = lazy(async () => ({
+  default: (await import('@/components/PracticeTab')).PracticeTab,
+}));
+const ClubSelectorTab = lazy(async () => ({
+  default: (await import('@/components/ClubSelectorTab')).ClubSelectorTab,
+}));
+const ClubGappingTab = lazy(async () => ({
+  default: (await import('@/components/ClubGappingTab')).ClubGappingTab,
+}));
+const ReportsTab = lazy(async () => ({
+  default: (await import('@/components/reports/ReportsTab')).ReportsTab,
+}));
 
 const playingDataTabs = ['dashboard', 'all-clubs', 'upload', 'reports'] as const;
 const mainTabs = ['on-course', 'club-gapping', 'playing-data', 'practice', 'settings'] as const;
@@ -20,6 +38,14 @@ type PlayingDataTab = typeof playingDataTabs[number];
 type MainTab = typeof mainTabs[number];
 
 const defaultPlayingDataTab: PlayingDataTab = 'dashboard';
+
+const TabLoader = () => (
+  <div className="space-y-4">
+    <Skeleton className="h-10 w-48" />
+    <Skeleton className="h-64 w-full" />
+    <Skeleton className="h-32 w-full" />
+  </div>
+);
 
 const isMainTab = (value: string): value is MainTab =>
   mainTabs.includes(value as MainTab);
@@ -135,36 +161,52 @@ const Index = () => {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard">
-                <DashboardTab onOpenUpload={() => {
-                  navigate(getPathForTab('playing-data', 'upload'));
-                }} />
+                <Suspense fallback={<TabLoader />}>
+                  <DashboardTab onOpenUpload={() => {
+                    navigate(getPathForTab('playing-data', 'upload'));
+                  }} />
+                </Suspense>
               </TabsContent>
               <TabsContent value="all-clubs">
-                <AllClubsTab />
+                <Suspense fallback={<TabLoader />}>
+                  <AllClubsTab />
+                </Suspense>
               </TabsContent>
               <TabsContent value="upload">
-                <UploadTab />
+                <Suspense fallback={<TabLoader />}>
+                  <UploadTab />
+                </Suspense>
               </TabsContent>
               <TabsContent value="reports">
-                <ReportsTab />
+                <Suspense fallback={<TabLoader />}>
+                  <ReportsTab />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
 
           <TabsContent value="on-course">
-            <ClubSelectorTab />
+            <Suspense fallback={<TabLoader />}>
+              <ClubSelectorTab />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="club-gapping">
-            <ClubGappingTab />
+            <Suspense fallback={<TabLoader />}>
+              <ClubGappingTab />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="practice">
-            <PracticeTab />
+            <Suspense fallback={<TabLoader />}>
+              <PracticeTab />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="settings">
-            <SettingsTab />
+            <Suspense fallback={<TabLoader />}>
+              <SettingsTab />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </main>

@@ -1,11 +1,30 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ReportsByClub } from './ReportsByClub';
-import { ReportsByDistance } from './ReportsByDistance';
-import { ReportsByLie } from './ReportsByLie';
-import { ReportsByTime } from './ReportsByTime';
-import { ReportsComparative } from './ReportsComparative';
 import { BarChart3, Ruler, Layers, Calendar, GitCompare } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const ReportsByClub = lazy(async () => ({
+  default: (await import('./ReportsByClub')).ReportsByClub,
+}));
+const ReportsByDistance = lazy(async () => ({
+  default: (await import('./ReportsByDistance')).ReportsByDistance,
+}));
+const ReportsByLie = lazy(async () => ({
+  default: (await import('./ReportsByLie')).ReportsByLie,
+}));
+const ReportsByTime = lazy(async () => ({
+  default: (await import('./ReportsByTime')).ReportsByTime,
+}));
+const ReportsComparative = lazy(async () => ({
+  default: (await import('./ReportsComparative')).ReportsComparative,
+}));
+
+const ReportLoader = () => (
+  <div className="space-y-4">
+    <Skeleton className="h-12 w-full" />
+    <Skeleton className="h-72 w-full" />
+  </div>
+);
 
 export function ReportsTab() {
   const [activeReport, setActiveReport] = useState('club');
@@ -37,19 +56,29 @@ export function ReportsTab() {
         </TabsList>
 
         <TabsContent value="club" className="mt-6">
-          <ReportsByClub />
+          <Suspense fallback={<ReportLoader />}>
+            <ReportsByClub />
+          </Suspense>
         </TabsContent>
         <TabsContent value="distance" className="mt-6">
-          <ReportsByDistance />
+          <Suspense fallback={<ReportLoader />}>
+            <ReportsByDistance />
+          </Suspense>
         </TabsContent>
         <TabsContent value="lie" className="mt-6">
-          <ReportsByLie />
+          <Suspense fallback={<ReportLoader />}>
+            <ReportsByLie />
+          </Suspense>
         </TabsContent>
         <TabsContent value="time" className="mt-6">
-          <ReportsByTime />
+          <Suspense fallback={<ReportLoader />}>
+            <ReportsByTime />
+          </Suspense>
         </TabsContent>
         <TabsContent value="compare" className="mt-6">
-          <ReportsComparative />
+          <Suspense fallback={<ReportLoader />}>
+            <ReportsComparative />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>
