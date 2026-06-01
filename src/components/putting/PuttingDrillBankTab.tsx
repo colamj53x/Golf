@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock3, Plus, Search, Sparkles } from 'lucide-react';
+import { Clock3, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -74,7 +74,6 @@ export function PuttingDrillBankTab() {
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div><h3 className="font-bold">{drill.name}</h3><div className="mt-2 flex flex-wrap gap-1"><Badge variant="outline" className="capitalize">{drill.location}</Badge>{drill.skill_tags?.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div></div>
-                  {drill.blast_compatible && <Sparkles className="h-5 w-5 shrink-0 text-sky-600" aria-label="Blast compatible" />}
                 </div>
                 <p className="text-sm text-muted-foreground">{drill.purpose}</p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> {drill.time_minutes} min · {drill.equipment?.join(', ')}</div>

@@ -500,7 +500,7 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
 
         {currentDrill.blast_compatible && (
           <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
-            <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Blast Motion data for this set</div>
+            <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Optional Blast Motion evidence for this training set</div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="grid gap-1"><Label>Tempo ratio</Label><Input type="number" step="0.1" placeholder="2.0" value={blastByDrill[currentDrill.id]?.tempo_ratio ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], tempo_ratio: Number(e.target.value) || null } }))} /></div>
               <div className="grid gap-1"><Label>Backstroke sec</Label><Input type="number" step="0.01" placeholder="0.60" value={blastByDrill[currentDrill.id]?.backstroke_time ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], backstroke_time: Number(e.target.value) || null } }))} /></div>
@@ -510,15 +510,22 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             <div className="flex flex-wrap items-center gap-3">
               <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-sky-300 bg-white px-3 py-2 text-sky-900">
                 <ImagePlus className="h-4 w-4" />
-                Upload Blast screenshot
-                <Input className="hidden" type="file" accept="image/*" onChange={async e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const screenshot = await compressScreenshot(file);
-                  setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], screenshot_data_url: screenshot, screenshot_name: file.name } }));
+                Upload Blast screenshots
+                <Input className="hidden" type="file" accept="image/*" multiple onChange={async e => {
+                  const files = [...(e.target.files || [])];
+                  if (!files.length) return;
+                  const screenshots = await Promise.all(files.map(compressScreenshot));
+                  setBlastByDrill(prev => ({
+                    ...prev,
+                    [currentDrill.id]: {
+                      ...prev[currentDrill.id],
+                      screenshot_data_urls: [...(prev[currentDrill.id]?.screenshot_data_urls || []), ...screenshots],
+                      screenshot_names: [...(prev[currentDrill.id]?.screenshot_names || []), ...files.map(file => file.name)],
+                    },
+                  }));
                 }} />
               </Label>
-              {blastByDrill[currentDrill.id]?.screenshot_name && <span className="text-xs text-sky-800">{blastByDrill[currentDrill.id].screenshot_name} attached</span>}
+              {(blastByDrill[currentDrill.id]?.screenshot_data_urls?.length || 0) > 0 && <span className="text-xs text-sky-800">{blastByDrill[currentDrill.id].screenshot_data_urls?.length} screenshot{blastByDrill[currentDrill.id].screenshot_data_urls?.length === 1 ? '' : 's'} attached</span>}
             </div>
           </div>
         )}

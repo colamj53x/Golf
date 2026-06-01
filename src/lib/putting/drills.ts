@@ -251,9 +251,6 @@ const baseDrills: PuttingDrill[] = [
 ];
 
 const extraDrills: PuttingDrill[] = [
-  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Blast Tempo Baseline', 'Tempo', 'Measure a repeatable putting rhythm without chasing a perfect number.', 'Hit 10 putts from 1.5 m with Blast Motion. Use your normal routine.', 10, 'both', ['tempo', 'routine'], ['Blast Motion'], 'Keep your rhythm stable around a natural 2:1 pattern.', 90),
-  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'Blast Tempo Ladder', 'Tempo transfer', 'Keep the same rhythm as stroke length changes.', 'Hit 5 putts each from 1 m, 3 m, and 6 m. Record Blast metrics after the set.', 15, 'both', ['tempo', 'pace'], ['Blast Motion'], 'Same rhythm, different stroke length.', 100),
-  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'Quiet Hands Drill', 'Stroke control', 'Build a shoulder-driven stroke with soft grip pressure.', 'Hit 10 putts from 1 m. Use Blast Motion if available.', 10, 'both', ['tempo', 'strike'], ['Blast Motion'], 'Quiet hands. Hold the finish.', 110),
   makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', '3-6-9 m Ladder', 'Pace', 'Calibrate speed across three useful outdoor distances.', 'Putt 3 balls each from 3 m, 6 m, and 9 m. Score balls inside 60 cm.', 9, 'outdoor', ['pace', 'lag'], ['Balls', 'Tees'], 'Same tempo. Let stroke length change.', 120),
   makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5', 'Long Lag Circle', 'Lag control', 'Reduce three-putt risk from long range.', 'Hit 5 balls from 9-12 m. Score balls finishing inside a 90 cm circle.', 5, 'outdoor', ['pace', 'lag'], ['Balls', 'Tees'], 'Look longer at the target. Die it into the circle.', 130),
   makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6', '1 m Circle', 'Conversion', 'Build short-putt confidence around the hole.', 'Place 8 balls around the hole at 1 m. Score makes.', 8, 'outdoor', ['conversion', 'pressure'], ['Balls'], 'Face first. Firm inside 1 m.', 140),
@@ -309,7 +306,7 @@ function makeDrill(
     best_for: skillTags,
     progression: 'Add distance, reduce the target, or use one ball with a full routine.',
     regression: 'Shorten the putt or widen the target until the movement feels repeatable.',
-    blast_compatible: equipment.includes('Blast Motion') || skillTags.includes('tempo'),
+    blast_compatible: true,
     cue_cards: [cue],
     common_fault: 'Chasing the result instead of committing to the routine.',
     quick_fix: cue,
@@ -383,7 +380,6 @@ export interface PuttingPracticeSet {
 
 export const PUTTING_PRACTICE_SETS: PuttingPracticeSet[] = [
   ...INDOOR_PRACTICE_SETS.map((set) => ({ ...set, category: set.id === 'full' ? 'benchmark' as const : 'indoor' as const, timeMinutes: set.id === 'full' ? 30 : 20, bestFor: set.id === 'full' ? 'Monthly benchmark' : 'Indoor practice' })),
-  { id: 'set-d', name: 'Set D - Blast Motion Stroke Lab', description: 'Measure tempo, rhythm, and stroke consistency by set.', category: 'blast', drillNames: ['Blast Tempo Baseline', 'Blast Tempo Ladder', 'Quiet Hands Drill', '1 m Automatic Putts'], timeMinutes: 25, bestFor: 'Tempo and technique' },
   { id: 'outdoor-speed', name: 'Outdoor Speed Control', description: 'Calibrate pace and reduce three-putt risk.', category: 'outdoor', drillNames: ['3-6-9 m Ladder', 'Long Lag Circle', 'Random One-Ball Test'], timeMinutes: 25, bestFor: 'Pace and lag putting' },
   { id: 'outdoor-conversion', name: 'Short-Putt Conversion', description: 'Build confidence and conversion around the hole.', category: 'outdoor', drillNames: ['1 m Circle', '1.5 m Circle', 'Pressure Ladder'], timeMinutes: 20, bestFor: 'Short putts under pressure' },
   { id: 'outdoor-reading', name: 'Green Reading Builder', description: 'Match entry point, start spot, and speed.', category: 'outdoor', drillNames: ['Entry Point Drill', 'Random One-Ball Test'], timeMinutes: 20, bestFor: 'Green reading' },

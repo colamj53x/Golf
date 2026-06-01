@@ -27,7 +27,6 @@ const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
   { value: 'sets', label: 'Practice Sets' },
   { value: 'warmup', label: 'Warm-Up' },
   { value: 'drills', label: 'Drill Library' },
-  { value: 'blast', label: 'Blast Motion' },
   { value: 'history', label: 'History' },
 ];
 

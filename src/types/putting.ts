@@ -5,7 +5,7 @@ export interface ScoringInput {
 }
 
 export type PuttingMetric = 'startLineStrike' | 'paceTouch' | 'conversionPressure';
-export type PuttingSessionType = 'indoor' | 'outdoor' | 'technique' | 'warmup' | 'benchmark' | 'blast';
+export type PuttingSessionType = 'indoor' | 'outdoor' | 'technique' | 'warmup' | 'benchmark';
 export type PuttingDifficulty = 'beginner' | 'developing' | 'strong' | 'advanced';
 
 export interface PuttingMetricScore {
@@ -63,6 +63,8 @@ export interface BlastMotionSetData {
   notes?: string;
   screenshot_data_url?: string;
   screenshot_name?: string;
+  screenshot_data_urls?: string[];
+  screenshot_names?: string[];
 }
 
 export interface DrillResult {
