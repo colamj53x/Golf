@@ -9,6 +9,9 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 const DashboardTab = lazy(async () => ({
   default: (await import('@/components/DashboardTab')).DashboardTab,
 }));
+const AnalysisOverview = lazy(async () => ({
+  default: (await import('@/components/analysis/AnalysisOverview')).AnalysisOverview,
+}));
 const AllClubsTab = lazy(async () => ({
   default: (await import('@/components/AllClubsTab')).AllClubsTab,
 }));
@@ -34,7 +37,7 @@ const LibraryTab = lazy(async () => ({
   default: (await import('@/components/LibraryTab')).LibraryTab,
 }));
 
-const analyseTabs = ['overview', 'clubs', 'gapping', 'reports', 'upload'] as const;
+const analyseTabs = ['overview', 'rounds', 'clubs', 'gapping', 'reports', 'upload'] as const;
 const mainTabs = ['play', 'practice', 'analyse', 'library', 'settings'] as const;
 
 type AnalyseTab = typeof analyseTabs[number];
@@ -64,7 +67,7 @@ function legacyRedirect(pathname: string): string | null {
   if (pathname === '/club-gapping') return '/analyse/gapping';
   if (pathname.startsWith('/playing-data/')) {
     const legacyTab = pathname.split('/').filter(Boolean)[1];
-    if (legacyTab === 'dashboard') return '/analyse/overview';
+    if (legacyTab === 'dashboard') return '/analyse/rounds';
     if (legacyTab === 'all-clubs') return '/analyse/clubs';
     if (legacyTab === 'reports') return '/analyse/reports';
     if (legacyTab === 'upload') return '/analyse/upload';
@@ -179,6 +182,7 @@ const Index = () => {
             <Tabs value={analyseTab} onValueChange={handleAnalyseTabChange} className="w-full">
               <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
                 <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
+                <TabsTrigger value="rounds" className="shrink-0">Rounds</TabsTrigger>
                 <TabsTrigger value="clubs" className="shrink-0">Clubs</TabsTrigger>
                 <TabsTrigger value="gapping" className="shrink-0 gap-2">
                   <Gauge className="h-4 w-4" />
@@ -194,6 +198,11 @@ const Index = () => {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="overview">
+                <Suspense fallback={<TabLoader />}>
+                  <AnalysisOverview />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="rounds">
                 <Suspense fallback={<TabLoader />}>
                   <DashboardTab onOpenUpload={() => navigate(getPathForTab('analyse', 'upload'))} />
                 </Suspense>

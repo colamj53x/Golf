@@ -1,0 +1,108 @@
+import { describe, expect, it } from 'vitest';
+import { buildAnalysisModel, calculateShotDamage, reflectionConfidence, shotConfidence, shotQualityScore } from '@/lib/analysisSynthesis';
+import { DEFAULT_CLUB_CONFIGS, type RoundReflection, type Shot } from '@/types/golf';
+
+function shot(overrides: Partial<Shot> = {}): Shot {
+  return {
+    id: crypto.randomUUID(),
+    club: 'Dr',
+    type: 'round',
+    shotFamily: 'full',
+    swingEffort: 'full',
+    targetIntent: 'fairway',
+    target: 220,
+    total: 220,
+    side: 0,
+    shotQuality: '15 Handicap',
+    date: new Date('2026-05-31T10:00:00'),
+    startLie: 'Tee',
+    endLie: 'Fairway',
+    strikeQuality: '',
+    endDistanceFromTarget: 0,
+    notes: '',
+    ...overrides,
+  };
+}
+
+function reflection(overrides: Partial<RoundReflection> = {}): RoundReflection {
+  return {
+    id: crypto.randomUUID(),
+    roundDate: '2026-05-31',
+    drivingNotes: '',
+    ironsNotes: '',
+    shortNotes: '',
+    puttingNotes: '',
+    mentalNotes: '',
+    courseManagementNotes: '',
+    createdAt: new Date('2026-05-31'),
+    updatedAt: new Date('2026-05-31'),
+    ...overrides,
+  };
+}
+
+describe('analysis synthesis', () => {
+  it('maps shot quality labels onto the coaching index', () => {
+    expect(shotQualityScore('Pro')).toBe(100);
+    expect(shotQualityScore('15 Handicap')).toBe(60);
+    expect(shotQualityScore('unknown')).toBeNull();
+  });
+
+  it('uses guarded confidence thresholds', () => {
+    expect(shotConfidence(7)).toBe('none');
+    expect(shotConfidence(8)).toBe('low');
+    expect(shotConfidence(15)).toBe('medium');
+    expect(shotConfidence(30)).toBe('high');
+    expect(reflectionConfidence(1)).toBe('low');
+    expect(reflectionConfidence(4)).toBe('high');
+  });
+
+  it('treats penalties as more damaging than playable rough', () => {
+    expect(calculateShotDamage(shot({ endLie: 'Penalty' }))).toBe(2);
+    expect(calculateShotDamage(shot({ endLie: 'Rough' }))).toBe(0.25);
+    expect(calculateShotDamage(shot({ endLie: 'Fairway' }))).toBe(0);
+  });
+
+  it('surfaces recurring reflection themes', () => {
+    const model = buildAnalysisModel({
+      shots: [],
+      clubs: DEFAULT_CLUB_CONFIGS,
+      practiceSessions: [],
+      roundReflections: [
+        reflection({ mentalNotes: 'Rushed on the back nine' }),
+        reflection({ drivingNotes: 'Tempo was rushed again' }),
+      ],
+    });
+
+    expect(model.reflectionThemes[0]).toMatchObject({
+      id: 'rushed',
+      count: 2,
+      confidence: 'medium',
+    });
+  });
+
+  it('ranks damaging driver misses as a club priority', () => {
+    const driverShots = Array.from({ length: 10 }, (_, index) => shot({
+      id: `driver-${index}`,
+      side: 28,
+      endLie: 'Trees / recovery',
+      notes: 'slice',
+    }));
+    const wedgeShots = Array.from({ length: 10 }, (_, index) => shot({
+      id: `wedge-${index}`,
+      club: 'PW',
+      target: 115,
+      total: 115,
+      shotQuality: '5 Handicap',
+    }));
+    const model = buildAnalysisModel({
+      shots: [...driverShots, ...wedgeShots],
+      clubs: DEFAULT_CLUB_CONFIGS,
+      practiceSessions: [],
+      roundReflections: [],
+    });
+
+    expect(model.priorities[0].clubName).toBe('Driver');
+    expect(model.priorities[0].direction).toBe('Right');
+    expect(model.reliableClubs[0].clubName).toBe('PW');
+  });
+});
