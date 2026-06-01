@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { clearPuttingSessionDraft, loadPuttingSessionDraft, savePuttingSessionDraft } from '@/lib/putting/sessionDraft';
+import { compressPuttingScreenshot } from '@/lib/putting/screenshots';
 
 interface SessionMeta {
   date: string;
@@ -41,28 +42,6 @@ interface Props {
 }
 
 const cueOptions = ['Face first', 'Roll over start spot', 'Quiet hands', 'Same tempo', 'Hold finish', 'Die it in', 'Firm inside 1m', 'Look and react'];
-
-async function compressScreenshot(file: File): Promise<string> {
-  const source = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const next = new Image();
-    next.onload = () => resolve(next);
-    next.onerror = reject;
-    next.src = source;
-  });
-  const width = Math.min(1200, image.width);
-  const height = Math.round((image.height / image.width) * width);
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext('2d')?.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL('image/jpeg', 0.68);
-}
 
 export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 'set-a', onComplete, onCancel }: Props) {
   const { user } = useAuth();
@@ -514,7 +493,7 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                 <Input className="hidden" type="file" accept="image/*" multiple onChange={async e => {
                   const files = [...(e.target.files || [])];
                   if (!files.length) return;
-                  const screenshots = await Promise.all(files.map(compressScreenshot));
+                  const screenshots = await Promise.all(files.map(compressPuttingScreenshot));
                   setBlastByDrill(prev => ({
                     ...prev,
                     [currentDrill.id]: {
