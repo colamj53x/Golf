@@ -3,11 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { ScanSearch } from 'lucide-react';
-import { toast } from 'sonner';
-import { BlastMotionSetData } from '@/types/putting';
-import { BLAST_METRIC_FIELDS, extractBlastMetrics } from '@/lib/putting/blastExtraction';
+import { BlastMetricKey, BlastMotionSetData } from '@/types/putting';
 
 interface Props {
   value?: BlastMotionSetData;
@@ -16,27 +12,31 @@ interface Props {
   disabled?: boolean;
 }
 
-export function BlastMetricsEditor({ value, onSave, saveLabel = 'Apply reviewed metrics', disabled = false }: Props) {
-  const [draft, setDraft] = useState<BlastMotionSetData>(value || {});
-  const [reading, setReading] = useState(false);
+const fields: Array<[BlastMetricKey, string, string]> = [
+  ['tempo_ratio', 'Tempo ratio', '0.1'],
+  ['backstroke_time', 'Backstroke sec', '0.01'],
+  ['forwardstroke_time', 'Forward sec', '0.01'],
+  ['total_stroke_time', 'Total stroke sec', '0.01'],
+  ['tempo_consistency', 'Consistency %', '1'],
+  ['face_rotation', 'Face rotation', '0.1'],
+  ['lie_loft_change', 'Lie / loft change', '0.1'],
+  ['stroke_length', 'Stroke length', '0.1'],
+];
+
+function withLegacyAverages(value?: BlastMotionSetData): BlastMotionSetData {
+  if (!value) return {};
+  const metric_ranges = { ...value.metric_ranges };
+  for (const [field] of fields) {
+    if (!metric_ranges[field] && value[field] !== undefined) metric_ranges[field] = { average: value[field] };
+  }
+  return { ...value, metric_ranges };
+}
+
+export function BlastMetricsEditor({ value, onSave, saveLabel = 'Save Blast metrics', disabled = false }: Props) {
+  const [draft, setDraft] = useState<BlastMotionSetData>(() => withLegacyAverages(value));
   const [saving, setSaving] = useState(false);
-  const screenshots = value?.screenshot_data_urls || [];
 
-  useEffect(() => setDraft(value || {}), [value]);
-
-  const handleRead = async () => {
-    if (!screenshots.length) return;
-    setReading(true);
-    try {
-      const extracted = await extractBlastMetrics(screenshots);
-      setDraft(current => ({ ...current, ...extracted }));
-      toast.success('Blast metrics read. Please review them before saving.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not read the Blast screenshots.');
-    } finally {
-      setReading(false);
-    }
-  };
+  useEffect(() => setDraft(withLegacyAverages(value)), [value]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -49,37 +49,45 @@ export function BlastMetricsEditor({ value, onSave, saveLabel = 'Apply reviewed 
 
   return (
     <div className="space-y-3 rounded-md border border-sky-200 bg-white/80 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold text-sky-950">Blast metric review</div>
-          <p className="text-xs text-sky-800">Read all screenshots together, then correct any suggestion before saving.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {draft.extraction_confidence && <Badge variant="outline">{draft.extraction_confidence} confidence</Badge>}
-          <Button type="button" size="sm" variant="outline" disabled={disabled || reading || screenshots.length === 0} onClick={handleRead}>
-            <ScanSearch className="mr-1 h-4 w-4" /> {reading ? 'Reading...' : 'Read screenshots'}
-          </Button>
-        </div>
+      <div>
+        <div className="text-sm font-semibold text-sky-950">Blast Motion metrics</div>
+        <p className="text-xs text-sky-800">Enter the minimum, average and maximum shown by Blast Motion. Leave unavailable fields blank.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {BLAST_METRIC_FIELDS.map(([field, label, step]) => (
-          <div key={field} className="grid gap-1">
-            <Label>{label}</Label>
-            <Input
-              type="number"
-              step={step}
-              value={draft[field] ?? ''}
-              onChange={event => setDraft(current => ({ ...current, [field]: event.target.value === '' ? null : Number(event.target.value) }))}
-            />
-          </div>
-        ))}
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[620px] grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,0.7fr))] gap-2">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Metric</div>
+          {['Minimum', 'Average', 'Maximum'].map(label => <div key={label} className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>)}
+          {fields.map(([field, label, step]) => (
+            <div key={field} className="contents">
+              <Label className="self-center">{label}</Label>
+              {(['min', 'average', 'max'] as const).map(bound => (
+                <Input
+                  key={bound}
+                  type="number"
+                  step={step}
+                  value={draft.metric_ranges?.[field]?.[bound] ?? ''}
+                  onChange={event => setDraft(current => ({
+                    ...current,
+                    metric_ranges: {
+                      ...current.metric_ranges,
+                      [field]: {
+                        ...current.metric_ranges?.[field],
+                        [bound]: event.target.value === '' ? null : Number(event.target.value),
+                      },
+                    },
+                  }))}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
       <div className="grid gap-1">
-        <Label>Extraction notes</Label>
+        <Label>Notes</Label>
         <Textarea
-          value={draft.extraction_notes || ''}
-          onChange={event => setDraft(current => ({ ...current, extraction_notes: event.target.value }))}
-          placeholder="The image reader will flag uncertain or missing values here."
+          value={draft.notes || ''}
+          onChange={event => setDraft(current => ({ ...current, notes: event.target.value }))}
+          placeholder="Optional notes about this Blast Motion set."
           rows={2}
         />
       </div>

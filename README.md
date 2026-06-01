@@ -26,8 +26,6 @@ Create a local `.env` file using `.env.example` as a guide:
 VITE_SUPABASE_PROJECT_ID=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 VITE_SUPABASE_URL=
-OPENAI_API_KEY=
-OPENAI_VISION_MODEL=gpt-5-mini
 ```
 
 Start the development server:
@@ -59,8 +57,6 @@ Environment variables required in Vercel:
 - `VITE_SUPABASE_PROJECT_ID`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_URL`
-- `OPENAI_API_KEY`
-- `OPENAI_VISION_MODEL` (optional, defaults to `gpt-5-mini`)
 
 ## Supabase
 

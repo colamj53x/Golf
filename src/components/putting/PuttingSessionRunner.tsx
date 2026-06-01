@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Minus, Plus, ArrowLeft, ArrowRight, Check, ImagePlus, Sparkles, X } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { BlastMotionSetData, PuttingDrill, DrillResult, PuttingSessionType } from '@/types/putting';
 import { computeDrillResult, summarizeSession, validateDrillCounts } from '@/lib/putting/scoring';
 import { PUTTING_PRACTICE_SETS, PuttingPracticeSetId } from '@/lib/putting/drills';
@@ -16,7 +16,6 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { clearPuttingSessionDraft, loadPuttingSessionDraft, savePuttingSessionDraft } from '@/lib/putting/sessionDraft';
-import { compressPuttingScreenshot } from '@/lib/putting/screenshots';
 import { BlastMetricsEditor } from '@/components/putting/BlastMetricsEditor';
 
 interface SessionMeta {
@@ -480,51 +479,12 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
 
         {currentDrill.blast_compatible && (
           <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
-            <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Optional Blast Motion evidence for this training set</div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-sky-300 bg-white px-3 py-2 text-sky-900">
-                <ImagePlus className="h-4 w-4" />
-                Upload Blast screenshots
-                <Input className="hidden" type="file" accept="image/*" multiple onChange={async e => {
-                  const files = [...(e.target.files || [])];
-                  if (!files.length) return;
-                  const screenshots = await Promise.all(files.map(compressPuttingScreenshot));
-                  setBlastByDrill(prev => ({
-                    ...prev,
-                    [currentDrill.id]: {
-                      ...prev[currentDrill.id],
-                      screenshot_data_urls: [...(prev[currentDrill.id]?.screenshot_data_urls || []), ...screenshots],
-                      screenshot_names: [...(prev[currentDrill.id]?.screenshot_names || []), ...files.map(file => file.name)],
-                    },
-                  }));
-                }} />
-              </Label>
-              {(blastByDrill[currentDrill.id]?.screenshot_data_urls?.length || 0) > 0 && <span className="text-xs text-sky-800">{blastByDrill[currentDrill.id].screenshot_data_urls?.length} screenshot{blastByDrill[currentDrill.id].screenshot_data_urls?.length === 1 ? '' : 's'} attached</span>}
-            </div>
-            {(blastByDrill[currentDrill.id]?.screenshot_data_urls || []).length > 0 && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                {blastByDrill[currentDrill.id].screenshot_data_urls?.map((image, index) => (
-                  <div key={`${currentDrill.id}-${index}`} className="relative overflow-hidden rounded-md border border-sky-200 bg-white">
-                    <img src={image} alt={`${currentDrill.name} Blast metric screenshot ${index + 1}`} className="aspect-[4/3] w-full object-cover" />
-                    <Button type="button" variant="destructive" size="icon" className="absolute right-1 top-1 h-6 w-6" onClick={() => setBlastByDrill(prev => ({
-                      ...prev,
-                      [currentDrill.id]: {
-                        ...prev[currentDrill.id],
-                        screenshot_data_urls: (prev[currentDrill.id]?.screenshot_data_urls || []).filter((_, itemIndex) => itemIndex !== index),
-                        screenshot_names: (prev[currentDrill.id]?.screenshot_names || []).filter((_, itemIndex) => itemIndex !== index),
-                      },
-                    }))} aria-label={`Remove screenshot ${index + 1}`}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Optional Blast Motion metrics for this training set</div>
             <BlastMetricsEditor
               value={blastByDrill[currentDrill.id]}
               onSave={next => {
                 setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], ...next } }));
-                toast.success('Reviewed Blast metrics applied to this drill');
+                toast.success('Blast metrics applied to this drill');
               }}
             />
           </div>

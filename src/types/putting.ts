@@ -51,7 +51,25 @@ export interface PuttingDrill {
   quick_fix?: string | null;
 }
 
+export type BlastMetricKey =
+  | 'tempo_ratio'
+  | 'backstroke_time'
+  | 'forwardstroke_time'
+  | 'total_stroke_time'
+  | 'tempo_consistency'
+  | 'face_rotation'
+  | 'lie_loft_change'
+  | 'stroke_length';
+
+export interface BlastMetricRange {
+  min?: number | null;
+  average?: number | null;
+  max?: number | null;
+}
+
 export interface BlastMotionSetData {
+  metric_ranges?: Partial<Record<BlastMetricKey, BlastMetricRange>>;
+  // Keep legacy averages readable for sessions entered before range capture was added.
   tempo_ratio?: number | null;
   backstroke_time?: number | null;
   forwardstroke_time?: number | null;
@@ -61,13 +79,6 @@ export interface BlastMotionSetData {
   lie_loft_change?: number | null;
   stroke_length?: number | null;
   notes?: string;
-  screenshot_data_url?: string;
-  screenshot_name?: string;
-  screenshot_data_urls?: string[];
-  screenshot_names?: string[];
-  extraction_confidence?: 'high' | 'medium' | 'low';
-  extraction_notes?: string;
-  extracted_at?: string;
 }
 
 export interface DrillResult {

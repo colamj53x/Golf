@@ -87,13 +87,10 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
       return { metric, label: PUTTING_METRIC_LABELS[metric], value: values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null };
     });
     const weakest = [...metrics].filter((metric) => metric.value !== null).sort((a, b) => (a.value || 0) - (b.value || 0))[0];
-    const blastResults = sessions.flatMap((session) => session.drill_results).filter((result) => result.blast?.tempo_ratio);
-    const tempo = blastResults.length ? Math.round((blastResults.reduce((sum, result) => sum + (result.blast?.tempo_ratio || 0), 0) / blastResults.length) * 10) / 10 : null;
-    const screenshotCount = sessions.flatMap((session) => session.drill_results).reduce((sum, result) => {
-      const uploaded = result.blast?.screenshot_data_urls?.length ?? 0;
-      return sum + uploaded + (!uploaded && result.blast?.screenshot_data_url ? 1 : 0);
-    }, 0);
-    return { form, metrics, weakest, tempo, screenshotCount };
+    const blastResults = sessions.flatMap((session) => session.drill_results).filter((result) => result.blast?.metric_ranges || result.blast?.tempo_ratio);
+    const tempos = blastResults.map(result => result.blast?.metric_ranges?.tempo_ratio?.average ?? result.blast?.tempo_ratio).filter((tempo): tempo is number => typeof tempo === 'number');
+    const tempo = tempos.length ? Math.round((tempos.reduce((sum, value) => sum + value, 0) / tempos.length) * 10) / 10 : null;
+    return { form, metrics, weakest, tempo, blastSetCount: blastResults.length };
   }, [sessions]);
 
   if (section === 'drills') return <PuttingDrillBankTab />;
@@ -120,7 +117,7 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
       </Card>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {overview.metrics.map(({ metric, label, value }) => <Card key={metric}><CardContent className="p-4"><Gauge className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">{label}</div><div className="text-2xl font-bold">{value ?? '-'}{value !== null ? '%' : ''}</div><Progress value={value || 0} className="mt-3 h-1.5" /></CardContent></Card>)}
-        <Card><CardContent className="p-4"><Sparkles className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">Blast evidence</div><div className="text-2xl font-bold">{overview.screenshotCount}</div><div className="mt-3 text-xs text-muted-foreground">{overview.tempo ? `Average recorded tempo ${overview.tempo}:1` : 'Optional screenshots attach to normal training sets'}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><Sparkles className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">Blast Motion sets</div><div className="text-2xl font-bold">{overview.blastSetCount}</div><div className="mt-3 text-xs text-muted-foreground">{overview.tempo ? `Average recorded tempo ${overview.tempo}:1` : 'Optional metrics can be added to normal training sets'}</div></CardContent></Card>
       </div>
       {loading && <Card><CardContent className="p-4 text-sm text-muted-foreground">Loading putting scores...</CardContent></Card>}
       {!loading && <PuttingHistory sessions={sessions} onChanged={loadSessions} />}
