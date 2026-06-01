@@ -13,6 +13,8 @@ import { loadPuttingSessionDraft } from '@/lib/putting/sessionDraft';
 import { PuttingDrillBankTab } from './PuttingDrillBankTab';
 import { PuttingHistory } from './PuttingHistory';
 import { scoreBlastMechanics } from '@/lib/putting/blastScoring';
+import { useBlastMotionTargets } from '@/lib/putting/blastTargets';
+import { PuttingCueCards } from './PuttingCueCards';
 
 interface Props {
   section: PuttingSection;
@@ -54,6 +56,7 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<PuttingSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const { targets: blastTargets } = useBlastMotionTargets();
 
   const loadSessions = useCallback(async () => {
     if (!user) return;
@@ -91,18 +94,24 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
     const blastResults = sessions.flatMap((session) => session.drill_results).filter((result) => result.blast?.metric_ranges || result.blast?.tempo_ratio);
     const tempos = blastResults.map(result => result.blast?.metric_ranges?.tempo_ratio?.average ?? result.blast?.tempo_ratio).filter((tempo): tempo is number => typeof tempo === 'number');
     const tempo = tempos.length ? Math.round((tempos.reduce((sum, value) => sum + value, 0) / tempos.length) * 10) / 10 : null;
-    const mechanicsScores = blastResults.map(result => scoreBlastMechanics(result.blast)?.score).filter((value): value is number => typeof value === 'number');
+    const mechanicsScores = blastResults.map(result => scoreBlastMechanics(result.blast, blastTargets)?.score).filter((value): value is number => typeof value === 'number');
     const mechanicsScore = mechanicsScores.length ? Math.round(mechanicsScores.reduce((sum, value) => sum + value, 0) / mechanicsScores.length) : null;
     return { form, metrics, weakest, tempo, mechanicsScore, blastSetCount: blastResults.length };
-  }, [sessions]);
+  }, [blastTargets, sessions]);
 
   if (section === 'drills') return <PuttingDrillBankTab />;
-  if (section === 'sets') return <SetGrid sets={PUTTING_PRACTICE_SETS.filter((set) => set.category !== 'warmup')} onStart={onStartIndoorSet} />;
+  if (section === 'sets') return (
+    <div className="space-y-4">
+      <PuttingCueCards />
+      <SetGrid sets={PUTTING_PRACTICE_SETS.filter((set) => set.category !== 'warmup')} onStart={onStartIndoorSet} />
+    </div>
+  );
   if (section === 'warmup') return (
     <div className="space-y-4">
       <Card>
         <CardHeader><CardTitle>Pre-Round Warm-Up</CardTitle><CardDescription>No score chasing. Calibrate the green, find your start line, finish with confidence, then go play.</CardDescription></CardHeader>
       </Card>
+      <PuttingCueCards />
       <SetGrid sets={PUTTING_PRACTICE_SETS.filter((set) => set.category === 'warmup')} onStart={onStartIndoorSet} />
     </div>
   );

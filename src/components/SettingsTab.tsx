@@ -3,7 +3,7 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, CircleDot, Dumbbell, Goal, Settings as SettingsIcon, Save, Pencil } from 'lucide-react';
+import { BookOpen, CircleDot, Dumbbell, Goal, Settings as SettingsIcon, Save, Pencil, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -14,8 +14,15 @@ import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { DrillBankTab } from '@/components/DrillBankTab';
 import { PuttingDrillBankTab } from '@/components/putting/PuttingDrillBankTab';
+import { BlastMotionTargetsCard } from '@/components/putting/BlastMotionTargetsCard';
 
 const SETTINGS_SECTIONS = [
+  {
+    href: '#settings-blast-targets',
+    title: 'Blast Motion Targets',
+    description: 'Putting mechanics targets synced across devices.',
+    icon: Sparkles,
+  },
   {
     href: '#settings-global',
     title: 'Global Settings',
@@ -262,6 +269,8 @@ export function SettingsTab() {
       <section id="settings-shot-profiles" className="scroll-mt-6">
         <ShotProfilesCard />
       </section>
+
+      <BlastMotionTargetsCard />
 
       <section id="settings-full-swing-drills" className="scroll-mt-6">
         <DrillBankTab />
