@@ -56,10 +56,13 @@ export type BlastMetricKey =
   | 'backstroke_time'
   | 'forwardstroke_time'
   | 'total_stroke_time'
-  | 'tempo_consistency'
-  | 'face_rotation'
+  | 'backstroke_length'
+  | 'impact_stroke_speed'
+  | 'face_angle_at_impact'
+  | 'backstroke_rotation'
+  | 'forwardstroke_rotation'
   | 'lie_loft_change'
-  | 'stroke_length';
+;
 
 export interface BlastMetricRange {
   min?: number | null;
@@ -74,6 +77,7 @@ export interface BlastMotionSetData {
   backstroke_time?: number | null;
   forwardstroke_time?: number | null;
   total_stroke_time?: number | null;
+  // Legacy aliases retained so previously entered values remain readable.
   tempo_consistency?: number | null;
   face_rotation?: number | null;
   lie_loft_change?: number | null;

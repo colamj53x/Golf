@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { BlastMetricKey, BlastMotionSetData } from '@/types/putting';
+import { scoreBlastMechanics } from '@/lib/putting/blastScoring';
 
 interface Props {
   value?: BlastMotionSetData;
@@ -17,15 +18,19 @@ const fields: Array<[BlastMetricKey, string, string]> = [
   ['backstroke_time', 'Backstroke sec', '0.01'],
   ['forwardstroke_time', 'Forward sec', '0.01'],
   ['total_stroke_time', 'Total stroke sec', '0.01'],
-  ['tempo_consistency', 'Consistency %', '1'],
-  ['face_rotation', 'Face rotation', '0.1'],
+  ['backstroke_length', 'Backstroke length', '0.1'],
+  ['impact_stroke_speed', 'Impact stroke speed', '0.1'],
+  ['face_angle_at_impact', 'Face angle at impact', '0.1'],
+  ['backstroke_rotation', 'Backstroke rotation', '0.1'],
+  ['forwardstroke_rotation', 'Forward stroke rotation', '0.1'],
   ['lie_loft_change', 'Lie / loft change', '0.1'],
-  ['stroke_length', 'Stroke length', '0.1'],
 ];
 
 function withLegacyAverages(value?: BlastMotionSetData): BlastMotionSetData {
   if (!value) return {};
   const metric_ranges = { ...value.metric_ranges };
+  if (!metric_ranges.backstroke_length && value.stroke_length !== undefined) metric_ranges.backstroke_length = { average: value.stroke_length };
+  if (!metric_ranges.face_angle_at_impact && value.face_rotation !== undefined) metric_ranges.face_angle_at_impact = { average: value.face_rotation };
   for (const [field] of fields) {
     if (!metric_ranges[field] && value[field] !== undefined) metric_ranges[field] = { average: value[field] };
   }
@@ -35,6 +40,7 @@ function withLegacyAverages(value?: BlastMotionSetData): BlastMotionSetData {
 export function BlastMetricsEditor({ value, onSave, saveLabel = 'Save Blast metrics', disabled = false }: Props) {
   const [draft, setDraft] = useState<BlastMotionSetData>(() => withLegacyAverages(value));
   const [saving, setSaving] = useState(false);
+  const mechanics = scoreBlastMechanics(draft);
 
   useEffect(() => setDraft(withLegacyAverages(value)), [value]);
 
@@ -53,6 +59,13 @@ export function BlastMetricsEditor({ value, onSave, saveLabel = 'Save Blast metr
         <div className="text-sm font-semibold text-sky-950">Blast Motion metrics</div>
         <p className="text-xs text-sky-800">Enter the minimum, average and maximum shown by Blast Motion. Leave unavailable fields blank.</p>
       </div>
+      {mechanics && (
+        <div className="rounded-md border border-sky-200 bg-sky-50 p-3">
+          <div className="text-xs font-semibold uppercase text-sky-800">Blast Mechanics Score</div>
+          <div className="mt-1 text-2xl font-bold text-sky-950">{mechanics.score}<span className="text-sm font-normal text-sky-800"> / 100</span></div>
+          <p className="mt-1 text-xs text-sky-800">{mechanics.summary} Based on {mechanics.metricsUsed} entered metric{mechanics.metricsUsed === 1 ? '' : 's'}.</p>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <div className="grid min-w-[620px] grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,0.7fr))] gap-2">
           <div className="text-xs font-semibold uppercase text-muted-foreground">Metric</div>

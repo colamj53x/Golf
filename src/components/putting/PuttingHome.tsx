@@ -12,6 +12,7 @@ import { PUTTING_METRIC_LABELS, PUTTING_PRACTICE_SETS, PuttingPracticeSetId } fr
 import { loadPuttingSessionDraft } from '@/lib/putting/sessionDraft';
 import { PuttingDrillBankTab } from './PuttingDrillBankTab';
 import { PuttingHistory } from './PuttingHistory';
+import { scoreBlastMechanics } from '@/lib/putting/blastScoring';
 
 interface Props {
   section: PuttingSection;
@@ -90,7 +91,9 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
     const blastResults = sessions.flatMap((session) => session.drill_results).filter((result) => result.blast?.metric_ranges || result.blast?.tempo_ratio);
     const tempos = blastResults.map(result => result.blast?.metric_ranges?.tempo_ratio?.average ?? result.blast?.tempo_ratio).filter((tempo): tempo is number => typeof tempo === 'number');
     const tempo = tempos.length ? Math.round((tempos.reduce((sum, value) => sum + value, 0) / tempos.length) * 10) / 10 : null;
-    return { form, metrics, weakest, tempo, blastSetCount: blastResults.length };
+    const mechanicsScores = blastResults.map(result => scoreBlastMechanics(result.blast)?.score).filter((value): value is number => typeof value === 'number');
+    const mechanicsScore = mechanicsScores.length ? Math.round(mechanicsScores.reduce((sum, value) => sum + value, 0) / mechanicsScores.length) : null;
+    return { form, metrics, weakest, tempo, mechanicsScore, blastSetCount: blastResults.length };
   }, [sessions]);
 
   if (section === 'drills') return <PuttingDrillBankTab />;
@@ -117,7 +120,7 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
       </Card>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {overview.metrics.map(({ metric, label, value }) => <Card key={metric}><CardContent className="p-4"><Gauge className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">{label}</div><div className="text-2xl font-bold">{value ?? '-'}{value !== null ? '%' : ''}</div><Progress value={value || 0} className="mt-3 h-1.5" /></CardContent></Card>)}
-        <Card><CardContent className="p-4"><Sparkles className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">Blast Motion sets</div><div className="text-2xl font-bold">{overview.blastSetCount}</div><div className="mt-3 text-xs text-muted-foreground">{overview.tempo ? `Average recorded tempo ${overview.tempo}:1` : 'Optional metrics can be added to normal training sets'}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><Sparkles className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">Blast Mechanics</div><div className="text-2xl font-bold">{overview.mechanicsScore ?? '-'}{overview.mechanicsScore !== null ? '/100' : ''}</div><div className="mt-3 text-xs text-muted-foreground">{overview.blastSetCount ? `${overview.blastSetCount} recorded set${overview.blastSetCount === 1 ? '' : 's'}${overview.tempo ? ` · tempo ${overview.tempo}:1` : ''}` : 'Optional metrics can be added to normal training sets'}</div></CardContent></Card>
       </div>
       {loading && <Card><CardContent className="p-4 text-sm text-muted-foreground">Loading putting scores...</CardContent></Card>}
       {!loading && <PuttingHistory sessions={sessions} onChanged={loadSessions} />}
