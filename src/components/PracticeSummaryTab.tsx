@@ -11,7 +11,7 @@ import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/prac
 import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
 

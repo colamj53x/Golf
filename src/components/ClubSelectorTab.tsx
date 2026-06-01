@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/components/ClubGappingTab';
+import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/lib/gapping';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';

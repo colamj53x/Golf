@@ -5,6 +5,7 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
 import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
+import { getUploadShotFingerprint } from '@/lib/uploadReview';
 import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ type UploadReviewRow = {
   swingEffort: string;
   targetIntent: string;
   accepted: boolean;
+  target: number;
   total: number;
   side: number;
   startLie: string;
@@ -57,7 +59,7 @@ type UploadShotInsert = {
   shot_family: string;
   swing_effort: string;
   target_intent: string;
-  target: null;
+  target: number;
   total: number;
   offline: number;
   start_lie: string;
@@ -219,34 +221,6 @@ function isMissingReviewedUploadSchemaError(error: unknown): boolean {
   );
 }
 
-function getUploadShotFingerprint(shot: {
-  club: string;
-  shot_type?: string | null;
-  total?: number | null;
-  offline?: number | null;
-  start_lie?: string | null;
-  end_lie?: string | null;
-  strike_quality?: string | null;
-  shot_quality?: string | null;
-  end_distance_from_target?: number | null;
-  notes?: string | null;
-  shot_date?: string | null;
-}): string {
-  return [
-    shot.shot_date ?? '',
-    normalizeClubCode(shot.club),
-    shot.shot_type ?? '',
-    shot.total ?? '',
-    shot.offline ?? '',
-    shot.start_lie ?? '',
-    shot.end_lie ?? '',
-    shot.strike_quality ?? '',
-    shot.shot_quality ?? '',
-    shot.end_distance_from_target ?? '',
-    shot.notes ?? '',
-  ].join('|');
-}
-
 function buildReviewRow(shot: Shot): UploadReviewRow {
   const club = normalizeClub(shot.club);
   const shotFamily = inferShotFamily({ ...shot, club });
@@ -262,6 +236,7 @@ function buildReviewRow(shot: Shot): UploadReviewRow {
     swingEffort,
     targetIntent,
     accepted: false,
+    target: shot.target,
     total: shot.total,
     side: shot.side,
     startLie: shot.startLie,
@@ -506,7 +481,7 @@ export function UploadTab() {
         shot_family: row.shotFamily,
         swing_effort: row.swingEffort,
         target_intent: row.targetIntent,
-        target: null,
+        target: Math.max(0, Math.min(600, row.target)),
         total: Math.max(0, Math.min(600, row.total)),
         offline: Math.max(-200, Math.min(200, row.side)),
         start_lie: row.startLie,
@@ -529,7 +504,7 @@ export function UploadTab() {
         const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
         const { data: existingShots, error: existingShotsError } = await supabase
           .from('shots')
-          .select('club, shot_type, total, offline, start_lie, end_lie, strike_quality, shot_quality, end_distance_from_target, notes, shot_date')
+          .select('club, shot_type, target, total, offline, start_lie, end_lie, strike_quality, shot_quality, end_distance_from_target, notes, shot_date')
           .eq('user_id', user.id)
           .in('shot_date', relevantDates);
 
