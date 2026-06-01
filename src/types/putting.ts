@@ -5,6 +5,8 @@ export interface ScoringInput {
 }
 
 export type PuttingMetric = 'startLineStrike' | 'paceTouch' | 'conversionPressure';
+export type PuttingSessionType = 'indoor' | 'outdoor' | 'technique' | 'warmup' | 'benchmark' | 'blast';
+export type PuttingDifficulty = 'beginner' | 'developing' | 'strong' | 'advanced';
 
 export interface PuttingMetricScore {
   metric: PuttingMetric;
@@ -35,6 +37,32 @@ export interface PuttingDrill {
   is_builtin: boolean;
   sort_order: number;
   scoring_mode?: 'standard' | 'pressure_ladder';
+  location?: 'indoor' | 'outdoor' | 'both';
+  skill_tags?: string[];
+  difficulty?: PuttingDifficulty;
+  time_minutes?: number;
+  equipment?: string[];
+  best_for?: string[];
+  progression?: string | null;
+  regression?: string | null;
+  blast_compatible?: boolean;
+  cue_cards?: string[];
+  common_fault?: string | null;
+  quick_fix?: string | null;
+}
+
+export interface BlastMotionSetData {
+  tempo_ratio?: number | null;
+  backstroke_time?: number | null;
+  forwardstroke_time?: number | null;
+  total_stroke_time?: number | null;
+  tempo_consistency?: number | null;
+  face_rotation?: number | null;
+  lie_loft_change?: number | null;
+  stroke_length?: number | null;
+  notes?: string;
+  screenshot_data_url?: string;
+  screenshot_name?: string;
 }
 
 export interface DrillResult {
@@ -48,6 +76,16 @@ export interface DrillResult {
   percent: number;
   metric_scores?: PuttingMetricScore[];
   putts_used?: number;
+  blast?: BlastMotionSetData;
+  session_meta?: {
+    session_type?: PuttingSessionType;
+    practice_focus?: string;
+    selected_cue?: string;
+    reflection_what_worked?: string;
+    reflection_what_failed?: string;
+    reflection_next_focus?: string;
+    confidence_after?: number;
+  };
 }
 
 export interface PuttingSessionRecord {
@@ -69,6 +107,14 @@ export interface PuttingSessionRecord {
   recommendation: string | null;
   drill_results: DrillResult[];
   created_at: string;
+  session_type?: PuttingSessionType;
+  practice_focus?: string | null;
+  selected_cue?: string | null;
+  green_speed?: string | null;
+  reflection_what_worked?: string | null;
+  reflection_what_failed?: string | null;
+  reflection_next_focus?: string | null;
+  confidence_after?: number | null;
 }
 
 export const SESSION_LEVELS: LevelBand[] = [

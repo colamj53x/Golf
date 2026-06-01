@@ -6,11 +6,11 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { PuttingDrill, LevelBand, ScoringInput } from '@/types/putting';
 import { PuttingSessionRunner } from './PuttingSessionRunner';
-import { IndoorPracticeSetId, mergeLockedIndoorDrills } from '@/lib/putting/drills';
+import { PUTTING_PRACTICE_SETS, PuttingPracticeSetId, mergeLockedIndoorDrills } from '@/lib/putting/drills';
 
 interface Props {
   onBack: () => void;
-  initialPracticeSetId?: IndoorPracticeSetId;
+  initialPracticeSetId?: PuttingPracticeSetId;
 }
 
 export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a' }: Props) {
@@ -19,10 +19,7 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a' }: Props)
   const [loading, setLoading] = useState(true);
 
   const loadDrills = useCallback(async () => {
-    let query = supabase
-      .from('putting_drills')
-      .select('*')
-      .eq('category', 'indoor');
+    let query = supabase.from('putting_drills').select('*');
 
     query = user
       ? query.or(`is_builtin.eq.true,user_id.eq.${user.id}`)
@@ -57,7 +54,7 @@ export function PuttingIndoor({ onBack, initialPracticeSetId = 'set-a' }: Props)
       ) : (
         <PuttingSessionRunner
           drills={drills}
-          category="indoor"
+          category={PUTTING_PRACTICE_SETS.find((set) => set.id === initialPracticeSetId)?.category === 'outdoor' ? 'outdoor' : 'indoor'}
           initialPracticeSetId={initialPracticeSetId}
           onComplete={onBack}
           onCancel={onBack}

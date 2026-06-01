@@ -1,4 +1,4 @@
-import { PuttingDrill, PuttingMetric } from '@/types/putting';
+import { PuttingDrill, PuttingMetric, PuttingSessionType } from '@/types/putting';
 
 export const PUTTING_METRIC_LABELS: Record<PuttingMetric, string> = {
   startLineStrike: 'Start Line & Strike',
@@ -6,7 +6,7 @@ export const PUTTING_METRIC_LABELS: Record<PuttingMetric, string> = {
   conversionPressure: 'Conversion & Pressure',
 };
 
-export const LOCKED_INDOOR_DRILLS: PuttingDrill[] = [
+const baseDrills: PuttingDrill[] = [
   {
     id: '11111111-1111-4111-8111-111111111111',
     user_id: null,
@@ -250,6 +250,98 @@ export const LOCKED_INDOOR_DRILLS: PuttingDrill[] = [
   },
 ];
 
+const extraDrills: PuttingDrill[] = [
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Blast Tempo Baseline', 'Tempo', 'Measure a repeatable putting rhythm without chasing a perfect number.', 'Hit 10 putts from 1.5 m with Blast Motion. Use your normal routine.', 10, 'both', ['tempo', 'routine'], ['Blast Motion'], 'Keep your rhythm stable around a natural 2:1 pattern.', 90),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'Blast Tempo Ladder', 'Tempo transfer', 'Keep the same rhythm as stroke length changes.', 'Hit 5 putts each from 1 m, 3 m, and 6 m. Record Blast metrics after the set.', 15, 'both', ['tempo', 'pace'], ['Blast Motion'], 'Same rhythm, different stroke length.', 100),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'Quiet Hands Drill', 'Stroke control', 'Build a shoulder-driven stroke with soft grip pressure.', 'Hit 10 putts from 1 m. Use Blast Motion if available.', 10, 'both', ['tempo', 'strike'], ['Blast Motion'], 'Quiet hands. Hold the finish.', 110),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', '3-6-9 m Ladder', 'Pace', 'Calibrate speed across three useful outdoor distances.', 'Putt 3 balls each from 3 m, 6 m, and 9 m. Score balls inside 60 cm.', 9, 'outdoor', ['pace', 'lag'], ['Balls', 'Tees'], 'Same tempo. Let stroke length change.', 120),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5', 'Long Lag Circle', 'Lag control', 'Reduce three-putt risk from long range.', 'Hit 5 balls from 9-12 m. Score balls finishing inside a 90 cm circle.', 5, 'outdoor', ['pace', 'lag'], ['Balls', 'Tees'], 'Look longer at the target. Die it into the circle.', 130),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6', '1 m Circle', 'Conversion', 'Build short-putt confidence around the hole.', 'Place 8 balls around the hole at 1 m. Score makes.', 8, 'outdoor', ['conversion', 'pressure'], ['Balls'], 'Face first. Firm inside 1 m.', 140),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7', '1.5 m Circle', 'Pressure conversion', 'Test conversion when the putt is no longer automatic.', 'Place 8 balls around the hole at 1.5 m. Score makes.', 8, 'outdoor', ['conversion', 'pressure'], ['Balls'], 'Commit to the start spot.', 150),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8', 'Entry Point Drill', 'Green reading', 'Link read, entry point, start line, and pace.', 'Choose 8 breaking putts. Call the entry point before each stroke.', 8, 'outdoor', ['reading', 'pace'], ['Balls'], 'Read the finish, then build the line back.', 160),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9', 'Par-18 Putting', 'Scoring test', 'Benchmark your outdoor putting transfer.', 'Play 9 different holes on the practice green. Par is 2 on each.', 18, 'outdoor', ['pressure', 'routine', 'pace'], ['Ball'], 'One ball. Full routine. Accept the result.', 170),
+  makeDrill('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10', 'Random One-Ball Test', 'Course transfer', 'Practise the rhythm of real putting rather than block repetition.', 'Play 9 different putts with one ball and a full routine.', 9, 'outdoor', ['routine', 'reading', 'pressure'], ['Ball'], 'Read it, commit, roll it.', 180),
+];
+
+function makeDrill(
+  id: string,
+  name: string,
+  purpose: string,
+  detail: string,
+  setup: string,
+  reps: number,
+  location: 'indoor' | 'outdoor' | 'both',
+  skillTags: string[],
+  equipment: string[],
+  cue: string,
+  sortOrder: number,
+): PuttingDrill {
+  return {
+    id,
+    user_id: null,
+    category: location === 'indoor' ? 'indoor' : 'outdoor',
+    name,
+    purpose: `${purpose}: ${detail}`,
+    setup,
+    reps,
+    scoring_inputs: [
+      { id: 'successful', label: 'Successful rep', points: 1 },
+      { id: 'missed', label: 'Miss', points: 0 },
+    ],
+    max_score: reps,
+    scaled: false,
+    scaled_max: null,
+    level_bands: [
+      { min: 0, max: Math.floor(reps * 0.49), label: 'Needs work' },
+      { min: Math.ceil(reps * 0.5), max: Math.floor(reps * 0.69), label: 'Developing' },
+      { min: Math.ceil(reps * 0.7), max: Math.floor(reps * 0.89), label: 'Good' },
+      { min: Math.ceil(reps * 0.9), max: reps, label: 'Strong' },
+    ],
+    recommendation: cue,
+    is_builtin: true,
+    sort_order: sortOrder,
+    scoring_mode: 'standard',
+    location,
+    skill_tags: skillTags,
+    difficulty: 'developing',
+    time_minutes: Math.max(5, Math.ceil(reps / 3)),
+    equipment,
+    best_for: skillTags,
+    progression: 'Add distance, reduce the target, or use one ball with a full routine.',
+    regression: 'Shorten the putt or widen the target until the movement feels repeatable.',
+    blast_compatible: equipment.includes('Blast Motion') || skillTags.includes('tempo'),
+    cue_cards: [cue],
+    common_fault: 'Chasing the result instead of committing to the routine.',
+    quick_fix: cue,
+  };
+}
+
+function enrichDrill(drill: PuttingDrill): PuttingDrill {
+  const skill = drill.name.includes('Distance') || drill.name.includes('Lag') || drill.name.includes('Random')
+    ? ['pace']
+    : drill.name.includes('Pressure') || drill.name.includes('Automatic') || drill.name.includes('Clock')
+      ? ['conversion']
+      : ['start line', 'strike'];
+  return {
+    ...drill,
+    location: drill.location || 'indoor',
+    skill_tags: drill.skill_tags || skill,
+    difficulty: drill.difficulty || 'developing',
+    time_minutes: drill.time_minutes || Math.max(5, Math.ceil(drill.reps / 3)),
+    equipment: drill.equipment || ['Balls', 'Tees or coins'],
+    best_for: drill.best_for || skill,
+    progression: drill.progression || 'Narrow the target or add distance.',
+    regression: drill.regression || 'Widen the target or shorten the putt.',
+    blast_compatible: drill.blast_compatible ?? true,
+    cue_cards: drill.cue_cards || [drill.recommendation || 'Commit to the start spot.'],
+    common_fault: drill.common_fault || 'Losing the routine when the score matters.',
+    quick_fix: drill.quick_fix || drill.recommendation,
+  };
+}
+
+export const LOCKED_INDOOR_DRILLS: PuttingDrill[] = baseDrills.map(enrichDrill);
+export const PRODUCT_PUTTING_DRILLS: PuttingDrill[] = [...LOCKED_INDOOR_DRILLS, ...extraDrills.map(enrichDrill)];
+
 export const INDOOR_PRACTICE_SETS = [
   {
     id: 'set-a',
@@ -279,6 +371,31 @@ export const INDOOR_PRACTICE_SETS = [
 
 export type IndoorPracticeSetId = (typeof INDOOR_PRACTICE_SETS)[number]['id'];
 
+export interface PuttingPracticeSet {
+  id: string;
+  name: string;
+  description: string;
+  category: PuttingSessionType;
+  drillNames: string[];
+  timeMinutes: number;
+  bestFor: string;
+}
+
+export const PUTTING_PRACTICE_SETS: PuttingPracticeSet[] = [
+  ...INDOOR_PRACTICE_SETS.map((set) => ({ ...set, category: set.id === 'full' ? 'benchmark' as const : 'indoor' as const, timeMinutes: set.id === 'full' ? 30 : 20, bestFor: set.id === 'full' ? 'Monthly benchmark' : 'Indoor practice' })),
+  { id: 'set-d', name: 'Set D - Blast Motion Stroke Lab', description: 'Measure tempo, rhythm, and stroke consistency by set.', category: 'blast', drillNames: ['Blast Tempo Baseline', 'Blast Tempo Ladder', 'Quiet Hands Drill', '1 m Automatic Putts'], timeMinutes: 25, bestFor: 'Tempo and technique' },
+  { id: 'outdoor-speed', name: 'Outdoor Speed Control', description: 'Calibrate pace and reduce three-putt risk.', category: 'outdoor', drillNames: ['3-6-9 m Ladder', 'Long Lag Circle', 'Random One-Ball Test'], timeMinutes: 25, bestFor: 'Pace and lag putting' },
+  { id: 'outdoor-conversion', name: 'Short-Putt Conversion', description: 'Build confidence and conversion around the hole.', category: 'outdoor', drillNames: ['1 m Circle', '1.5 m Circle', 'Pressure Ladder'], timeMinutes: 20, bestFor: 'Short putts under pressure' },
+  { id: 'outdoor-reading', name: 'Green Reading Builder', description: 'Match entry point, start spot, and speed.', category: 'outdoor', drillNames: ['Entry Point Drill', 'Random One-Ball Test'], timeMinutes: 20, bestFor: 'Green reading' },
+  { id: 'benchmark-short', name: 'Putting Skills Test - Short', description: 'A repeatable 10-12 minute benchmark.', category: 'benchmark', drillNames: ['Start-Line Gate', '1 m Automatic Putts', '3-6-9 m Ladder', 'Pressure Ladder'], timeMinutes: 12, bestFor: 'Quick benchmark' },
+  { id: 'benchmark-full', name: 'Putting Skills Test - Full', description: 'A complete indoor and outdoor putting profile.', category: 'benchmark', drillNames: ['Start-Line Gate', 'Putter Gate Stroke', '3-6-9 m Ladder', 'Long Lag Circle', '1 m Circle', '1.5 m Circle', 'Pressure Ladder'], timeMinutes: 30, bestFor: 'Monthly benchmark' },
+  { id: 'warmup-5', name: '5-Minute Emergency Warm-Up', description: 'Speed check, start line, then finish with makes.', category: 'warmup', drillNames: ['Long Lag Circle', '1 m Circle'], timeMinutes: 5, bestFor: 'Fast pre-round calibration' },
+  { id: 'warmup-10', name: '10-Minute Standard Warm-Up', description: 'Green speed, lag feel, start line, short confidence, and one-ball rehearsal.', category: 'warmup', drillNames: ['3-6-9 m Ladder', 'Start-Line Gate', '1 m Circle', 'Random One-Ball Test'], timeMinutes: 10, bestFor: 'Normal pre-round routine' },
+  { id: 'warmup-15', name: '15-Minute Tournament Warm-Up', description: 'A fuller calibration without score-chasing.', category: 'warmup', drillNames: ['3-6-9 m Ladder', 'Entry Point Drill', '1 m Circle', 'Random One-Ball Test'], timeMinutes: 15, bestFor: 'Competition preparation' },
+];
+
+export type PuttingPracticeSetId = string;
+
 export const DRILL_METRIC_WEIGHTS: Record<string, Partial<Record<PuttingMetric, number>>> = {
   'Start-Line Gate': { startLineStrike: 1 },
   'Spot Roll Drill': { startLineStrike: 0.7, conversionPressure: 0.3 },
@@ -292,7 +409,7 @@ export const DRILL_METRIC_WEIGHTS: Record<string, Partial<Record<PuttingMetric, 
 };
 
 export function mergeLockedIndoorDrills(remoteDrills: PuttingDrill[]): PuttingDrill[] {
-  const lockedIds = new Set(LOCKED_INDOOR_DRILLS.map(drill => drill.id));
+  const lockedIds = new Set(PRODUCT_PUTTING_DRILLS.map(drill => drill.id));
   const unlockedRemote = remoteDrills.filter(drill => !drill.is_builtin && !lockedIds.has(drill.id));
-  return [...LOCKED_INDOOR_DRILLS, ...unlockedRemote].sort((a, b) => a.sort_order - b.sort_order);
+  return [...PRODUCT_PUTTING_DRILLS, ...unlockedRemote.map(enrichDrill)].sort((a, b) => a.sort_order - b.sort_order);
 }

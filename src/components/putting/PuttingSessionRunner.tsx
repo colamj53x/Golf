@@ -7,10 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Minus, Plus, ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { PuttingDrill, DrillResult } from '@/types/putting';
+import { Minus, Plus, ArrowLeft, ArrowRight, Check, ImagePlus, Sparkles } from 'lucide-react';
+import { BlastMotionSetData, PuttingDrill, DrillResult, PuttingSessionType } from '@/types/putting';
 import { computeDrillResult, summarizeSession, validateDrillCounts } from '@/lib/putting/scoring';
-import { INDOOR_PRACTICE_SETS, IndoorPracticeSetId } from '@/lib/putting/drills';
+import { PUTTING_PRACTICE_SETS, PuttingPracticeSetId } from '@/lib/putting/drills';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
@@ -24,14 +24,44 @@ interface SessionMeta {
   targetType: string;
   sessionLength: string;
   notes: string;
+  selectedCue: string;
+  practiceFocus: string;
+  reflectionWorked: string;
+  reflectionFailed: string;
+  reflectionNext: string;
+  confidenceAfter: number;
 }
 
 interface Props {
   drills: PuttingDrill[];
   category: 'indoor' | 'outdoor';
-  initialPracticeSetId?: IndoorPracticeSetId;
+  initialPracticeSetId?: PuttingPracticeSetId;
   onComplete: (sessionId: string) => void;
   onCancel: () => void;
+}
+
+const cueOptions = ['Face first', 'Roll over start spot', 'Quiet hands', 'Same tempo', 'Hold finish', 'Die it in', 'Firm inside 1m', 'Look and react'];
+
+async function compressScreenshot(file: File): Promise<string> {
+  const source = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const next = new Image();
+    next.onload = () => resolve(next);
+    next.onerror = reject;
+    next.src = source;
+  });
+  const width = Math.min(1200, image.width);
+  const height = Math.round((image.height / image.width) * width);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d')?.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', 0.68);
 }
 
 export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 'set-a', onComplete, onCancel }: Props) {
@@ -50,18 +80,24 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
     targetType: matchingDraft?.meta.targetType ?? 'Cup',
     sessionLength: matchingDraft?.meta.sessionLength ?? '25 min',
     notes: matchingDraft?.meta.notes ?? '',
+    selectedCue: matchingDraft?.meta.selectedCue ?? 'Face first',
+    practiceFocus: matchingDraft?.meta.practiceFocus ?? '',
+    reflectionWorked: matchingDraft?.meta.reflectionWorked ?? '',
+    reflectionFailed: matchingDraft?.meta.reflectionFailed ?? '',
+    reflectionNext: matchingDraft?.meta.reflectionNext ?? '',
+    confidenceAfter: matchingDraft?.meta.confidenceAfter ?? 5,
   });
   const [allCounts, setAllCounts] = useState<Record<string, Record<string, number>>>(matchingDraft?.allCounts ?? {});
-  const [practiceSetId, setPracticeSetId] = useState<IndoorPracticeSetId>(matchingDraft?.practiceSetId ?? initialPracticeSetId);
+  const [blastByDrill, setBlastByDrill] = useState<Record<string, BlastMotionSetData>>(matchingDraft?.blastByDrill ?? {});
+  const [practiceSetId, setPracticeSetId] = useState<PuttingPracticeSetId>(matchingDraft?.practiceSetId ?? initialPracticeSetId);
   const [saving, setSaving] = useState(false);
 
   const sortedDrills = useMemo(() => [...drills].sort((a, b) => a.sort_order - b.sort_order), [drills]);
   const selectedSet = useMemo(
-    () => INDOOR_PRACTICE_SETS.find(set => set.id === practiceSetId) ?? INDOOR_PRACTICE_SETS[0],
+    () => PUTTING_PRACTICE_SETS.find(set => set.id === practiceSetId) ?? PUTTING_PRACTICE_SETS[0],
     [practiceSetId],
   );
   const activeDrills = useMemo(() => {
-    if (category !== 'indoor') return sortedDrills;
     const drillNames = new Set(selectedSet.drillNames);
     const usedNames = new Set<string>();
     return sortedDrills.filter(drill => {
@@ -69,7 +105,8 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
       usedNames.add(drill.name);
       return true;
     });
-  }, [category, selectedSet, sortedDrills]);
+  }, [selectedSet, sortedDrills]);
+  const sessionType: PuttingSessionType = selectedSet.category;
 
   const currentDrill = step >= 0 && step < activeDrills.length ? activeDrills[step] : null;
   const currentCounts = currentDrill ? allCounts[currentDrill.id] ?? {} : {};
@@ -102,8 +139,10 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
       step,
       meta,
       allCounts,
+      blastByDrill,
+      sessionType,
     });
-  }, [allCounts, category, meta, practiceSetId, step]);
+  }, [allCounts, blastByDrill, category, meta, practiceSetId, sessionType, step]);
 
   const handleNext = () => {
     if (!currentDrill) return;
@@ -118,8 +157,22 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
   const results: DrillResult[] = useMemo(() => {
     return activeDrills
       .filter(d => allCounts[d.id])
-      .map(d => computeDrillResult(d, allCounts[d.id]));
-  }, [activeDrills, allCounts]);
+      .map((d, index) => ({
+        ...computeDrillResult(d, allCounts[d.id]),
+        blast: blastByDrill[d.id],
+        ...(index === 0 ? {
+          session_meta: {
+            session_type: sessionType,
+            practice_focus: meta.practiceFocus,
+            selected_cue: meta.selectedCue,
+            reflection_what_worked: meta.reflectionWorked,
+            reflection_what_failed: meta.reflectionFailed,
+            reflection_next_focus: meta.reflectionNext,
+            confidence_after: meta.confidenceAfter,
+          },
+        } : {}),
+      }));
+  }, [activeDrills, allCounts, blastByDrill, meta.confidenceAfter, meta.practiceFocus, meta.reflectionFailed, meta.reflectionNext, meta.reflectionWorked, meta.selectedCue, sessionType]);
 
   const summary = useMemo(() => summarizeSession(results, activeDrills), [results, activeDrills]);
 
@@ -164,11 +217,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
       <Card>
         <CardHeader>
           <CardTitle>Start Putting Session</CardTitle>
-          <CardDescription>Indoor Carpet Putting — Start Line & Short Putt Control</CardDescription>
+          <CardDescription>{selectedSet.name} · {selectedSet.timeMinutes} min · {selectedSet.bestFor}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {category === 'indoor' && (
+            {(
               <div className="grid gap-2 md:col-span-2">
                 <Label>Practice set</Label>
                 <Select
@@ -181,7 +234,7 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {INDOOR_PRACTICE_SETS.map(set => (
+                    {PUTTING_PRACTICE_SETS.map(set => (
                       <SelectItem key={set.id} value={set.id}>{set.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -231,6 +284,17 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                   <SelectItem value="Custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>My key cue</Label>
+              <Select value={meta.selectedCue} onValueChange={v => setMeta({ ...meta, selectedCue: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{cueOptions.map(cue => <SelectItem key={cue} value={cue}>{cue}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Practice focus</Label>
+              <Input value={meta.practiceFocus} onChange={e => setMeta({ ...meta, practiceFocus: e.target.value })} placeholder="Pace, start line, routine..." />
             </div>
           </div>
           <div className="grid gap-2">
@@ -288,6 +352,25 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             <p className="text-sm">{summary.recommendation}</p>
           </div>
 
+          <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <Label>What worked?</Label>
+              <Textarea value={meta.reflectionWorked} onChange={e => setMeta({ ...meta, reflectionWorked: e.target.value })} rows={2} />
+            </div>
+            <div className="grid gap-2">
+              <Label>What failed?</Label>
+              <Textarea value={meta.reflectionFailed} onChange={e => setMeta({ ...meta, reflectionFailed: e.target.value })} rows={2} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Next focus</Label>
+              <Input value={meta.reflectionNext} onChange={e => setMeta({ ...meta, reflectionNext: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Confidence after session: {meta.confidenceAfter}/10</Label>
+              <Input type="range" min={1} max={10} value={meta.confidenceAfter} onChange={e => setMeta({ ...meta, confidenceAfter: Number(e.target.value) })} />
+            </div>
+          </div>
+
           <div className="space-y-2">
             <h4 className="font-semibold">Drill breakdown</h4>
             {results.map(r => (
@@ -341,6 +424,11 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
             <strong>Cue:</strong> {currentDrill.recommendation}
           </div>
         )}
+        <div className="grid gap-2 rounded-md border bg-muted/20 p-3 text-sm md:grid-cols-3">
+          <div><strong>Equipment:</strong> {currentDrill.equipment?.join(', ') || 'Balls'}</div>
+          <div><strong>Common fault:</strong> {currentDrill.common_fault || 'Losing the routine'}</div>
+          <div><strong>Quick fix:</strong> {currentDrill.quick_fix || currentDrill.recommendation}</div>
+        </div>
 
         <div className="space-y-3">
           {currentDrill.scoring_inputs.map(input => {
@@ -407,6 +495,31 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
               })}
             />
             <p className="text-xs text-muted-foreground">Play until you complete the ladder or reach 20 putts.</p>
+          </div>
+        )}
+
+        {currentDrill.blast_compatible && (
+          <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
+            <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Blast Motion data for this set</div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-1"><Label>Tempo ratio</Label><Input type="number" step="0.1" placeholder="2.0" value={blastByDrill[currentDrill.id]?.tempo_ratio ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], tempo_ratio: Number(e.target.value) || null } }))} /></div>
+              <div className="grid gap-1"><Label>Backstroke sec</Label><Input type="number" step="0.01" placeholder="0.60" value={blastByDrill[currentDrill.id]?.backstroke_time ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], backstroke_time: Number(e.target.value) || null } }))} /></div>
+              <div className="grid gap-1"><Label>Forward sec</Label><Input type="number" step="0.01" placeholder="0.30" value={blastByDrill[currentDrill.id]?.forwardstroke_time ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], forwardstroke_time: Number(e.target.value) || null } }))} /></div>
+              <div className="grid gap-1"><Label>Consistency %</Label><Input type="number" min={0} max={100} placeholder="82" value={blastByDrill[currentDrill.id]?.tempo_consistency ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], tempo_consistency: Number(e.target.value) || null } }))} /></div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-sky-300 bg-white px-3 py-2 text-sky-900">
+                <ImagePlus className="h-4 w-4" />
+                Upload Blast screenshot
+                <Input className="hidden" type="file" accept="image/*" onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const screenshot = await compressScreenshot(file);
+                  setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], screenshot_data_url: screenshot, screenshot_name: file.name } }));
+                }} />
+              </Label>
+              {blastByDrill[currentDrill.id]?.screenshot_name && <span className="text-xs text-sky-800">{blastByDrill[currentDrill.id].screenshot_name} attached</span>}
+            </div>
           </div>
         )}
 

@@ -9,7 +9,7 @@ import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
 import { DriverPracticeView } from '@/components/DriverPracticeView';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { parsePracticeConfigKey } from '@/types/practiceClubs';
-import { IndoorPracticeSetId } from '@/lib/putting/drills';
+import { PuttingPracticeSetId } from '@/lib/putting/drills';
 import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
 
 type PuttingView = 'home' | 'indoor';
@@ -23,8 +23,12 @@ const secondaryNavItems = [
 ];
 
 const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
-  { value: 'dashboard', label: 'Dashboard' },
-  { value: 'drills', label: 'Drills' },
+  { value: 'overview', label: 'Overview' },
+  { value: 'sets', label: 'Practice Sets' },
+  { value: 'warmup', label: 'Warm-Up' },
+  { value: 'drills', label: 'Drill Library' },
+  { value: 'blast', label: 'Blast Motion' },
+  { value: 'history', label: 'History' },
 ];
 
 const fullSwingTiles = [
@@ -51,9 +55,9 @@ export function PracticeTab() {
   const [practiceMode, setPracticeMode] = useState<'full-swing' | 'putting'>('full-swing');
   const [fullSwingView, setFullSwingView] = useState<FullSwingView>('home');
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
-  const [puttingSection, setPuttingSection] = useState<PuttingSection>('dashboard');
+  const [puttingSection, setPuttingSection] = useState<PuttingSection>('overview');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
-  const [puttingSetId, setPuttingSetId] = useState<IndoorPracticeSetId>('set-a');
+  const [puttingSetId, setPuttingSetId] = useState<PuttingPracticeSetId>('set-a');
   const { setSelectedClub, setSelectedShotType, setSelectedPower } = usePracticeData();
 
   const openLog = (configKey: string) => {

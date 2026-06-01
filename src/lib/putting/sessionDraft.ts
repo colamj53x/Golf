@@ -1,10 +1,12 @@
-import { IndoorPracticeSetId } from './drills';
+import { BlastMotionSetData, PuttingSessionType } from '@/types/putting';
+import { PuttingPracticeSetId } from './drills';
 
 const STORAGE_KEY = 'putting_session_draft_v1';
 
 export interface PuttingSessionDraft {
   category: 'indoor' | 'outdoor';
-  practiceSetId: IndoorPracticeSetId;
+  sessionType?: PuttingSessionType;
+  practiceSetId: PuttingPracticeSetId;
   step: number;
   meta: {
     date: string;
@@ -13,8 +15,15 @@ export interface PuttingSessionDraft {
     targetType: string;
     sessionLength: string;
     notes: string;
+    selectedCue?: string;
+    practiceFocus?: string;
+    reflectionWorked?: string;
+    reflectionFailed?: string;
+    reflectionNext?: string;
+    confidenceAfter?: number;
   };
   allCounts: Record<string, Record<string, number>>;
+  blastByDrill?: Record<string, BlastMotionSetData>;
   updatedAt: string;
 }
 
