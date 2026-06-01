@@ -1,6 +1,7 @@
 // Per-drill overrides for built-in drills. Custom drills are edited in customDrills.ts directly.
 import type { CustomDrillInput } from './customDrills';
 import type { Drill, DrillWithMeta } from './practiceDrillsLibrary';
+import { persistDurableLocalSettingsSoon } from './durableLocalSettings';
 
 const STORAGE_KEY = 'drill_overrides_v1';
 
@@ -21,6 +22,7 @@ export function loadOverrides(): OverrideMap {
 export function saveOverrides(map: OverrideMap): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    persistDurableLocalSettingsSoon();
   } catch {
     /* ignore */
   }

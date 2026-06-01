@@ -33,7 +33,6 @@ import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { useGolfData } from '@/context/GolfDataContext';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
 import {
-  buildClubPracticeReport,
   calculateStatus,
   calculateTrend,
   computeSmashFactorDisplayFromInputs,
@@ -556,59 +555,6 @@ export function PracticeDashboardTab() {
     if (score >= 60) return 'bg-amber-500/10 border-amber-500/20';
     return 'bg-red-500/10 border-red-500/20';
   };
-
-  const clubReport = buildClubPracticeReport(
-    config,
-    currentSession,
-    previousSession,
-    allSessions,
-    shotsBySession,
-    currentConfigKey,
-    shots,
-    practiceDistanceTolerancePct,
-    practiceBallFlightTolerancePct,
-    practiceOtherTolerancePct,
-  );
-
-  const reportCard = currentSession ? (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Club Report</CardTitle>
-        <CardDescription>
-          {clubReport.title} • Latest session {format(currentSession.date, 'dd MMM yyyy')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-3">
-          <p className={
-            'text-sm font-medium ' + (
-              clubReport.tone === 'positive' ? 'text-green-600'
-              : clubReport.tone === 'negative' ? 'text-red-600'
-              : 'text-foreground'
-            )
-          }>
-            {clubReport.headline}
-          </p>
-          {clubReport.bullets.length > 0 && (
-            <ul className="space-y-1.5">
-              {clubReport.bullets.map((b, i) => (
-                <li key={i} className="flex gap-2 text-sm leading-snug">
-                  <span className={
-                    'shrink-0 font-semibold ' + (
-                      b.tone === 'positive' ? 'text-green-600'
-                      : b.tone === 'negative' ? 'text-red-600'
-                      : 'text-muted-foreground'
-                    )
-                  }>{b.label}:</span>
-                  <span className="text-muted-foreground">{b.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  ) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1156,9 +1102,6 @@ export function PracticeDashboardTab() {
           </CardContent>
         </Card>
       )}
-
-      {/* Club report */}
-      {reportCard}
 
       {/* Last Two Sessions Comparison */}
       <Card>

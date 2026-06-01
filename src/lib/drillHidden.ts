@@ -2,6 +2,8 @@
 // removed via customDrills.ts. This lets users "delete" library drills without
 // losing the original definitions — they can restore later.
 
+import { persistDurableLocalSettingsSoon } from './durableLocalSettings';
+
 const STORAGE_KEY = 'drill_hidden_v1';
 
 export function loadHiddenDrills(): string[] {
@@ -18,6 +20,7 @@ export function loadHiddenDrills(): string[] {
 function save(ids: string[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    persistDurableLocalSettingsSoon();
   } catch {
     /* ignore */
   }

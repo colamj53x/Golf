@@ -37,6 +37,7 @@ import {
   type ShotSortKey,
 } from '@/lib/gapping';
 import { updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { persistDurableLocalSettingsSoon } from '@/lib/durableLocalSettings';
 import { Shot } from '@/types/golf';
 
 export function ClubGappingTab() {
@@ -61,6 +62,7 @@ export function ClubGappingTab() {
 
   useEffect(() => {
     localStorage.setItem(SHOT_CATEGORY_OVERRIDES_KEY, JSON.stringify(shotCategoryOverrides));
+    persistDurableLocalSettingsSoon();
     window.dispatchEvent(new Event(SHOT_CATEGORY_OVERRIDES_EVENT));
   }, [shotCategoryOverrides]);
 

@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
 import { insertPracticeShots } from '@/lib/practiceRepository';
 import type { PracticeShot } from '@/lib/practiceSpreadsheetParser';
+import { USER_SETTINGS_CONFIG_PREFIX } from '@/lib/userSettingsRepository';
 
 // Stored config from database
 interface StoredPracticeConfig {
@@ -141,6 +142,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
 
         const configs: StoredPracticeConfig[] = (configsData || [])
           .filter((row) => !row.config_key.startsWith('round_reflection:'))
+          .filter((row) => !row.config_key.startsWith(USER_SETTINGS_CONFIG_PREFIX))
           .map((row) => ({
             id: row.id,
             configKey: row.config_key,

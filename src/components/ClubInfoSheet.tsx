@@ -11,9 +11,6 @@ import {
   Activity, 
   BarChart3,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  CircleDot,
   Download,
   Loader2
 } from 'lucide-react';
@@ -125,18 +122,6 @@ function StatRow({
   );
 }
 
-function InsightItem({ type, children }: { type: 'strength' | 'weakness' | 'neutral'; children: React.ReactNode }) {
-  const Icon = type === 'strength' ? CheckCircle2 : type === 'weakness' ? XCircle : CircleDot;
-  const colorClass = type === 'strength' ? 'text-green-500' : type === 'weakness' ? 'text-red-500' : 'text-muted-foreground';
-  
-  return (
-    <div className="flex items-start gap-2 py-1">
-      <Icon className={`h-4 w-4 mt-0.5 flex-shrink-0 ${colorClass}`} />
-      <span className="text-sm">{children}</span>
-    </div>
-  );
-}
-
 export function ClubInfoSheet({
   open,
   onOpenChange,
@@ -236,71 +221,6 @@ export function ClubInfoSheet({
     }
   };
   
-  // Generate insights based on data
-  const insights = useMemo(() => {
-    const strengths: string[] = [];
-    const weaknesses: string[] = [];
-    const trends: string[] = [];
-    
-    // Accuracy insights
-    if (overall.onTargetPct >= 70) strengths.push('Excellent accuracy - hitting targets consistently');
-    else if (overall.onTargetPct < 40) weaknesses.push('Accuracy needs work - missing targets too often');
-    
-    // Bad miss insights
-    if (overall.badMissPct <= 5) strengths.push('Very few disaster shots');
-    else if (overall.badMissPct > 15) weaknesses.push('Too many penalty situations');
-    
-    // Distance control
-    if (overall.distanceVariation <= 8) strengths.push('Consistent distance control');
-    else if (overall.distanceVariation > 15) weaknesses.push('Unpredictable distances');
-    
-    // Dispersion
-    if (overall.sideVariation <= 6) strengths.push('Tight shot dispersion');
-    else if (overall.sideVariation > 12) weaknesses.push('Wide dispersion pattern');
-    
-    // Strike quality
-    if (overall.strikeCentrePct >= 70) strengths.push('Pure ball striking');
-    else if (overall.strikeCentrePct < 50) weaknesses.push('Inconsistent contact quality');
-    
-    // Miss pattern
-    if (overall.rightPct > 35 && overall.rightPct > overall.leftPct * 1.5) {
-      weaknesses.push('Strong tendency to miss right');
-    } else if (overall.leftPct > 35 && overall.leftPct > overall.rightPct * 1.5) {
-      weaknesses.push('Strong tendency to miss left');
-    }
-    
-    // Green metrics
-    if (distanceToTargetEnabled) {
-      if (overall.greensHitPct >= 65) strengths.push('Reliable green hitting');
-      else if (overall.greensHitPct < 40) weaknesses.push('Difficulty finding greens');
-      
-      if (overall.proximityWithin5mPct >= 50) strengths.push('Excellent proximity to the hole');
-      else if (overall.proximityWithin5mPct < 25) weaknesses.push('Leaving shots too far from the pin');
-    }
-    
-    // Trend analysis
-    const recentVsOldest = {
-      onTarget: periods.mostRecent.onTargetPct - periods.oldest.onTargetPct,
-      badMiss: periods.mostRecent.badMissPct - periods.oldest.badMissPct,
-      strikeCentre: periods.mostRecent.strikeCentrePct - periods.oldest.strikeCentrePct,
-    };
-    
-    if (recentVsOldest.onTarget > 10) trends.push('Accuracy trending up significantly');
-    else if (recentVsOldest.onTarget < -10) trends.push('Accuracy has declined recently');
-    
-    if (recentVsOldest.badMiss < -5) trends.push('Fewer disaster shots recently');
-    else if (recentVsOldest.badMiss > 5) trends.push('More penalty situations lately');
-    
-    if (recentVsOldest.strikeCentre > 10) trends.push('Strike quality improving');
-    
-    // Capability vs consistency gap
-    if (ratings.capability > ratings.consistency + 15) {
-      weaknesses.push(`Capability (${ratings.capability}) far exceeds consistency (${ratings.consistency}) - you can hit great shots but can't repeat them`);
-    }
-    
-    return { strengths, weaknesses, trends };
-  }, [overall, periods, ratings, distanceToTargetEnabled]);
-
   const improvement = getImprovementDisplay(ratings.improvement);
 
   return (
@@ -371,52 +291,6 @@ export function ClubInfoSheet({
                       Focus on consistency drills.
                     </span>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Key Insights */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                Key Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Strengths
-                  </h4>
-                  {insights.strengths.length > 0 ? (
-                    insights.strengths.map((s, i) => <InsightItem key={i} type="strength">{s}</InsightItem>)
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No standout strengths identified yet</p>
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                    <XCircle className="h-4 w-4" />
-                    Areas to Improve
-                  </h4>
-                  {insights.weaknesses.length > 0 ? (
-                    insights.weaknesses.map((w, i) => <InsightItem key={i} type="weakness">{w}</InsightItem>)
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No major weaknesses identified</p>
-                  )}
-                </div>
-              </div>
-              
-              {insights.trends.length > 0 && (
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="font-medium mb-2 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    Recent Trends
-                  </h4>
-                  {insights.trends.map((t, i) => <InsightItem key={i} type="neutral">{t}</InsightItem>)}
                 </div>
               )}
             </CardContent>

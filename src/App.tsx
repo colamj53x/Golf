@@ -8,6 +8,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { GolfDataProvider } from "@/context/GolfDataContext";
 import { PracticeDataProvider } from "@/context/PracticeDataContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { DurableLocalSettingsSync } from "@/components/DurableLocalSettingsSync";
 
 const Index = lazy(() => import("./pages/Index"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -32,6 +33,7 @@ const App = () => (
     <AuthProvider>
       <GolfDataProvider>
         <PracticeDataProvider>
+          <DurableLocalSettingsSync />
           <TooltipProvider>
             <Toaster />
             <Sonner />

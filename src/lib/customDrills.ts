@@ -1,5 +1,6 @@
 // User-created drills, stored locally and merged into the drill bank.
 import type { Drill, DrillKind, DrillLevel, DrillWithMeta } from './practiceDrillsLibrary';
+import { persistDurableLocalSettingsSoon } from './durableLocalSettings';
 
 const STORAGE_KEY = 'custom_drills_v1';
 
@@ -40,6 +41,7 @@ export function loadCustomDrills(): StoredCustomDrill[] {
 export function saveCustomDrills(drills: StoredCustomDrill[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(drills));
+    persistDurableLocalSettingsSoon();
   } catch {
     /* ignore */
   }

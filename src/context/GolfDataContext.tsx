@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, normalizeClubCode, RoundReflection } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
 import { parseDate } from '@/lib/golfCalculations';
+import {
+  loadGolfUserSettings,
+  parseGolfUserSettings,
+  saveGolfUserSettings,
+  type GolfUserSettings,
+} from '@/lib/userSettingsRepository';
 
 type ShotRow = Database['public']['Tables']['shots']['Row'];
 
@@ -69,6 +75,7 @@ const GolfDataContext = createContext<GolfDataContextType | undefined>(undefined
 
 export function GolfDataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const settingsHydrated = useRef(false);
   
   const [clubs, setClubs] = useState<ClubConfig[]>(() => {
     const saved = localStorage.getItem('golf-club-configs');
@@ -137,6 +144,78 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('golf-practice-other-tolerance-pct', practiceOtherTolerancePct.toString());
   }, [practiceOtherTolerancePct]);
+
+  const currentSettings: GolfUserSettings = {
+    clubs,
+    distanceToTargetTolerance,
+    lowTargetExclusionThreshold,
+    gappingHcpTarget,
+    practiceDistanceTolerancePct,
+    practiceBallFlightTolerancePct,
+    practiceOtherTolerancePct,
+  };
+  const currentSettingsRef = useRef(currentSettings);
+  currentSettingsRef.current = currentSettings;
+
+  useEffect(() => {
+    if (!user) {
+      settingsHydrated.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const remote = await loadGolfUserSettings(user.id);
+        if (cancelled) return;
+        if (remote) {
+          const next = parseGolfUserSettings(remote, currentSettingsRef.current);
+          setClubs(next.clubs);
+          setDistanceToTargetTolerance(next.distanceToTargetTolerance);
+          setLowTargetExclusionThreshold(next.lowTargetExclusionThreshold);
+          setGappingHcpTarget(next.gappingHcpTarget);
+          setPracticeDistanceTolerancePct(next.practiceDistanceTolerancePct);
+          setPracticeBallFlightTolerancePct(next.practiceBallFlightTolerancePct);
+          setPracticeOtherTolerancePct(next.practiceOtherTolerancePct);
+        } else {
+          await saveGolfUserSettings(user.id, currentSettingsRef.current);
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error('Failed to load user settings:', getUserFriendlyError(error));
+        }
+      } finally {
+        if (!cancelled) settingsHydrated.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !settingsHydrated.current) return;
+
+    const timeout = window.setTimeout(() => {
+      void saveGolfUserSettings(user.id, currentSettingsRef.current).catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error('Failed to save user settings:', getUserFriendlyError(error));
+        }
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    clubs,
+    distanceToTargetTolerance,
+    gappingHcpTarget,
+    lowTargetExclusionThreshold,
+    practiceBallFlightTolerancePct,
+    practiceDistanceTolerancePct,
+    practiceOtherTolerancePct,
+    user,
+  ]);
 
   const loadShots = useCallback(async () => {
     if (!user) {

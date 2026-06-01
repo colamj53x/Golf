@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-  Target, 
   TrendingUp, 
   TrendingDown, 
   Minus, 
@@ -11,9 +10,6 @@ import {
   Activity, 
   BarChart3,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  CircleDot,
   Download,
   Loader2,
   Gauge
@@ -106,18 +102,6 @@ function ConsistencyBadge({ score, label }: { score: number | null; label: strin
   );
 }
 
-function InsightItem({ type, children }: { type: 'strength' | 'weakness' | 'neutral'; children: React.ReactNode }) {
-  const Icon = type === 'strength' ? CheckCircle2 : type === 'weakness' ? XCircle : CircleDot;
-  const colorClass = type === 'strength' ? 'text-green-500' : type === 'weakness' ? 'text-red-500' : 'text-muted-foreground';
-  
-  return (
-    <div className="flex items-start gap-2 py-1">
-      <Icon className={`h-4 w-4 mt-0.5 flex-shrink-0 ${colorClass}`} />
-      <span className="text-sm">{children}</span>
-    </div>
-  );
-}
-
 export function PracticeClubInfoSheet({
   open,
   onOpenChange,
@@ -186,75 +170,6 @@ export function PracticeClubInfoSheet({
       overall: Math.round(overallSum / count),
     };
   }, [allSessionsWithConsistency]);
-  
-  // Generate insights
-  const insights = useMemo(() => {
-    const strengths: string[] = [];
-    const weaknesses: string[] = [];
-    const trends: string[] = [];
-    
-    if (!currentSession || sessions.length < 2) {
-      return { strengths, weaknesses, trends };
-    }
-    
-    // Check consistency scores
-    if (currentSession.consistency) {
-      if (currentSession.consistency.distancePct >= 80) {
-        strengths.push('Excellent distance consistency');
-      } else if (currentSession.consistency.distancePct < 60) {
-        weaknesses.push('Distance consistency needs work');
-      }
-      
-      if (currentSession.consistency.lateralPct >= 80) {
-        strengths.push('Great lateral accuracy');
-      } else if (currentSession.consistency.lateralPct < 60) {
-        weaknesses.push('Lateral dispersion is too wide');
-      }
-    }
-    
-    // Check specific metrics against targets
-    metrics.forEach(metric => {
-      const currentValue = currentSession.metrics.find(m => m.metricId === metric.id);
-      const prevValue = previousSession?.metrics.find(m => m.metricId === metric.id);
-      
-      if (!currentValue || currentValue.valueMax === null) return;
-      
-      const val = currentValue.valueMax;
-      
-      // Check if within target
-      if (metric.targetMin !== null && metric.targetMax !== null) {
-        if (val >= metric.targetMin && val <= metric.targetMax) {
-          if (metric.category === 'distance' && metric.id === 'total_distance') {
-            strengths.push(`${metric.metricName} is on target`);
-          }
-        } else if (metric.higherIsBetter && val < metric.targetMin) {
-          weaknesses.push(`${metric.metricName} below target (${val} vs ${metric.targetMin}+)`);
-        } else if (!metric.higherIsBetter && val > metric.targetMax) {
-          weaknesses.push(`${metric.metricName} above target (${val} vs ≤${metric.targetMax})`);
-        }
-      }
-      
-      // Check trends
-      if (prevValue && prevValue.valueMax !== null) {
-        const diff = val - prevValue.valueMax;
-        if (Math.abs(diff) > 2) {
-          const improving = metric.higherIsBetter ? diff > 0 : diff < 0;
-          if (improving) {
-            trends.push(`${metric.metricName} improved by ${Math.abs(diff).toFixed(1)}`);
-          } else if (sessions.length >= 3) {
-            trends.push(`${metric.metricName} declined by ${Math.abs(diff).toFixed(1)}`);
-          }
-        }
-      }
-    });
-    
-    // Limit insights
-    return {
-      strengths: strengths.slice(0, 4),
-      weaknesses: weaknesses.slice(0, 4),
-      trends: trends.slice(0, 3),
-    };
-  }, [currentSession, previousSession, metrics, sessions.length]);
   
   const getMetricValue = (session: PracticeSession | null, metricId: string): string | null => {
     if (!session) return null;
@@ -437,54 +352,6 @@ export function PracticeClubInfoSheet({
                           <div className="text-sm font-medium">{consistencyAverages.best}%</div>
                           <div className="text-sm font-medium">{consistencyAverages.overall}%</div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Key Insights */}
-              {(insights.strengths.length > 0 || insights.weaknesses.length > 0 || insights.trends.length > 0) && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Target className="h-5 w-5 text-primary" />
-                      Key Insights
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Strengths
-                        </h4>
-                        {insights.strengths.length > 0 ? (
-                          insights.strengths.map((s, i) => <InsightItem key={i} type="strength">{s}</InsightItem>)
-                        ) : (
-                          <p className="text-sm text-muted-foreground">More data needed</p>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                          <XCircle className="h-4 w-4" />
-                          Areas to Improve
-                        </h4>
-                        {insights.weaknesses.length > 0 ? (
-                          insights.weaknesses.map((w, i) => <InsightItem key={i} type="weakness">{w}</InsightItem>)
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No major issues identified</p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {insights.trends.length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <h4 className="font-medium mb-2 flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-primary" />
-                          Recent Trends
-                        </h4>
-                        {insights.trends.map((t, i) => <InsightItem key={i} type="neutral">{t}</InsightItem>)}
                       </div>
                     )}
                   </CardContent>

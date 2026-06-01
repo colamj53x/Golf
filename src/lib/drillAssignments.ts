@@ -1,6 +1,8 @@
 // Local storage of which drills are "active" against which club + shot type
 // combinations. Keyed by drill id -> array of "club_shotType" tokens.
 
+import { persistDurableLocalSettingsSoon } from './durableLocalSettings';
+
 const STORAGE_KEY = 'drill_bank_assignments_v1';
 
 export type AssignmentMap = Record<string, string[]>; // drillId -> ["dr_full", ...]
@@ -28,6 +30,7 @@ export function loadAssignments(): AssignmentMap {
 export function saveAssignments(map: AssignmentMap): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    persistDurableLocalSettingsSoon();
   } catch {
     // ignore
   }

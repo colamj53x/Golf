@@ -20,8 +20,6 @@ import {
 import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
 import { ProcessedShot } from '@/types/golf';
 import { calculateClubRatings } from '@/lib/clubRatings';
-import { analyzeClubPerformance } from '@/lib/clubSummaryGenerator';
-import { ClubSummaryCard } from '@/components/ClubSummaryCard';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { LatestRoundTab } from '@/components/dashboard/LatestRoundTab';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
@@ -183,16 +181,6 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     // Calculate club ratings
     const ratings = calculateClubRatings(processed, currentConfig || undefined);
 
-    // Generate analysis
-    const distanceEnabled = currentConfig?.distanceToTargetEnabled ?? false;
-    const analysis = analyzeClubPerformance(
-      overall,
-      { mostRecent: trendMetrics.mostRecent, middle: trendMetrics.middle, oldest: trendMetrics.oldest },
-      ratings,
-      selectedClub !== 'all' ? selectedClub : 'Your clubs',
-      distanceEnabled
-    );
-
     return {
       processed,
       trendMetrics,
@@ -201,9 +189,8 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
       lastRound,
       last5Rounds,
       latestRoundDateKey: latestRoundDateKeys[0] ?? null,
-      distanceToTargetEnabled: distanceEnabled,
+      distanceToTargetEnabled: currentConfig?.distanceToTargetEnabled ?? false,
       ratings,
-      analysis,
       clubName: selectedClub !== 'all' ? selectedClub : 'All Clubs',
     };
   }, [shots, selectedClub, selectedStartLie, selectedDistanceFilter, clubs, distanceToTargetTolerance]);
@@ -312,7 +299,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
     );
   }
 
-  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, latestRoundDateKey, distanceToTargetEnabled, ratings, analysis, clubName } = processedData;
+  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, latestRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
 
   const handleSaveRoundReflection = async () => {
     if (!latestRoundDateKey) return;
@@ -543,16 +530,6 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
         </Card>
       </div>
 
-      {/* Club Performance Summary */}
-      <ClubSummaryCard
-        clubName={clubName}
-        analysis={analysis}
-        ratings={ratings}
-        shotCount={overall.shotCount}
-        overall={overall}
-        quartiles={capabilityMetrics}
-        distanceToTargetEnabled={distanceToTargetEnabled}
-      />
 
 
       {/* Trend Table */}
