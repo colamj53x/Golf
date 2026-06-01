@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -8,21 +8,36 @@ import {
   Brain,
   CircleDot,
   Gauge,
-  ShieldCheck,
-  Sparkles,
-  Target,
-  Trophy,
+  Signal,
 } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { useAnalysisPuttingSessions } from '@/hooks/useAnalysisPuttingSessions';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import {
   buildAnalysisModel,
   type AnalysisConfidence,
   type AnalysisTrend,
-  type TransferStatus,
 } from '@/lib/analysisSynthesis';
+import {
+  buildClubGappingRows,
+  clubSortIndex,
+  fmt,
+  fmtSideRange,
+  fmtSigned,
+  getClubName,
+  getShotLabel,
+  loadShotCategoryOverrides,
+  percentDotTone,
+  rangeDotTone,
+  SHOT_CONTEXT_OPTIONS,
+  shotCountTone,
+  type GappingRow,
+  type ShotContext,
+} from '@/lib/gapping';
+import { useShotProfiles } from '@/lib/shotProfiles';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -43,13 +58,6 @@ const trendLabel: Record<AnalysisTrend, string> = {
   insufficient: 'More data needed',
 };
 
-const transferLabel: Record<TransferStatus, string> = {
-  transferring: 'Transferring',
-  'not-yet-transferring': 'Not yet transferring',
-  'course-better': 'Course better than practice',
-  insufficient: 'Insufficient data',
-};
-
 const confidenceClasses: Record<AnalysisConfidence, string> = {
   high: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   medium: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -61,10 +69,10 @@ function ConfidenceBadge({ value }: { value: AnalysisConfidence }) {
   return <Badge variant="outline" className={confidenceClasses[value]}>{confidenceLabel[value]}</Badge>;
 }
 
-function TrendIcon({ value }: { value: AnalysisTrend }) {
-  if (value === 'improving') return <ArrowUpRight className="h-4 w-4 text-emerald-600" />;
-  if (value === 'declining') return <ArrowDownRight className="h-4 w-4 text-red-600" />;
-  return <ArrowRight className="h-4 w-4 text-slate-500" />;
+function TrendIndicator({ value }: { value: AnalysisTrend }) {
+  if (value === 'improving') return <ArrowUpRight className="h-4 w-4 text-emerald-600" aria-label="Improving" />;
+  if (value === 'declining') return <ArrowDownRight className="h-4 w-4 text-red-600" aria-label="Declining" />;
+  return <ArrowRight className="h-4 w-4 text-slate-500" aria-label={trendLabel[value]} />;
 }
 
 function MetricCard({
@@ -98,10 +106,29 @@ function EmptyCard({ children }: { children: string }) {
   return <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{children}</div>;
 }
 
+function groupRows(rows: GappingRow[]) {
+  const groups = new Map<string, GappingRow[]>();
+  const sortedRows = [...rows].sort((a, b) => {
+    const clubDelta = clubSortIndex(a.profile.clubId) - clubSortIndex(b.profile.clubId);
+    if (clubDelta !== 0) return clubDelta;
+    return (b.displayTotal ?? Number.NEGATIVE_INFINITY) - (a.displayTotal ?? Number.NEGATIVE_INFINITY);
+  });
+  sortedRows.forEach((row) => {
+    const clubName = getClubName(row.profile);
+    groups.set(clubName, [...(groups.get(clubName) || []), row]);
+  });
+  return [...groups.entries()];
+}
+
 export function AnalysisOverview() {
-  const { shots, clubs, roundReflections, isLoading: golfLoading } = useGolfData();
-  const { practiceSessions, isLoading: practiceLoading } = usePracticeData();
+  const { shots, clubs, roundReflections, gappingHcpTarget, isLoading: golfLoading } = useGolfData();
+  const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
+  const profiles = useShotProfiles();
   const puttingSessions = useAnalysisPuttingSessions();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession, isLoading: practiceShotsLoading } = usePracticeShotsBySessions(practiceSessionIds);
+  const [shotContext, setShotContext] = useState<ShotContext>('tee');
+  const shotCategoryOverrides = useMemo(() => loadShotCategoryOverrides(), []);
   const analysis = useMemo(() => buildAnalysisModel({
     shots,
     clubs,
@@ -109,10 +136,21 @@ export function AnalysisOverview() {
     practiceSessions,
     puttingSessions,
   }), [clubs, practiceSessions, puttingSessions, roundReflections, shots]);
-  const transferHeadline = analysis.transferInsights.find((row) => row.status !== 'insufficient');
+  const gappingRows = useMemo(() => buildClubGappingRows({
+    profiles,
+    shots,
+    shotContext,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    shotCategoryOverrides,
+  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shotCategoryOverrides, shotContext, shots, shotsBySession]);
+  const groupedRows = useMemo(() => groupRows(gappingRows), [gappingRows]);
+  const clubInsightMap = useMemo(() => new Map(analysis.clubInsights.map((insight) => [insight.clubId, insight])), [analysis.clubInsights]);
 
-  if (golfLoading || practiceLoading) {
-    return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-48 w-full" /><Skeleton className="h-64 w-full" /></div>;
+  if (golfLoading || practiceLoading || practiceShotsLoading) {
+    return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;
   }
 
   return (
@@ -140,177 +178,115 @@ export function AnalysisOverview() {
         </CardContent>
       </Card>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Gauge} label="SQI" value={analysis.sqi === null ? '-' : `${analysis.sqi} / 100`} detail={`${analysis.change !== null && analysis.change >= 0 ? '+' : ''}${analysis.change ?? '-'} vs baseline`} tone="good" />
         <MetricCard icon={AlertTriangle} label="Costly miss" value={`${analysis.badMissPct}%`} detail="Misses likely to cost position or a shot" tone="warn" />
         <MetricCard icon={CircleDot} label="Damage" value={`${analysis.damagePerRound}`} detail={`${analysis.scoringDamage} estimated shots across captured rounds`} tone="warn" />
         <MetricCard icon={Activity} label="Current form" value={trendLabel[analysis.trend]} detail={`${analysis.baselineSqi ?? '-'} all-time SQI baseline`} />
-        <MetricCard icon={Target} label="Top leak" value={analysis.priorities[0]?.clubName || '-'} detail={analysis.topLeak} tone="warn" />
-        <MetricCard icon={ShieldCheck} label="Practice transfer" value={transferHeadline ? transferLabel[transferHeadline.status] : 'More data needed'} detail={transferHeadline?.clubName || 'Capture matching practice and course samples'} tone={transferHeadline?.status === 'transferring' ? 'good' : 'default'} />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-amber-600" /> Top club priorities</CardTitle>
-            <CardDescription>Ranked by scoring damage, costly misses, and shot quality. Low samples are shown cautiously.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis.priorities.length === 0 && <EmptyCard>Capture at least eight shots with a club to unlock a priority recommendation.</EmptyCard>}
-            {analysis.priorities.map((priority) => (
-              <div key={priority.clubId} className="rounded-xl border bg-muted/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-900">{priority.rank}</span>
-                    <div>
-                      <div className="font-bold">{priority.clubName}</div>
-                      <div className="text-xs text-muted-foreground">{priority.evidence}</div>
-                    </div>
-                  </div>
-                  <ConfidenceBadge value={priority.confidence} />
-                </div>
-                <p className="mt-3 text-sm leading-relaxed">{priority.recommendation}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5 text-emerald-600" /> Most reliable clubs</CardTitle>
-            <CardDescription>Clubs currently giving you the strongest playable outcomes.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis.reliableClubs.length === 0 && <EmptyCard>More club-level samples are needed before a strength is declared.</EmptyCard>}
-            {analysis.reliableClubs.map((club) => (
-              <div key={club.clubId} className="flex items-start justify-between gap-3 rounded-lg border p-3">
-                <div>
-                  <div className="font-semibold">{club.clubName}</div>
-                  <div className="text-xs text-muted-foreground">SQI {club.sqi ?? '-'} · Costly miss {club.badMissPct}%</div>
-                </div>
-                <ConfidenceBadge value={club.confidence} />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       </section>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-emerald-700" /> What is changing?</CardTitle>
-          <CardDescription>Recent form compared with the longer baseline, so older data does not hide movement.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Gauge className="h-5 w-5 text-emerald-700" /> Club analysis</CardTitle>
+          <CardDescription>
+            Your gapping view with the useful course signals folded in. Change the lie context to see the shots you would actually play from there.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow><TableHead>Area</TableHead><TableHead>Trend</TableHead><TableHead>Evidence</TableHead><TableHead>Coach&apos;s read</TableHead><TableHead>Confidence</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {analysis.formInsights.map((row) => (
-                <TableRow key={row.area}>
-                  <TableCell className="font-semibold">{row.area}</TableCell>
-                  <TableCell><div className="flex items-center gap-2"><TrendIcon value={row.trend} />{trendLabel[row.trend]}</div></TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{row.evidence}</TableCell>
-                  <TableCell className="min-w-[280px]">{row.meaning}</TableCell>
-                  <TableCell><ConfidenceBadge value={row.confidence} /></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-sky-700" /> Practice to course transfer</CardTitle>
-          <CardDescription>Only matched structured samples are compared. Where the evidence is weak, the answer stays honest.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow><TableHead>Skill / club</TableHead><TableHead>Status</TableHead><TableHead>Evidence</TableHead><TableHead>Action</TableHead><TableHead>Confidence</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {analysis.transferInsights.map((row) => (
-                <TableRow key={row.clubName}>
-                  <TableCell className="font-semibold">{row.clubName}</TableCell>
-                  <TableCell>{transferLabel[row.status]}</TableCell>
-                  <TableCell className="min-w-[220px] text-muted-foreground">{row.evidence}</TableCell>
-                  <TableCell className="min-w-[260px]">{row.action}</TableCell>
-                  <TableCell><ConfidenceBadge value={row.confidence} /></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CircleDot className="h-5 w-5 text-rose-700" /> Miss pattern heatmap</CardTitle>
-            <CardDescription>This is the shape of the miss, not merely whether it was bad.</CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <CardContent>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {SHOT_CONTEXT_OPTIONS.map((option) => (
+              <Button
+                key={option.id}
+                type="button"
+                size="sm"
+                variant={shotContext === option.id ? 'default' : 'outline'}
+                onClick={() => setShotContext(option.id)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+          <div className="overflow-x-auto rounded-md border">
             <Table>
-              <TableHeader><TableRow><TableHead>Club</TableHead><TableHead>Shots</TableHead><TableHead>SQI</TableHead><TableHead>Side pattern</TableHead><TableHead>Distance pattern</TableHead><TableHead>Common tags</TableHead><TableHead>End lie</TableHead><TableHead>Confidence</TableHead></TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[110px]">Club</TableHead>
+                  <TableHead className="text-center">Shots</TableHead>
+                  <TableHead>Shot</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead className="text-right">Distance</TableHead>
+                  <TableHead className="text-right">Vertical</TableHead>
+                  <TableHead className="text-right">Side range</TableHead>
+                  <TableHead className="text-right">Mean side</TableHead>
+                  <TableHead className="text-right">Carry</TableHead>
+                  <TableHead className="text-center">Last 20 T</TableHead>
+                  <TableHead className="text-center">Last 20 safe</TableHead>
+                  <TableHead className="text-center">Range</TableHead>
+                  <TableHead className="text-center">SQI</TableHead>
+                  <TableHead className="text-center">Costly miss</TableHead>
+                  <TableHead>Pattern</TableHead>
+                  <TableHead className="text-center">Trend</TableHead>
+                  <TableHead>Confidence</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                {analysis.clubInsights.map((club) => (
-                  <TableRow key={club.clubId}>
-                    <TableCell className="font-semibold">{club.clubName}</TableCell>
-                    <TableCell>{club.shots}</TableCell>
-                    <TableCell>{club.sqi ?? '-'}</TableCell>
-                    <TableCell>{club.direction}</TableCell>
-                    <TableCell>{club.distance}</TableCell>
-                    <TableCell>{club.tags.join(', ') || '-'}</TableCell>
-                    <TableCell>{club.commonEndLie}</TableCell>
-                    <TableCell><ConfidenceBadge value={club.confidence} /></TableCell>
+                {groupedRows.flatMap(([clubName, clubRows]) => clubRows.map((row, index) => {
+                  const insight = clubInsightMap.get(row.profile.clubId);
+                  return (
+                    <TableRow key={`${row.profile.id}-${row.target}`}>
+                      <TableCell className="font-semibold">{index === 0 ? clubName : ''}</TableCell>
+                      <TableCell className="text-center">
+                        <Signal className={cn('mx-auto h-4 w-4', shotCountTone(row.shotCount))} aria-label={`${row.shotCount} shots`} />
+                      </TableCell>
+                      <TableCell><Badge variant="outline">{getShotLabel(row.profile)}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="capitalize">{row.target}</Badge></TableCell>
+                      <TableCell className="whitespace-nowrap text-right font-semibold">{fmt(row.displayTotal)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right">{fmt(row.totalMin)} - {fmt(row.totalMax)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right">{fmtSideRange(row.displaySideLeft, row.displaySideRight)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right">{fmtSigned(row.sideBias)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right">{fmt(row.displayCarry)}</TableCell>
+                      <TableCell className="text-center"><span className={cn('mx-auto block h-4 w-4 rounded-full border', percentDotTone(row.recentTargetPct))} title={`Last 20 target ${fmt(row.recentTargetPct, '%')}`} /></TableCell>
+                      <TableCell className="text-center"><span className={cn('mx-auto block h-4 w-4 rounded-full border', percentDotTone(row.recentSafePct))} title={`Last 20 safe ${fmt(row.recentSafePct, '%')}`} /></TableCell>
+                      <TableCell className="text-center"><span className={cn('mx-auto block h-4 w-4 rounded-full border', rangeDotTone(row.rangeConfidence))} title={`Range ${fmt(row.rangeConfidence, '%')}`} /></TableCell>
+                      <TableCell className="text-center font-semibold">{index === 0 ? insight?.sqi ?? '-' : ''}</TableCell>
+                      <TableCell className="whitespace-nowrap text-center">{index === 0 ? `${insight?.badMissPct ?? 0}%` : ''}</TableCell>
+                      <TableCell className="whitespace-nowrap">{index === 0 ? [insight?.direction, insight?.distance].filter(Boolean).join(' / ') : ''}</TableCell>
+                      <TableCell className="text-center">{index === 0 && insight ? <TrendIndicator value={insight.trend} /> : null}</TableCell>
+                      <TableCell>{index === 0 && insight ? <ConfidenceBadge value={insight.confidence} /> : null}</TableCell>
+                    </TableRow>
+                  );
+                }))}
+                {gappingRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={17} className="py-10 text-center text-muted-foreground">No club data yet for this context.</TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Brain className="h-5 w-5 text-orange-700" /> Reflection intelligence</CardTitle>
-            <CardDescription>{analysis.reflectionSummary}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis.reflectionThemes.length === 0 && <EmptyCard>Add short reflections after rounds and sessions. Repeated themes will appear here.</EmptyCard>}
-            {analysis.reflectionThemes.slice(0, 6).map((theme) => (
-              <div key={theme.id} className="rounded-lg border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold">{theme.label}</div>
-                  <ConfidenceBadge value={theme.confidence} />
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">{theme.count} mentions · {theme.linkedData}</div>
-                <p className="mt-2 text-sm">{theme.meaning}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Distance, carry, and dot indicators use the same rules as Gapping. SQI, costly miss, pattern, and trend are club-level course signals.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-red-700" /> Bad miss and scoring damage</CardTitle>
-          <CardDescription>Estimated only from captured end lies, penalties, recovery outcomes, and explicit strike tags.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Brain className="h-5 w-5 text-orange-700" /> Reflection intelligence</CardTitle>
+          <CardDescription>{analysis.reflectionSummary}</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow><TableHead>Club</TableHead><TableHead>Costly miss</TableHead><TableHead>Severity</TableHead><TableHead>Estimated damage</TableHead><TableHead>Damage / shot</TableHead><TableHead>Why it matters</TableHead><TableHead>Action</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {analysis.priorities.map((club) => (
-                <TableRow key={club.clubId}>
-                  <TableCell className="font-semibold">{club.clubName}</TableCell>
-                  <TableCell>{club.badMissPct}%</TableCell>
-                  <TableCell className="capitalize">{club.severity || 'Low'}</TableCell>
-                  <TableCell>{club.damage}</TableCell>
-                  <TableCell>{club.damagePerShot}</TableCell>
-                  <TableCell className="min-w-[220px]">{club.evidence}</TableCell>
-                  <TableCell className="min-w-[240px]">{club.recommendation}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {analysis.reflectionThemes.length === 0 && <EmptyCard>Add short reflections after rounds and sessions. Repeated themes will appear here.</EmptyCard>}
+          {analysis.reflectionThemes.slice(0, 6).map((theme) => (
+            <div key={theme.id} className="rounded-lg border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold">{theme.label}</div>
+                <ConfidenceBadge value={theme.confidence} />
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{theme.count} mentions · {theme.linkedData}</div>
+              <p className="mt-2 text-sm">{theme.meaning}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>
