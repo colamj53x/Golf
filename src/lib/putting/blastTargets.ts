@@ -29,14 +29,24 @@ async function loadRemoteTargets(userId: string): Promise<BlastMotionTargets | n
 }
 
 async function saveRemoteTargets(userId: string, targets: BlastMotionTargets) {
-  const { error } = await supabase.from('practice_configs').upsert({
+  const payload = {
     config_key: CONFIG_KEY,
     club: '__user_settings__',
     shot_type: 'putting_blast_targets',
     power: 'v1',
     metrics: targets as unknown as Json,
     user_id: userId,
-  }, { onConflict: 'user_id,config_key' });
+  };
+  const { data: existing, error: findError } = await supabase
+    .from('practice_configs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('config_key', CONFIG_KEY)
+    .maybeSingle();
+  if (findError) throw findError;
+  const { error } = existing
+    ? await supabase.from('practice_configs').update(payload).eq('id', existing.id).eq('user_id', userId)
+    : await supabase.from('practice_configs').insert(payload);
   if (error) throw error;
 }
 
