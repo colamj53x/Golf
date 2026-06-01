@@ -18,7 +18,7 @@ interface Props {
   onStartIndoorSet: (setId: PuttingPracticeSetId) => void;
 }
 
-export type PuttingSection = 'overview' | 'sets' | 'warmup' | 'drills' | 'history';
+export type PuttingSection = 'overview' | 'sets' | 'warmup' | 'drills';
 
 const score = (session: PuttingSessionRecord) => session.max_total ? Math.round((session.total_score / session.max_total) * 100) : 0;
 function metricPercent(results: DrillResult[], metric: PuttingMetric): number | null {
@@ -97,7 +97,6 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
   }, [sessions]);
 
   if (section === 'drills') return <PuttingDrillBankTab />;
-  if (section === 'history') return <PuttingHistory sessions={sessions} onChanged={loadSessions} />;
   if (section === 'sets') return <SetGrid sets={PUTTING_PRACTICE_SETS.filter((set) => set.category !== 'warmup')} onStart={onStartIndoorSet} />;
   if (section === 'warmup') return (
     <div className="space-y-4">
@@ -124,6 +123,7 @@ export function PuttingHome({ section, onStartIndoorSet }: Props) {
         <Card><CardContent className="p-4"><Sparkles className="h-4 w-4 text-primary" /><div className="mt-3 text-xs uppercase text-muted-foreground">Blast evidence</div><div className="text-2xl font-bold">{overview.screenshotCount}</div><div className="mt-3 text-xs text-muted-foreground">{overview.tempo ? `Average recorded tempo ${overview.tempo}:1` : 'Optional screenshots attach to normal training sets'}</div></CardContent></Card>
       </div>
       {loading && <Card><CardContent className="p-4 text-sm text-muted-foreground">Loading putting scores...</CardContent></Card>}
+      {!loading && <PuttingHistory sessions={sessions} onChanged={loadSessions} />}
     </div>
   );
 }
