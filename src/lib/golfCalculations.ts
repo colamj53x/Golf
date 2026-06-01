@@ -127,6 +127,7 @@ export interface ShotQualityBreakdown {
 
 // Exported interface for calculateMetrics return type
 export interface MetricsResult {
+  shotQualityIndex: number | null;
   onTargetPct: number;
   rightPct: number;
   leftPct: number;
@@ -156,6 +157,7 @@ export function calculateMetrics(shots: ProcessedShot[], config: ClubConfig | un
 
   if (shots.length === 0) {
     return {
+      shotQualityIndex: null,
       onTargetPct: 0,
       rightPct: 0,
       leftPct: 0,
@@ -181,6 +183,19 @@ export function calculateMetrics(shots: ProcessedShot[], config: ClubConfig | un
   }
 
   const total = shots.length;
+  const shotQualityScores: Record<string, number> = {
+    Pro: 100,
+    'Elite Am': 95,
+    '0 Handicap': 90,
+    '5 Handicap': 80,
+    '10 Handicap': 70,
+    '15 Handicap': 60,
+    '20 Handicap': 45,
+    '25 Handicap': 25,
+  };
+  const ratedShots = shots
+    .map(s => shotQualityScores[s.shotQuality])
+    .filter((score): score is number => typeof score === 'number');
   const onTarget = shots.filter(s => s.isOnTarget).length;
   const right = shots.filter(s => s.isRight).length;
   const left = shots.filter(s => s.isLeft).length;
@@ -235,6 +250,9 @@ export function calculateMetrics(shots: ProcessedShot[], config: ClubConfig | un
   });
 
   return {
+    shotQualityIndex: ratedShots.length > 0
+      ? ratedShots.reduce((sum, score) => sum + score, 0) / ratedShots.length
+      : null,
     onTargetPct: (onTarget / total) * 100,
     rightPct: (right / total) * 100,
     leftPct: (left / total) * 100,

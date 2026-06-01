@@ -1,9 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Minus, Target, Activity, Award, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Target, Activity, Award, ChevronDown, ChevronRight, ChevronsUpDown, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPercent, formatDistance, MetricsResult } from '@/lib/golfCalculations';
 import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
+import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { useState } from 'react';
 
 interface LatestRoundTabProps {
@@ -11,6 +11,7 @@ interface LatestRoundTabProps {
   last5Rounds: MetricsResult;
   mostRecentThird: MetricsResult;
   distanceToTargetEnabled: boolean;
+  roundDate: string;
 }
 
 type ComparisonStatus = 'better' | 'worse' | 'same';
@@ -84,7 +85,9 @@ function MetricComparisonRow({
   );
 }
 
-export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distanceToTargetEnabled }: LatestRoundTabProps) {
+const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
+
+export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distanceToTargetEnabled, roundDate }: LatestRoundTabProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
 
   const toggleCategory = (categoryKey: string) => {
@@ -114,7 +117,7 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
     return (
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
-          No shots recorded in the latest round.
+          No shots recorded in this round.
         </CardContent>
       </Card>
     );
@@ -123,37 +126,14 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
   // Calculate summary stats vs L5R
   const onTargetStatusL5R = getComparison(lastRound.onTargetPct, last5Rounds.onTargetPct, 'onTargetPct');
   const badMissStatusL5R = getComparison(lastRound.badMissPct, last5Rounds.badMissPct, 'badMissPct');
-  const avgDistStatusL5R = getComparison(lastRound.avgDistanceHit, last5Rounds.avgDistanceHit, 'avgDistanceHit');
-  const sideVarStatusL5R = getComparison(lastRound.sideVariation, last5Rounds.sideVariation, 'sideVariation');
+  const strikeCentreStatusL5R = getComparison(lastRound.strikeCentrePct, last5Rounds.strikeCentrePct, 'strikeCentrePct');
+  const sqiStatusL5R = getComparison(lastRound.shotQualityIndex, last5Rounds.shotQualityIndex, 'shotQualityIndex');
 
   // Calculate summary stats vs Recent 1/3
   const onTargetStatusRecent = getComparison(lastRound.onTargetPct, mostRecentThird.onTargetPct, 'onTargetPct');
   const badMissStatusRecent = getComparison(lastRound.badMissPct, mostRecentThird.badMissPct, 'badMissPct');
-  const avgDistStatusRecent = getComparison(lastRound.avgDistanceHit, mostRecentThird.avgDistanceHit, 'avgDistanceHit');
-  const sideVarStatusRecent = getComparison(lastRound.sideVariation, mostRecentThird.sideVariation, 'sideVariation');
-
-  // Count better/worse metrics vs L5R
-  let betterCountL5R = 0;
-  let worseCountL5R = 0;
-  let betterCountRecent = 0;
-  let worseCountRecent = 0;
-  
-  METRIC_CATEGORIES.forEach(category => {
-    category.metrics.forEach(m => {
-      if (m.requiresDistanceToTarget && !distanceToTargetEnabled) return;
-      const current = lastRound[m.key as keyof MetricsResult] as number | null;
-      const baselineL5R = last5Rounds[m.key as keyof MetricsResult] as number | null;
-      const baselineRecent = mostRecentThird[m.key as keyof MetricsResult] as number | null;
-      
-      const statusL5R = getComparison(current, baselineL5R, m.key);
-      if (statusL5R === 'better') betterCountL5R++;
-      if (statusL5R === 'worse') worseCountL5R++;
-      
-      const statusRecent = getComparison(current, baselineRecent, m.key);
-      if (statusRecent === 'better') betterCountRecent++;
-      if (statusRecent === 'worse') worseCountRecent++;
-    });
-  });
+  const strikeCentreStatusRecent = getComparison(lastRound.strikeCentrePct, mostRecentThird.strikeCentrePct, 'strikeCentrePct');
+  const sqiStatusRecent = getComparison(lastRound.shotQualityIndex, mostRecentThird.shotQualityIndex, 'shotQualityIndex');
 
   // Helper to get border color based on both statuses
   const getBorderColor = (status1: ComparisonStatus, status2: ComparisonStatus) => {
@@ -168,24 +148,25 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className={`stat-card border-l-4 ${getBorderColor(onTargetStatusL5R, onTargetStatusRecent)}`}>
+        <Card className={`stat-card border-l-4 ${getBorderColor(sqiStatusL5R, sqiStatusRecent)}`}>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">On-Target %</p>
-                <p className="text-2xl font-bold">{formatPercent(lastRound.onTargetPct)}</p>
+                <p className="text-sm text-muted-foreground">Shot Quality Index</p>
+                <p className="text-2xl font-bold">{formatSqi(lastRound.shotQualityIndex)}</p>
+                <p className="text-xs font-medium text-primary">{describeHandicapEquivalent(lastRound.shotQualityIndex)}</p>
                 <div className="flex gap-3 text-xs">
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.onTargetPct)}</span>
-                    <ComparisonIndicator status={onTargetStatusL5R} />
+                    <span className="text-muted-foreground">L5R: {formatSqi(last5Rounds.shotQualityIndex)}</span>
+                    <ComparisonIndicator status={sqiStatusL5R} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Top⅓: {formatPercent(mostRecentThird.onTargetPct)}</span>
-                    <ComparisonIndicator status={onTargetStatusRecent} />
+                    <span className="text-muted-foreground">Recent ⅓: {formatSqi(mostRecentThird.shotQualityIndex)}</span>
+                    <ComparisonIndicator status={sqiStatusRecent} />
                   </div>
                 </div>
               </div>
-              <Target className="h-8 w-8 text-primary opacity-80" />
+              <Gauge className="h-8 w-8 text-primary opacity-80" />
             </div>
           </CardContent>
         </Card>
@@ -202,7 +183,7 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
                     <ComparisonIndicator status={badMissStatusL5R} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Top⅓: {formatPercent(mostRecentThird.badMissPct)}</span>
+                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.badMissPct)}</span>
                     <ComparisonIndicator status={badMissStatusRecent} />
                   </div>
                 </div>
@@ -212,42 +193,42 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
           </CardContent>
         </Card>
 
-        <Card className={`stat-card border-l-4 ${getBorderColor(avgDistStatusL5R, avgDistStatusRecent)}`}>
+        <Card className={`stat-card border-l-4 ${getBorderColor(onTargetStatusL5R, onTargetStatusRecent)}`}>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Avg Distance</p>
-                <p className="text-2xl font-bold">{formatDistance(lastRound.avgDistanceHit)}</p>
+                <p className="text-sm text-muted-foreground">On-Target %</p>
+                <p className="text-2xl font-bold">{formatPercent(lastRound.onTargetPct)}</p>
                 <div className="flex gap-3 text-xs">
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatDistance(last5Rounds.avgDistanceHit)}</span>
-                    <ComparisonIndicator status={avgDistStatusL5R} />
+                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.onTargetPct)}</span>
+                    <ComparisonIndicator status={onTargetStatusL5R} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Top⅓: {formatDistance(mostRecentThird.avgDistanceHit)}</span>
-                    <ComparisonIndicator status={avgDistStatusRecent} />
+                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.onTargetPct)}</span>
+                    <ComparisonIndicator status={onTargetStatusRecent} />
                   </div>
                 </div>
               </div>
-              <TrendingUp className="h-8 w-8 text-primary opacity-80" />
+              <Target className="h-8 w-8 text-primary opacity-80" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`stat-card border-l-4 ${getBorderColor(sideVarStatusL5R, sideVarStatusRecent)}`}>
+        <Card className={`stat-card border-l-4 ${getBorderColor(strikeCentreStatusL5R, strikeCentreStatusRecent)}`}>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Side Variation</p>
-                <p className="text-2xl font-bold">{formatDistance(lastRound.sideVariation)}</p>
+                <p className="text-sm text-muted-foreground">Strike Centre %</p>
+                <p className="text-2xl font-bold">{formatPercent(lastRound.strikeCentrePct)}</p>
                 <div className="flex gap-3 text-xs">
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatDistance(last5Rounds.sideVariation)}</span>
-                    <ComparisonIndicator status={sideVarStatusL5R} />
+                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.strikeCentrePct)}</span>
+                    <ComparisonIndicator status={strikeCentreStatusL5R} />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Top⅓: {formatDistance(mostRecentThird.sideVariation)}</span>
-                    <ComparisonIndicator status={sideVarStatusRecent} />
+                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.strikeCentrePct)}</span>
+                    <ComparisonIndicator status={strikeCentreStatusRecent} />
                   </div>
                 </div>
               </div>
@@ -256,43 +237,6 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
           </CardContent>
         </Card>
       </div>
-
-      {/* Round Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Latest Round Summary
-          </CardTitle>
-          <CardDescription>
-            {lastRound.shotCount} shots recorded • Compared against Last 5 Rounds ({last5Rounds.shotCount} shots) and Recent 1/3 ({mostRecentThird.shotCount} shots)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold">{lastRound.shotCount}</p>
-              <p className="text-sm text-muted-foreground">Shots This Round</p>
-            </div>
-            <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold text-primary">{betterCountL5R}</p>
-              <p className="text-sm text-muted-foreground">Better vs L5R</p>
-            </div>
-            <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold text-destructive">{worseCountL5R}</p>
-              <p className="text-sm text-muted-foreground">Worse vs L5R</p>
-            </div>
-            <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold text-primary">{betterCountRecent}</p>
-              <p className="text-sm text-muted-foreground">Better vs Top⅓</p>
-            </div>
-            <div className="text-center p-4 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold text-destructive">{worseCountRecent}</p>
-              <p className="text-sm text-muted-foreground">Worse vs Top⅓</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Detailed Comparison Table */}
       <Card>
@@ -303,7 +247,7 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
               Round Comparison
             </CardTitle>
             <CardDescription>
-              Latest round vs Last 5 Rounds and Recent 1/3
+              {roundDate} vs its trailing 5 rounds and recent 1/3
             </CardDescription>
           </div>
           <Button
@@ -322,7 +266,7 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
               <thead>
                 <tr>
                   <th>Metric</th>
-                  <th className="text-center">Latest Round</th>
+                  <th className="text-center">Selected Round</th>
                   <th className="text-center">Last 5 Rounds</th>
                   <th className="text-center">Recent 1/3</th>
                 </tr>
