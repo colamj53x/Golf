@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { clearPuttingSessionDraft, loadPuttingSessionDraft, savePuttingSessionDraft } from '@/lib/putting/sessionDraft';
 import { compressPuttingScreenshot } from '@/lib/putting/screenshots';
+import { BlastMetricsEditor } from '@/components/putting/BlastMetricsEditor';
 
 interface SessionMeta {
   date: string;
@@ -480,12 +481,6 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
         {currentDrill.blast_compatible && (
           <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
             <div className="flex items-center gap-2 font-semibold text-sky-900"><Sparkles className="h-4 w-4" /> Optional Blast Motion evidence for this training set</div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="grid gap-1"><Label>Tempo ratio</Label><Input type="number" step="0.1" placeholder="2.0" value={blastByDrill[currentDrill.id]?.tempo_ratio ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], tempo_ratio: Number(e.target.value) || null } }))} /></div>
-              <div className="grid gap-1"><Label>Backstroke sec</Label><Input type="number" step="0.01" placeholder="0.60" value={blastByDrill[currentDrill.id]?.backstroke_time ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], backstroke_time: Number(e.target.value) || null } }))} /></div>
-              <div className="grid gap-1"><Label>Forward sec</Label><Input type="number" step="0.01" placeholder="0.30" value={blastByDrill[currentDrill.id]?.forwardstroke_time ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], forwardstroke_time: Number(e.target.value) || null } }))} /></div>
-              <div className="grid gap-1"><Label>Consistency %</Label><Input type="number" min={0} max={100} placeholder="82" value={blastByDrill[currentDrill.id]?.tempo_consistency ?? ''} onChange={e => setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], tempo_consistency: Number(e.target.value) || null } }))} /></div>
-            </div>
             <div className="flex flex-wrap items-center gap-3">
               <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-sky-300 bg-white px-3 py-2 text-sky-900">
                 <ImagePlus className="h-4 w-4" />
@@ -525,6 +520,13 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
                 ))}
               </div>
             )}
+            <BlastMetricsEditor
+              value={blastByDrill[currentDrill.id]}
+              onSave={next => {
+                setBlastByDrill(prev => ({ ...prev, [currentDrill.id]: { ...prev[currentDrill.id], ...next } }));
+                toast.success('Reviewed Blast metrics applied to this drill');
+              }}
+            />
           </div>
         )}
 

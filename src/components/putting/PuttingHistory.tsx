@@ -13,6 +13,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { compressPuttingScreenshot } from '@/lib/putting/screenshots';
+import { BlastMotionSetData } from '@/types/putting';
+import { BlastMetricsEditor } from '@/components/putting/BlastMetricsEditor';
 
 interface Props {
   sessions: PuttingSessionRecord[];
@@ -121,6 +123,30 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
       onChanged();
     } catch {
       toast.error('Failed to remove Blast screenshot');
+    } finally {
+      setUploadingDrillId(null);
+    }
+  };
+
+  const handleSaveBlastMetrics = async (session: PuttingSessionRecord, result: DrillResult, blast: BlastMotionSetData) => {
+    if (!user) return;
+    const uploadKey = `${session.id}:${result.drill_id}`;
+    setUploadingDrillId(uploadKey);
+    try {
+      const nextResults = session.drill_results.map(item => item.drill_id === result.drill_id ? {
+        ...item,
+        blast: { ...item.blast, ...blast },
+      } : item);
+      const { error } = await supabase
+        .from('putting_sessions')
+        .update({ drill_results: JSON.parse(JSON.stringify(nextResults)) })
+        .eq('id', session.id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast.success('Reviewed Blast metrics saved');
+      onChanged();
+    } catch {
+      toast.error('Failed to save Blast metrics');
     } finally {
       setUploadingDrillId(null);
     }
@@ -251,6 +277,12 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
                               ))}
                             </div>
                           )}
+                          <BlastMetricsEditor
+                            value={result.blast}
+                            disabled={uploadingDrillId === uploadKey}
+                            saveLabel="Save reviewed metrics"
+                            onSave={blast => handleSaveBlastMetrics(s, result, blast)}
+                          />
                         </div>
                       );
                     })}

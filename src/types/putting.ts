@@ -65,6 +65,9 @@ export interface BlastMotionSetData {
   screenshot_name?: string;
   screenshot_data_urls?: string[];
   screenshot_names?: string[];
+  extraction_confidence?: 'high' | 'medium' | 'low';
+  extraction_notes?: string;
+  extracted_at?: string;
 }
 
 export interface DrillResult {
