@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, ImagePlus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ImagePlus, Trash2, X } from 'lucide-react';
 import { DrillResult, PuttingSessionRecord } from '@/types/putting';
 import { format, startOfWeek } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -94,6 +94,33 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
       onChanged();
     } catch {
       toast.error('Failed to add Blast screenshots');
+    } finally {
+      setUploadingDrillId(null);
+    }
+  };
+
+  const handleRemoveBlastScreenshot = async (session: PuttingSessionRecord, result: DrillResult, index: number) => {
+    if (!user) return;
+    setUploadingDrillId(`${session.id}:${result.drill_id}`);
+    try {
+      const nextResults = session.drill_results.map((item) => item.drill_id === result.drill_id ? {
+        ...item,
+        blast: {
+          ...item.blast,
+          screenshot_data_urls: (item.blast?.screenshot_data_urls || []).filter((_, itemIndex) => itemIndex !== index),
+          screenshot_names: (item.blast?.screenshot_names || []).filter((_, itemIndex) => itemIndex !== index),
+        },
+      } : item);
+      const { error } = await supabase
+        .from('putting_sessions')
+        .update({ drill_results: JSON.parse(JSON.stringify(nextResults)) })
+        .eq('id', session.id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast.success('Blast screenshot removed');
+      onChanged();
+    } catch {
+      toast.error('Failed to remove Blast screenshot');
     } finally {
       setUploadingDrillId(null);
     }
@@ -197,19 +224,33 @@ export function PuttingHistory({ sessions, onChanged }: Props) {
                       const screenshotCount = result.blast?.screenshot_data_urls?.length || (result.blast?.screenshot_data_url ? 1 : 0);
                       const uploadKey = `${s.id}:${result.drill_id}`;
                       return (
-                        <div key={result.drill_id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background p-3">
-                          <div>
-                            <div className="text-sm font-semibold">{result.drill_name}</div>
-                            <div className="text-xs text-muted-foreground">{result.final_score} / {result.max_score} · {screenshotCount} Blast screenshot{screenshotCount === 1 ? '' : 's'}</div>
+                        <div key={result.drill_id} className="space-y-3 rounded-md border bg-background p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold">{result.drill_name}</div>
+                              <div className="text-xs text-muted-foreground">{result.final_score} / {result.max_score} · {screenshotCount} Blast screenshot{screenshotCount === 1 ? '' : 's'}</div>
+                            </div>
+                            <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted">
+                              <ImagePlus className="h-4 w-4" />
+                              {uploadingDrillId === uploadKey ? 'Adding...' : 'Add screenshots'}
+                              <Input className="hidden" type="file" accept="image/*" multiple disabled={uploadingDrillId === uploadKey} onChange={async (event) => {
+                                await handleBlastUpload(s, result, [...(event.target.files || [])]);
+                                event.target.value = '';
+                              }} />
+                            </Label>
                           </div>
-                          <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted">
-                            <ImagePlus className="h-4 w-4" />
-                            {uploadingDrillId === uploadKey ? 'Adding...' : 'Add Blast screenshots'}
-                            <Input className="hidden" type="file" accept="image/*" multiple disabled={uploadingDrillId === uploadKey} onChange={async (event) => {
-                              await handleBlastUpload(s, result, [...(event.target.files || [])]);
-                              event.target.value = '';
-                            }} />
-                          </Label>
+                          {(result.blast?.screenshot_data_urls || []).length > 0 && (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                              {result.blast?.screenshot_data_urls?.map((image, index) => (
+                                <div key={`${result.drill_id}-${index}`} className="relative overflow-hidden rounded-md border bg-muted">
+                                  <img src={image} alt={`${result.drill_name} Blast metric screenshot ${index + 1}`} className="aspect-[4/3] w-full object-cover" />
+                                  <Button type="button" variant="destructive" size="icon" className="absolute right-1 top-1 h-6 w-6" disabled={uploadingDrillId === uploadKey} onClick={() => handleRemoveBlastScreenshot(s, result, index)} aria-label={`Remove screenshot ${index + 1}`}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Minus, Plus, ArrowLeft, ArrowRight, Check, ImagePlus, Sparkles } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, ArrowRight, Check, ImagePlus, Sparkles, X } from 'lucide-react';
 import { BlastMotionSetData, PuttingDrill, DrillResult, PuttingSessionType } from '@/types/putting';
 import { computeDrillResult, summarizeSession, validateDrillCounts } from '@/lib/putting/scoring';
 import { PUTTING_PRACTICE_SETS, PuttingPracticeSetId } from '@/lib/putting/drills';
@@ -506,6 +506,25 @@ export function PuttingSessionRunner({ drills, category, initialPracticeSetId = 
               </Label>
               {(blastByDrill[currentDrill.id]?.screenshot_data_urls?.length || 0) > 0 && <span className="text-xs text-sky-800">{blastByDrill[currentDrill.id].screenshot_data_urls?.length} screenshot{blastByDrill[currentDrill.id].screenshot_data_urls?.length === 1 ? '' : 's'} attached</span>}
             </div>
+            {(blastByDrill[currentDrill.id]?.screenshot_data_urls || []).length > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {blastByDrill[currentDrill.id].screenshot_data_urls?.map((image, index) => (
+                  <div key={`${currentDrill.id}-${index}`} className="relative overflow-hidden rounded-md border border-sky-200 bg-white">
+                    <img src={image} alt={`${currentDrill.name} Blast metric screenshot ${index + 1}`} className="aspect-[4/3] w-full object-cover" />
+                    <Button type="button" variant="destructive" size="icon" className="absolute right-1 top-1 h-6 w-6" onClick={() => setBlastByDrill(prev => ({
+                      ...prev,
+                      [currentDrill.id]: {
+                        ...prev[currentDrill.id],
+                        screenshot_data_urls: (prev[currentDrill.id]?.screenshot_data_urls || []).filter((_, itemIndex) => itemIndex !== index),
+                        screenshot_names: (prev[currentDrill.id]?.screenshot_names || []).filter((_, itemIndex) => itemIndex !== index),
+                      },
+                    }))} aria-label={`Remove screenshot ${index + 1}`}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
