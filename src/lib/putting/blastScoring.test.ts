@@ -41,4 +41,23 @@ describe('scoreBlastMechanics', () => {
     const edge = scoreBlastMechanics({ metric_ranges: { tempo_ratio: { average: 1.8 } } });
     expect(centered?.score).toBeGreaterThan(edge?.score || 0);
   });
+
+  it('scores lie and loft separately against the shared target', () => {
+    const result = scoreBlastMechanics({
+      metric_ranges: {
+        lie_change: { min: -0.1, average: 0, max: 0.1 },
+        loft_change: { min: -0.2, average: 0, max: 0.2 },
+      },
+    });
+    expect(result?.metricsUsed).toBe(2);
+  });
+
+  it('scores a legacy combined lie and loft value once', () => {
+    const result = scoreBlastMechanics({
+      metric_ranges: {
+        lie_loft_change: { min: -0.1, average: 0, max: 0.1 },
+      },
+    });
+    expect(result?.metricsUsed).toBe(1);
+  });
 });

@@ -61,6 +61,12 @@ export type BlastMetricKey =
   | 'face_angle_at_impact'
   | 'backstroke_rotation'
   | 'forwardstroke_rotation'
+  | 'lie_change'
+  | 'loft_change'
+;
+
+export type BlastTargetMetricKey =
+  | Exclude<BlastMetricKey, 'lie_change' | 'loft_change'>
   | 'lie_loft_change'
 ;
 
@@ -71,7 +77,7 @@ export interface BlastMetricRange {
 }
 
 export interface BlastMotionSetData {
-  metric_ranges?: Partial<Record<BlastMetricKey, BlastMetricRange>>;
+  metric_ranges?: Partial<Record<BlastMetricKey | 'lie_loft_change', BlastMetricRange>>;
   // Keep legacy averages readable for sessions entered before range capture was added.
   tempo_ratio?: number | null;
   backstroke_time?: number | null;

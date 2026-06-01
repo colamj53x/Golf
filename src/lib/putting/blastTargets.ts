@@ -3,7 +3,11 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 import { BlastMotionTargets, DEFAULT_BLAST_MOTION_TARGETS, parseBlastMotionTargets } from './blastTargetDefaults';
-export { BLAST_MOTION_METRICS, DEFAULT_BLAST_MOTION_TARGETS } from './blastTargetDefaults';
+export {
+  BLAST_MOTION_CAPTURE_METRICS,
+  BLAST_MOTION_TARGET_METRICS,
+  DEFAULT_BLAST_MOTION_TARGETS,
+} from './blastTargetDefaults';
 
 const CONFIG_KEY = '__user_settings__:putting_blast_targets';
 const CACHE_KEY = 'golf-putting-blast-targets-v1';

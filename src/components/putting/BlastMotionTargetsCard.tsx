@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBlastMotionTargets } from '@/lib/putting/blastTargets';
-import { BLAST_MOTION_METRICS, BlastMotionTargets, DEFAULT_BLAST_MOTION_TARGETS } from '@/lib/putting/blastTargetDefaults';
+import { BLAST_MOTION_TARGET_METRICS, BlastMotionTargets, DEFAULT_BLAST_MOTION_TARGETS } from '@/lib/putting/blastTargetDefaults';
 
 function numberValue(value: string): number | null {
   return value === '' ? null : Number(value);
@@ -43,7 +43,7 @@ export function BlastMotionTargetsCard() {
           <div className="grid min-w-[820px] grid-cols-[minmax(180px,1.2fr)_repeat(3,minmax(110px,0.7fr))_minmax(190px,1fr)] gap-2">
             <div className="text-xs font-semibold uppercase text-muted-foreground">Metric</div>
             {['Preferred Min', 'Target Average', 'Preferred Max', 'Scoring Mode'].map(label => <div key={label} className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>)}
-            {BLAST_MOTION_METRICS.map(({ key, label, step }) => (
+          {BLAST_MOTION_TARGET_METRICS.map(({ key, label, step }) => (
               <div key={key} className="contents">
                 <Label className="self-center">{label}</Label>
                 {(['preferredMin', 'targetAverage', 'preferredMax'] as const).map(field => (

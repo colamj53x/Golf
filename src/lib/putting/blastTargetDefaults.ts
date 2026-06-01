@@ -1,4 +1,4 @@
-import { BlastMetricKey } from '@/types/putting';
+import { BlastMetricKey, BlastTargetMetricKey } from '@/types/putting';
 
 export type BlastScoringMode = 'target_and_repeatability' | 'repeatability_only' | 'off';
 
@@ -9,9 +9,9 @@ export interface BlastMetricTarget {
   scoringMode: BlastScoringMode;
 }
 
-export type BlastMotionTargets = Record<BlastMetricKey, BlastMetricTarget>;
+export type BlastMotionTargets = Record<BlastTargetMetricKey, BlastMetricTarget>;
 
-export const BLAST_MOTION_METRICS: Array<{ key: BlastMetricKey; label: string; step: string }> = [
+export const BLAST_MOTION_CAPTURE_METRICS: Array<{ key: BlastMetricKey; label: string; step: string }> = [
   { key: 'tempo_ratio', label: 'Tempo ratio', step: '0.1' },
   { key: 'backstroke_time', label: 'Backstroke time (sec)', step: '0.01' },
   { key: 'forwardstroke_time', label: 'Forward stroke time (sec)', step: '0.01' },
@@ -21,6 +21,14 @@ export const BLAST_MOTION_METRICS: Array<{ key: BlastMetricKey; label: string; s
   { key: 'face_angle_at_impact', label: 'Face angle at impact', step: '0.1' },
   { key: 'backstroke_rotation', label: 'Backstroke rotation', step: '0.1' },
   { key: 'forwardstroke_rotation', label: 'Forward stroke rotation', step: '0.1' },
+  { key: 'lie_change', label: 'Lie change', step: '0.1' },
+  { key: 'loft_change', label: 'Loft change', step: '0.1' },
+];
+
+export const BLAST_MOTION_TARGET_METRICS: Array<{ key: BlastTargetMetricKey; label: string; step: string }> = [
+  ...BLAST_MOTION_CAPTURE_METRICS.filter(
+    ({ key }) => key !== 'lie_change' && key !== 'loft_change',
+  ) as Array<{ key: BlastTargetMetricKey; label: string; step: string }>,
   { key: 'lie_loft_change', label: 'Lie / loft change', step: '0.1' },
 ];
 
@@ -43,7 +51,7 @@ function parseNumber(value: unknown, fallback: number | null): number | null {
 
 export function parseBlastMotionTargets(value: unknown): BlastMotionTargets {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  return Object.fromEntries(BLAST_MOTION_METRICS.map(({ key }) => {
+  return Object.fromEntries(BLAST_MOTION_TARGET_METRICS.map(({ key }) => {
     const fallback = DEFAULT_BLAST_MOTION_TARGETS[key];
     const item = source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) ? source[key] as Partial<BlastMetricTarget> : {};
     const mode = item.scoringMode;

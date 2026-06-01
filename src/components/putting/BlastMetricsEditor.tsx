@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { BlastMetricKey, BlastMotionSetData } from '@/types/putting';
 import { scoreBlastMechanics } from '@/lib/putting/blastScoring';
 import { useBlastMotionTargets } from '@/lib/putting/blastTargets';
-import { BLAST_MOTION_METRICS } from '@/lib/putting/blastTargetDefaults';
+import { BLAST_MOTION_CAPTURE_METRICS } from '@/lib/putting/blastTargetDefaults';
 
 interface Props {
   value?: BlastMotionSetData;
@@ -18,10 +18,23 @@ interface Props {
 function withLegacyAverages(value?: BlastMotionSetData): BlastMotionSetData {
   if (!value) return {};
   const metric_ranges = { ...value.metric_ranges };
-  if (!metric_ranges.backstroke_length && value.stroke_length !== undefined) metric_ranges.backstroke_length = { average: value.stroke_length };
-  if (!metric_ranges.face_angle_at_impact && value.face_rotation !== undefined) metric_ranges.face_angle_at_impact = { average: value.face_rotation };
-  for (const { key: field } of BLAST_MOTION_METRICS) {
-    if (!metric_ranges[field] && value[field] !== undefined) metric_ranges[field] = { average: value[field] };
+  const legacyAverages: Partial<Record<BlastMetricKey, number | null | undefined>> = {
+    tempo_ratio: value.tempo_ratio,
+    backstroke_time: value.backstroke_time,
+    forwardstroke_time: value.forwardstroke_time,
+    total_stroke_time: value.total_stroke_time,
+    backstroke_length: value.stroke_length,
+    face_angle_at_impact: value.face_rotation,
+    lie_change: value.lie_loft_change,
+    loft_change: value.lie_loft_change,
+  };
+  const legacyLieLoft = metric_ranges.lie_loft_change;
+  if (!metric_ranges.lie_change && legacyLieLoft) metric_ranges.lie_change = { ...legacyLieLoft };
+  if (!metric_ranges.loft_change && legacyLieLoft) metric_ranges.loft_change = { ...legacyLieLoft };
+  for (const { key: field } of BLAST_MOTION_CAPTURE_METRICS) {
+    if (!metric_ranges[field] && legacyAverages[field] !== undefined) {
+      metric_ranges[field] = { average: legacyAverages[field] };
+    }
   }
   return { ...value, metric_ranges };
 }
@@ -60,7 +73,7 @@ export function BlastMetricsEditor({ value, onSave, saveLabel = 'Save Blast metr
         <div className="grid min-w-[620px] grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,0.7fr))] gap-2">
           <div className="text-xs font-semibold uppercase text-muted-foreground">Metric</div>
           {['Minimum', 'Average', 'Maximum'].map(label => <div key={label} className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>)}
-          {BLAST_MOTION_METRICS.map(({ key: field, label, step }) => (
+          {BLAST_MOTION_CAPTURE_METRICS.map(({ key: field, label, step }) => (
             <div key={field} className="contents">
               <Label className="self-center">{label}</Label>
               {(['min', 'average', 'max'] as const).map(bound => (

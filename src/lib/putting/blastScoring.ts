@@ -1,4 +1,4 @@
-import { BlastMetricKey, BlastMetricRange, BlastMotionSetData } from '@/types/putting';
+import { BlastMetricRange, BlastMotionSetData, BlastTargetMetricKey } from '@/types/putting';
 import { BlastMetricTarget, BlastMotionTargets, DEFAULT_BLAST_MOTION_TARGETS } from './blastTargetDefaults';
 
 interface ScoreResult {
@@ -34,8 +34,17 @@ function metricScore(range: BlastMetricRange, targetConfig: BlastMetricTarget): 
 }
 
 export function scoreBlastMechanics(blast?: BlastMotionSetData, targets: BlastMotionTargets = DEFAULT_BLAST_MOTION_TARGETS): ScoreResult | null {
-  const scores = Object.entries(blast?.metric_ranges || {}).flatMap(([key, range]) => {
-    const score = metricScore(range, targets[key as BlastMetricKey]);
+  const ranges = blast?.metric_ranges || {};
+  const scores = Object.entries(ranges).flatMap(([key, range]) => {
+    // New sessions capture lie and loft separately. Older sessions may still
+    // contain the combined metric, which should count once rather than three times.
+    if (key === 'lie_loft_change' && (ranges.lie_change || ranges.loft_change)) return [];
+    const targetKey = key === 'lie_change' || key === 'loft_change'
+      ? 'lie_loft_change'
+      : key as BlastTargetMetricKey;
+    const targetConfig = targets[targetKey];
+    if (!targetConfig) return [];
+    const score = metricScore(range, targetConfig);
     return score === null ? [] : [score];
   });
   if (!scores.length) return null;
