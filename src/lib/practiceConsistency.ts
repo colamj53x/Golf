@@ -45,6 +45,7 @@ export function pctWithinTarget(
   shots: ShotLike[],
   targetMin: number | null,
   targetMax: number | null,
+  tolerancePct = 5,
 ): number | null {
   if (!shots || shots.length === 0) return null;
   if (targetMin === null && targetMax === null) return null;
@@ -67,7 +68,7 @@ export function pctWithinTarget(
 
   const tMin = targetMin ?? targetMax!;
   const tMax = targetMax ?? targetMin!;
-  const tol = Math.max(Math.abs(tMin), Math.abs(tMax)) * 0.05;
+  const tol = Math.max(Math.abs(tMin), Math.abs(tMax)) * (tolerancePct / 100);
   const lo = Math.min(tMin, tMax) - tol;
   const hi = Math.max(tMin, tMax) + tol;
 

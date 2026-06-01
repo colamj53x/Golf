@@ -13,6 +13,8 @@ import { toast } from 'sonner';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, getPracticeConfigKey, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
+import { insertPracticeShots } from '@/lib/practiceRepository';
+import type { PracticeShot } from '@/lib/practiceSpreadsheetParser';
 
 // Stored config from database
 interface StoredPracticeConfig {
@@ -33,7 +35,7 @@ interface PracticeDataContextType {
   deletePracticeConfig: (configKey: string) => Promise<void>;
   resetToDefaults: () => void;
   practiceSessions: PracticeSession[];
-  addPracticeSession: (session: Omit<PracticeSession, 'id'>) => Promise<void>;
+  addPracticeSession: (session: Omit<PracticeSession, 'id'>, shots?: PracticeShot[]) => Promise<string | null>;
   updatePracticeSession: (id: string, updates: Partial<PracticeSession>) => Promise<void>;
   deletePracticeSession: (id: string) => Promise<void>;
   getSessionsForClub: (clubId: string) => PracticeSession[];
@@ -352,8 +354,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
     setPracticeConfigs(DEFAULT_PRACTICE_CONFIGS);
   }, []);
 
-  const addPracticeSession = useCallback(async (session: Omit<PracticeSession, 'id'>) => {
-    if (!user) return;
+  const addPracticeSession = useCallback(async (session: Omit<PracticeSession, 'id'>, shots: PracticeShot[] = []) => {
+    if (!user) return null;
 
     try {
       // Store metrics and consistency together in the JSONB column
@@ -391,13 +393,24 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         consistency,
       };
 
+      try {
+        await insertPracticeShots(user.id, newSession.id, shots);
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.error('Error saving individual practice shots:', getUserFriendlyError(error));
+        }
+        toast.error('Session saved but individual shots could not be stored');
+      }
+
       setPracticeSessions(prev => [newSession, ...prev]);
       toast.success('Practice session saved');
+      return newSession.id;
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('Error adding practice session:', getUserFriendlyError(error));
       }
       toast.error('Failed to save practice session. Please try again.');
+      return null;
     }
   }, [user]);
 
