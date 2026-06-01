@@ -66,11 +66,21 @@ export interface FormInsight {
   confidence: AnalysisConfidence;
 }
 
+export interface SqiSegment {
+  id: string;
+  label: string;
+  rounds: number;
+  sqi: number | null;
+  handicapEquivalent: string;
+  damagePerRound: number;
+}
+
 export interface AnalysisModel {
   sqi: number | null;
   baselineSqi: number | null;
   change: number | null;
   currentLevel: string;
+  handicapEquivalent: string;
   trend: AnalysisTrend;
   shots: number;
   rounds: number;
@@ -87,6 +97,8 @@ export interface AnalysisModel {
   transferInsights: TransferInsight[];
   reflectionThemes: ReflectionTheme[];
   reflectionSummary: string;
+  chronologicalSqi: SqiSegment[];
+  qualitySqi: SqiSegment[];
 }
 
 interface AnalysisInput {
@@ -107,6 +119,15 @@ const QUALITY_SCORES: Record<string, number> = {
   '20 handicap': 45,
   '25 handicap': 25,
 };
+
+const HANDICAP_BENCHMARKS = [
+  { score: 90, handicap: 0 },
+  { score: 80, handicap: 5 },
+  { score: 70, handicap: 10 },
+  { score: 60, handicap: 15 },
+  { score: 45, handicap: 20 },
+  { score: 25, handicap: 25 },
+];
 
 const TAGS = ['slice', 'push', 'pull', 'fade', 'draw', 'hook', 'straight', 'fat', 'thin', 'top', 'topped', 'high', 'low'];
 
@@ -129,6 +150,26 @@ const normalise = (value: string) => value.trim().toLowerCase();
 
 export function shotQualityScore(value: string): number | null {
   return QUALITY_SCORES[normalise(value)] ?? null;
+}
+
+export function describeHandicapEquivalent(score: number | null): string {
+  if (score === null) return 'Not enough data';
+  if (score >= 100) return 'Pro quality';
+  if (score >= 95) return 'Elite amateur quality';
+  if (score >= 90) return 'Scratch quality';
+  if (score < HANDICAP_BENCHMARKS[HANDICAP_BENCHMARKS.length - 1].score) return '25+ handicap quality';
+
+  for (let index = 0; index < HANDICAP_BENCHMARKS.length - 1; index += 1) {
+    const stronger = HANDICAP_BENCHMARKS[index];
+    const weaker = HANDICAP_BENCHMARKS[index + 1];
+    if (score <= stronger.score && score >= weaker.score) {
+      const progress = (stronger.score - score) / (stronger.score - weaker.score);
+      const handicap = stronger.handicap + progress * (weaker.handicap - stronger.handicap);
+      return `~${round(handicap)} handicap quality`;
+    }
+  }
+
+  return '25+ handicap quality';
 }
 
 export function shotConfidence(shots: number): AnalysisConfidence {
@@ -347,6 +388,78 @@ function sqiBand(score: number | null): string {
   return 'Priority problem area';
 }
 
+interface RatedRound {
+  date: string;
+  sqi: number;
+  damage: number;
+}
+
+function buildRatedRounds(shots: Shot[]): RatedRound[] {
+  const grouped = new Map<string, Shot[]>();
+  shots.forEach((shot) => {
+    const date = roundDateKey(shot);
+    grouped.set(date, [...(grouped.get(date) || []), shot]);
+  });
+
+  return [...grouped.entries()].map(([date, roundShots]) => {
+    const scores = roundShots
+      .map((shot) => shotQualityScore(shot.shotQuality))
+      .filter((score): score is number => score !== null);
+    const sqi = average(scores);
+    if (sqi === null) return null;
+    return {
+      date,
+      sqi,
+      damage: roundShots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0),
+    };
+  }).filter((item): item is RatedRound => item !== null);
+}
+
+function splitIntoQuartiles<T>(items: T[]): [T[], T[], T[]] {
+  if (items.length < 4) return [[], [], items];
+  const quarterSize = Math.max(1, Math.floor(items.length / 4));
+  return [
+    items.slice(0, quarterSize),
+    items.slice(quarterSize, items.length - quarterSize),
+    items.slice(items.length - quarterSize),
+  ];
+}
+
+function summariseRounds(id: string, label: string, rounds: RatedRound[]): SqiSegment {
+  const sqi = average(rounds.map((item) => item.sqi));
+  const damage = rounds.reduce((sum, item) => sum + item.damage, 0);
+  return {
+    id,
+    label,
+    rounds: rounds.length,
+    sqi: sqi === null ? null : round(sqi),
+    handicapEquivalent: describeHandicapEquivalent(sqi),
+    damagePerRound: rounds.length ? Math.round((damage / rounds.length) * 10) / 10 : 0,
+  };
+}
+
+function buildSqiPerspectives(shots: Shot[]) {
+  const ratedRounds = buildRatedRounds(shots);
+  const chronological = [...ratedRounds].sort((a, b) => a.date.localeCompare(b.date));
+  const [early, middleTime, recent] = splitIntoQuartiles(chronological);
+  const ranked = [...ratedRounds].sort((a, b) => a.sqi - b.sqi);
+  const [lower, middleQuality, top] = splitIntoQuartiles(ranked);
+
+  return {
+    chronologicalSqi: [
+      summariseRounds('early', 'Early 25%', early),
+      summariseRounds('middle-time', 'Middle 50%', middleTime),
+      summariseRounds('recent', 'Recent 25%', recent),
+    ],
+    qualitySqi: [
+      summariseRounds('lower', 'Lower 25%', lower),
+      summariseRounds('middle-quality', 'Middle 50%', middleQuality),
+      summariseRounds('top', 'Top 25%', top),
+    ],
+    roundScores: chronological.map((item) => item.sqi),
+  };
+}
+
 function trendText(trend: AnalysisTrend): string {
   if (trend === 'improving') return 'improving';
   if (trend === 'declining') return 'slipping';
@@ -368,6 +481,7 @@ export function buildAnalysisModel({
   const sqi = average(currentScores);
   const baselineSqi = average(scores);
   const change = sqi === null || baselineSqi === null ? null : round(sqi - baselineSqi);
+  const { chronologicalSqi, qualitySqi, roundScores } = buildSqiPerspectives(shots);
   const rounds = new Set(shots.map(roundDateKey)).size;
   const confidence = roundConfidence(rounds);
   const damage = shots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0);
@@ -382,7 +496,7 @@ export function buildAnalysisModel({
     .filter((club) => club.shots >= 8 && club.sqi !== null)
     .sort((a, b) => ((b.sqi || 0) - b.badMissPct - b.damagePerShot * 10) - ((a.sqi || 0) - a.badMissPct - a.damagePerShot * 10))
     .slice(0, 3);
-  const trend = describeTrend(sqi, baselineSqi, scores);
+  const trend = describeTrend(chronologicalSqi[2].sqi, chronologicalSqi[0].sqi, roundScores);
   const top = priorities[0];
   const strength = reliableClubs[0];
   const diagnosis = shots.length < 8
@@ -412,6 +526,7 @@ export function buildAnalysisModel({
     baselineSqi: baselineSqi === null ? null : round(baselineSqi),
     change,
     currentLevel: sqiBand(sqi),
+    handicapEquivalent: describeHandicapEquivalent(sqi),
     trend,
     shots: shots.length,
     rounds,
@@ -428,5 +543,7 @@ export function buildAnalysisModel({
     transferInsights,
     reflectionThemes,
     reflectionSummary: reflectionThemes[0] ? `${reflectionThemes[0].label} is the most common reflection theme (${reflectionThemes[0].count} mentions).` : 'No recurring reflection theme yet. Add short notes after rounds and practice sessions.',
+    chronologicalSqi,
+    qualitySqi,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAnalysisModel, calculateShotDamage, reflectionConfidence, shotConfidence, shotQualityScore } from '@/lib/analysisSynthesis';
+import { buildAnalysisModel, calculateShotDamage, describeHandicapEquivalent, reflectionConfidence, shotConfidence, shotQualityScore } from '@/lib/analysisSynthesis';
 import { DEFAULT_CLUB_CONFIGS, type RoundReflection, type Shot } from '@/types/golf';
 
 function shot(overrides: Partial<Shot> = {}): Shot {
@@ -45,6 +45,7 @@ describe('analysis synthesis', () => {
     expect(shotQualityScore('Pro')).toBe(100);
     expect(shotQualityScore('15 Handicap')).toBe(60);
     expect(shotQualityScore('unknown')).toBeNull();
+    expect(describeHandicapEquivalent(65)).toBe('~13 handicap quality');
   });
 
   it('uses guarded confidence thresholds', () => {
@@ -104,5 +105,34 @@ describe('analysis synthesis', () => {
     expect(model.priorities[0].clubName).toBe('Driver');
     expect(model.priorities[0].direction).toBe('Right');
     expect(model.reliableClubs[0].clubName).toBe('PW');
+  });
+
+  it('summarises SQI by round timeline and round quality', () => {
+    const roundQualities = [
+      '20 Handicap',
+      '15 Handicap',
+      '10 Handicap',
+      '5 Handicap',
+      '0 Handicap',
+      '10 Handicap',
+      '15 Handicap',
+      '5 Handicap',
+    ];
+    const shots = roundQualities.map((shotQuality, index) => shot({
+      id: `round-${index}`,
+      shotQuality,
+      date: new Date(`2026-05-${String(index + 1).padStart(2, '0')}T10:00:00`),
+    }));
+    const model = buildAnalysisModel({
+      shots,
+      clubs: DEFAULT_CLUB_CONFIGS,
+      practiceSessions: [],
+      roundReflections: [],
+    });
+
+    expect(model.chronologicalSqi.map((segment) => segment.sqi)).toEqual([53, 78, 70]);
+    expect(model.chronologicalSqi.map((segment) => segment.rounds)).toEqual([2, 4, 2]);
+    expect(model.qualitySqi.map((segment) => segment.sqi)).toEqual([53, 70, 85]);
+    expect(model.qualitySqi.map((segment) => segment.rounds)).toEqual([2, 4, 2]);
   });
 });
