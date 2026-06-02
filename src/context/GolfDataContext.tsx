@@ -5,6 +5,7 @@ import type { Database, Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
 import { getUserFriendlyError } from '@/lib/errorHandler';
 import { parseDate } from '@/lib/golfCalculations';
+import { decodeRoundShotSequence } from '@/lib/roundShotSequence';
 import {
   loadGolfUserSettings,
   parseGolfUserSettings,
@@ -281,15 +282,17 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
 
       const parsedShots: Shot[] = (allRows || [])
         .filter((row) => !(row.shot_type === '' && /^\d{4}-\d{2}-\d{2}$/.test(row.start_lie || '') && Number(row.target || 0) === 0 && Number(row.end_distance_from_target || 0) === 0))
-        .map((row) => ({
+        .map((row) => {
+          const legacySequence = decodeRoundShotSequence(row.notes);
+          return {
           id: row.id,
           club: normalizeClubCode(row.club),
           type: row.shot_type || '',
           shotFamily: row.shot_family || '',
           swingEffort: row.swing_effort || '',
           targetIntent: row.target_intent || '',
-          holeNumber: row.hole_number ?? null,
-          shotNumber: row.shot_number ?? null,
+          holeNumber: row.hole_number ?? legacySequence.holeNumber,
+          shotNumber: row.shot_number ?? legacySequence.shotNumber,
           target: row.target || 0,
           total: row.total || 0,
           side: row.offline || 0,
@@ -299,8 +302,9 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           endLie: row.end_lie || '',
           strikeQuality: row.strike_quality || '',
           endDistanceFromTarget: row.end_distance_from_target || 0,
-          notes: row.notes || '',
-        }));
+          notes: legacySequence.notes,
+        };
+        });
 
       setShots(parsedShots);
     } catch (error) {

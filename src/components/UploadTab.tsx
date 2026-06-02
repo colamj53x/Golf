@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
 import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
 import { getUploadShotFingerprint } from '@/lib/uploadReview';
+import { encodeRoundShotSequence } from '@/lib/roundShotSequence';
 import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -502,7 +503,10 @@ export function UploadTab() {
         user_id: user.id,
       }));
 
-      const reviewedShotsWithoutSequence = reviewedShots.map(({ hole_number, shot_number, ...reviewedShot }) => reviewedShot);
+      const reviewedShotsWithoutSequence = reviewedShots.map(({ hole_number, shot_number, ...reviewedShot }) => ({
+        ...reviewedShot,
+        notes: encodeRoundShotSequence(reviewedShot.notes, hole_number, shot_number),
+      }));
       const legacyShots = reviewedShotsWithoutSequence.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
       const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
       let duplicateCount = 0;
@@ -563,7 +567,6 @@ export function UploadTab() {
       let insertedCount = 0;
       let usedSequenceShotInsert = true;
       let usedLegacyShotInsert = false;
-      const requiresShotSequence = shotsToInsert.some(shot => shot.hole_number !== null && shot.shot_number !== null);
 
       for (let index = 0; index < shotsToInsert.length; index += batchSize) {
         const modernBatch = shotsToInsert.slice(index, index + batchSize);
@@ -578,9 +581,6 @@ export function UploadTab() {
         const { error } = await supabase.from('shots').insert(preferredBatch);
         if (error) {
           if (usedSequenceShotInsert && isMissingReviewedUploadSchemaError(error)) {
-            if (requiresShotSequence) {
-              throw Object.assign(new Error('Shot sequence database update required.'), { code: 'SHOT_SEQUENCE_SCHEMA_REQUIRED' });
-            }
             const { error: reviewedRetryError } = await supabase.from('shots').insert(reviewedWithoutSequenceBatch);
             if (!reviewedRetryError) {
               usedSequenceShotInsert = false;

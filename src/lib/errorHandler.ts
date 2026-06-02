@@ -30,9 +30,6 @@ export function getUserFriendlyError(error: unknown): string {
   if (code === 'PGRST204' || code === 'PGRST205') {
     return 'The app is waiting on a database update. Please refresh and try again.';
   }
-  if (code === 'SHOT_SEQUENCE_SCHEMA_REQUIRED') {
-    return 'This ParGolf upload includes Hole and Shot order, but the live database is missing the shot-sequence update. Apply the database migration before uploading so the exact round order is preserved.';
-  }
 
   // Check error message patterns (without exposing details)
   if (message.includes('JWT')) return 'Session expired. Please refresh the page and log in again.';
