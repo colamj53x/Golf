@@ -36,6 +36,8 @@ export function SettingsTab() {
     setLowTargetExclusionThreshold,
     gappingHcpTarget,
     setGappingHcpTarget,
+    shotPickerDistanceTolerancePct,
+    setShotPickerDistanceTolerancePct,
     practiceDistanceTolerancePct,
     setPracticeDistanceTolerancePct,
     practiceBallFlightTolerancePct,
@@ -46,6 +48,7 @@ export function SettingsTab() {
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
   const [editingGappingHcpTarget, setEditingGappingHcpTarget] = useState(gappingHcpTarget);
+  const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
   const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
   const [editingPracticeBallFlightTolerancePct, setEditingPracticeBallFlightTolerancePct] = useState(practiceBallFlightTolerancePct);
   const [editingPracticeOtherTolerancePct, setEditingPracticeOtherTolerancePct] = useState(practiceOtherTolerancePct);
@@ -55,6 +58,7 @@ export function SettingsTab() {
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
     setGappingHcpTarget(editingGappingHcpTarget);
+    setShotPickerDistanceTolerancePct(editingShotPickerDistanceTolerancePct);
     setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
     setPracticeBallFlightTolerancePct(editingPracticeBallFlightTolerancePct);
     setPracticeOtherTolerancePct(editingPracticeOtherTolerancePct);
@@ -66,6 +70,7 @@ export function SettingsTab() {
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
     setEditingGappingHcpTarget(gappingHcpTarget);
+    setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
     setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
     setEditingPracticeBallFlightTolerancePct(practiceBallFlightTolerancePct);
     setEditingPracticeOtherTolerancePct(practiceOtherTolerancePct);
@@ -154,6 +159,22 @@ export function SettingsTab() {
             </Select>
             <span className="text-sm text-muted-foreground">
               Sets the quality target for Club Gapping samples and Last 20 T
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="shotPickerDistanceTolerancePct" className="whitespace-nowrap min-w-[200px]">
+              Shot Picker Distance Tolerance (%)
+            </Label>
+            <Input
+              id="shotPickerDistanceTolerancePct"
+              type="number"
+              value={editingShotPickerDistanceTolerancePct}
+              onChange={(e) => setEditingShotPickerDistanceTolerancePct(parseFloat(e.target.value) || 0)}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Defines within-range, long, and short outcomes for the nominated Shot Picker distance
             </span>
           </div>
           <div className="flex items-center gap-4">

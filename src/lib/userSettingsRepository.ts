@@ -10,6 +10,7 @@ export interface GolfUserSettings {
   distanceToTargetTolerance: number;
   lowTargetExclusionThreshold: number;
   gappingHcpTarget: number;
+  shotPickerDistanceTolerancePct: number;
   practiceDistanceTolerancePct: number;
   practiceBallFlightTolerancePct: number;
   practiceOtherTolerancePct: number;
@@ -57,6 +58,7 @@ export function parseGolfUserSettings(
     distanceToTargetTolerance: numberOr(value.distanceToTargetTolerance, fallback.distanceToTargetTolerance),
     lowTargetExclusionThreshold: numberOr(value.lowTargetExclusionThreshold, fallback.lowTargetExclusionThreshold),
     gappingHcpTarget: numberOr(value.gappingHcpTarget, fallback.gappingHcpTarget),
+    shotPickerDistanceTolerancePct: numberOr(value.shotPickerDistanceTolerancePct, fallback.shotPickerDistanceTolerancePct),
     practiceDistanceTolerancePct: numberOr(value.practiceDistanceTolerancePct, fallback.practiceDistanceTolerancePct),
     practiceBallFlightTolerancePct: numberOr(value.practiceBallFlightTolerancePct, fallback.practiceBallFlightTolerancePct),
     practiceOtherTolerancePct: numberOr(value.practiceOtherTolerancePct, fallback.practiceOtherTolerancePct),

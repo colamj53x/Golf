@@ -65,6 +65,8 @@ interface ClubRecommendation {
   shotConfidence: number | null;
   safetyConfidence: number | null;
   withinTolerancePct: number | null;
+  nominatedShortPct: number | null;
+  nominatedLongPct: number | null;
   isShortOfTarget: boolean;
   leftRisk: number;
   rightRisk: number;
@@ -672,6 +674,12 @@ function calculateRecommendations(
         .flatMap((otherRow) => otherRow.sample));
       const withinToleranceCount = withinToleranceSample.filter((shot) => Math.abs(shot.total - adjustedTargetDistance) <= toleranceDistance).length;
       const withinTolerancePct = withinToleranceSample.length ? (withinToleranceCount / withinToleranceSample.length) * 100 : null;
+      const nominatedShortPct = withinToleranceSample.length
+        ? (withinToleranceSample.filter((shot) => shot.total < adjustedTargetDistance - toleranceDistance).length / withinToleranceSample.length) * 100
+        : null;
+      const nominatedLongPct = withinToleranceSample.length
+        ? (withinToleranceSample.filter((shot) => shot.total > adjustedTargetDistance + toleranceDistance).length / withinToleranceSample.length) * 100
+        : null;
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
       const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
@@ -749,6 +757,8 @@ function calculateRecommendations(
         shotConfidence: row.recentTargetPct,
         safetyConfidence: row.recentSafePct,
         withinTolerancePct,
+        nominatedShortPct,
+        nominatedLongPct,
         isShortOfTarget,
         leftRisk,
         rightRisk,
@@ -780,14 +790,13 @@ export function ClubSelectorTab({
 }: {
   defaultView?: 'club-selector' | 'wedge-matrix';
 } = {}) {
-  const { shots, clubs, isLoading, gappingHcpTarget } = useGolfData();
+  const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [targetDistance, setTargetDistance] = useState('120');
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
-  const [distanceTolerancePct, setDistanceTolerancePct] = useState('5');
   const [lie, setLie] = useState<LieOption>('fairway');
   const [target, setTarget] = useState<TargetOption>('green');
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
@@ -808,7 +817,7 @@ export function ClubSelectorTab({
 
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
-  const numericDistanceTolerancePct = Number(distanceTolerancePct) > 0 ? Number(distanceTolerancePct) : 5;
+  const numericDistanceTolerancePct = shotPickerDistanceTolerancePct > 0 ? shotPickerDistanceTolerancePct : 5;
   const selectorGappingRows = useMemo(() => buildClubGappingRows({
     profiles: shotProfiles,
     shots,
@@ -1010,19 +1019,6 @@ export function ClubSelectorTab({
                         placeholder="Optional"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="distance-tolerance">Tolerance (%)</Label>
-                      <Input
-                        id="distance-tolerance"
-                        type="number"
-                        inputMode="decimal"
-                        min="1"
-                        max="25"
-                        step="0.5"
-                        value={distanceTolerancePct}
-                        onChange={(event) => setDistanceTolerancePct(event.target.value)}
-                      />
-                    </div>
                   </div>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <ButtonGroup label="Lie">
@@ -1144,6 +1140,10 @@ export function ClubSelectorTab({
                             <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
                             <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
                             <Metric label={`Within ${numericDistanceTolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
+                          </div>
+                          <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-2">
+                            <Metric label={`Short of ${formatDistance(numericTarget)}`} value={fmtPct(result.nominatedShortPct)} />
+                            <Metric label={`Long of ${formatDistance(numericTarget)}`} value={fmtPct(result.nominatedLongPct)} />
                           </div>
                           {result.badges.length > 0 && (
                             <div className="flex flex-wrap gap-2 px-4 pb-4">
