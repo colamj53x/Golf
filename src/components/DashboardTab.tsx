@@ -257,7 +257,6 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
             if (legacyDraft.userId === userId && legacyDraft.roundDate === selectedRoundDateKey) {
               localDraft = legacyDraft.value;
               localStorage.setItem(storageKey, JSON.stringify(localDraft));
-              localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
             }
           } catch {
             localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
@@ -330,6 +329,17 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
       await upsertRoundReflection(selectedRoundDateKey, roundReflectionDraft);
       if (typeof window !== 'undefined' && userId) {
         localStorage.removeItem(getRoundReflectionDraftStorageKey(userId, selectedRoundDateKey));
+        const legacyRawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+        if (legacyRawDraft) {
+          try {
+            const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
+            if (legacyDraft.userId === userId && legacyDraft.roundDate === selectedRoundDateKey) {
+              localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+            }
+          } catch {
+            localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+          }
+        }
       }
       setRoundReflectionStatus('Round thoughts saved.');
       setRoundReflectionStatusTone('default');
@@ -455,6 +465,11 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
                     const storageKey = getRoundReflectionDraftStorageKey(userId, selectedRoundDateKey);
                     if (hasRoundReflectionContent(next)) {
                       localStorage.setItem(storageKey, JSON.stringify(next));
+                      localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify({
+                        userId,
+                        roundDate: selectedRoundDateKey,
+                        value: next,
+                      } satisfies StoredReflectionDraft));
                     } else {
                       localStorage.removeItem(storageKey);
                     }
