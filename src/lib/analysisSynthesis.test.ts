@@ -10,6 +10,8 @@ function shot(overrides: Partial<Shot> = {}): Shot {
     shotFamily: 'full',
     swingEffort: 'full',
     targetIntent: 'fairway',
+    holeNumber: null,
+    shotNumber: null,
     target: 220,
     total: 220,
     side: 0,

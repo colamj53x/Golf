@@ -1,0 +1,3 @@
+ALTER TABLE public.shots
+  ADD COLUMN IF NOT EXISTS hole_number INTEGER,
+  ADD COLUMN IF NOT EXISTS shot_number INTEGER;

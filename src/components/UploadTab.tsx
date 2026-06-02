@@ -28,6 +28,8 @@ type UploadReviewRow = {
   shotFamily: string;
   swingEffort: string;
   targetIntent: string;
+  holeNumber: number | null;
+  shotNumber: number | null;
   accepted: boolean;
   target: number;
   total: number;
@@ -60,6 +62,8 @@ type UploadShotInsert = {
   shot_family: string;
   swing_effort: string;
   target_intent: string;
+  hole_number: number | null;
+  shot_number: number | null;
   target: number;
   total: number;
   offline: number;
@@ -236,6 +240,8 @@ function buildReviewRow(shot: Shot): UploadReviewRow {
     shotFamily,
     swingEffort,
     targetIntent,
+    holeNumber: shot.holeNumber,
+    shotNumber: shot.shotNumber,
     accepted: false,
     target: shot.target,
     total: shot.total,
@@ -485,6 +491,8 @@ export function UploadTab() {
         shot_family: row.shotFamily,
         swing_effort: row.swingEffort,
         target_intent: row.targetIntent,
+        hole_number: row.holeNumber,
+        shot_number: row.shotNumber,
         target: Math.max(0, Math.min(600, row.target)),
         total: Math.max(0, Math.min(600, row.total)),
         offline: Math.max(-200, Math.min(200, row.side)),
@@ -498,11 +506,13 @@ export function UploadTab() {
         user_id: user.id,
       }));
 
-      const legacyShots = reviewedShots.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
+      const reviewedShotsWithoutSequence = reviewedShots.map(({ hole_number, shot_number, ...reviewedShot }) => reviewedShot);
+      const legacyShots = reviewedShotsWithoutSequence.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
       const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
       let duplicateCount = 0;
 
       let shotsToInsert = reviewedShots;
+      let reviewedShotsWithoutSequenceToInsert = reviewedShotsWithoutSequence;
       let legacyShotsToInsert = legacyShots;
 
       if (!replaceAll && replaceMatchingRounds) {
@@ -530,6 +540,7 @@ export function UploadTab() {
         }
 
         const filteredReviewedShots: UploadShotInsert[] = [];
+        const filteredReviewedShotsWithoutSequence: typeof reviewedShotsWithoutSequence = [];
         const filteredLegacyShots: typeof legacyShots = [];
 
         reviewedShots.forEach((shot, index) => {
@@ -543,26 +554,46 @@ export function UploadTab() {
           }
 
           filteredReviewedShots.push(shot);
+          filteredReviewedShotsWithoutSequence.push(reviewedShotsWithoutSequence[index]);
           filteredLegacyShots.push(legacyShots[index]);
         });
 
         shotsToInsert = filteredReviewedShots;
+        reviewedShotsWithoutSequenceToInsert = filteredReviewedShotsWithoutSequence;
         legacyShotsToInsert = filteredLegacyShots;
       }
 
       const batchSize = 100;
       let insertedCount = 0;
+      let usedSequenceShotInsert = true;
       let usedLegacyShotInsert = false;
 
       for (let index = 0; index < shotsToInsert.length; index += batchSize) {
         const modernBatch = shotsToInsert.slice(index, index + batchSize);
+        const reviewedWithoutSequenceBatch = reviewedShotsWithoutSequenceToInsert.slice(index, index + batchSize);
         const legacyBatch = legacyShotsToInsert.slice(index, index + batchSize);
 
-        const { error } = await supabase.from('shots').insert(usedLegacyShotInsert ? legacyBatch : modernBatch);
+        const preferredBatch = usedLegacyShotInsert
+          ? legacyBatch
+          : usedSequenceShotInsert
+            ? modernBatch
+            : reviewedWithoutSequenceBatch;
+        const { error } = await supabase.from('shots').insert(preferredBatch);
         if (error) {
-          if (!usedLegacyShotInsert && isMissingReviewedUploadSchemaError(error)) {
-            const { error: retryError } = await supabase.from('shots').insert(legacyBatch);
-            if (retryError) throw retryError;
+          if (usedSequenceShotInsert && isMissingReviewedUploadSchemaError(error)) {
+            const { error: reviewedRetryError } = await supabase.from('shots').insert(reviewedWithoutSequenceBatch);
+            if (!reviewedRetryError) {
+              usedSequenceShotInsert = false;
+            } else if (isMissingReviewedUploadSchemaError(reviewedRetryError)) {
+              const { error: legacyRetryError } = await supabase.from('shots').insert(legacyBatch);
+              if (legacyRetryError) throw legacyRetryError;
+              usedLegacyShotInsert = true;
+            } else {
+              throw reviewedRetryError;
+            }
+          } else if (!usedLegacyShotInsert && isMissingReviewedUploadSchemaError(error)) {
+            const { error: legacyRetryError } = await supabase.from('shots').insert(legacyBatch);
+            if (legacyRetryError) throw legacyRetryError;
             usedLegacyShotInsert = true;
           } else {
             throw error;
@@ -589,7 +620,9 @@ export function UploadTab() {
       const duplicateMsg = duplicateCount > 0 ? ` ${duplicateCount} duplicate shot${duplicateCount === 1 ? '' : 's'} already existed and were skipped.` : '';
       const legacyMsg = usedLegacyShotInsert
         ? ' Saved the reviewed shots using the existing database fields.'
-        : '';
+        : !usedSequenceShotInsert
+          ? ' Saved classifications, but shots-to-green will need the sequence database update before it can be calculated.'
+          : '';
       const reflectionMsg = skippedReflectionSave
         ? ' Round thoughts could not be saved yet, but the shot upload did complete.'
         : '';

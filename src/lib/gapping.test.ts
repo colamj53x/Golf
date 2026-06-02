@@ -30,6 +30,8 @@ const driverShot: Shot = {
   shotFamily: 'full',
   swingEffort: 'full',
   targetIntent: 'fairway',
+  holeNumber: null,
+  shotNumber: null,
   target: 245,
   total: 227,
   side: 4,

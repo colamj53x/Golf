@@ -471,12 +471,14 @@ export function parseCSV(csvContent: string): CSVParseResult {
     trajectory: column(['trajectory']),
     shape: column(['shape']),
     clubType: column(['clubtype']),
+    holeNumber: column(['hole', 'holenumber']),
+    shotNumber: column(['shot', 'shotnumber']),
   };
 
   const shots: Shot[] = [];
   const warnings: { row: number; issue: string }[] = [];
 
-  const optionalIndexes = ['shotNotes', 'trajectory', 'shape', 'clubType'];
+  const optionalIndexes = ['shotNotes', 'trajectory', 'shape', 'clubType', 'holeNumber', 'shotNumber'];
   if (Object.entries(indexes).some(([key, index]) => !optionalIndexes.includes(key) && index === -1)) {
     return {
       shots: [],
@@ -506,6 +508,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
       const trajectory = read(indexes.trajectory);
       const shape = read(indexes.shape);
       const clubType = read(indexes.clubType);
+      const holeNumber = read(indexes.holeNumber);
+      const shotNumber = read(indexes.shotNumber);
       const shotNotes = read(indexes.shotNotes) || trajectory || shape;
       
       const normalizedClub = club.trim().toLowerCase();
@@ -529,6 +533,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
         shotFamily: '',
         swingEffort: '',
         targetIntent: '',
+        holeNumber: holeNumber ? parseNumeric(holeNumber) : null,
+        shotNumber: shotNumber ? parseNumeric(shotNumber) : null,
         target: parseNumeric(target),
         total: parseNumeric(distanceHit),
         side: estimateDispersion(dispersion, shotNotes, shape),

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
-import { formatPercent } from '@/lib/golfCalculations';
+import { formatPercent, getShotDateKey } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
-import { buildRoundReview, RoundReviewRow } from '@/lib/roundReview';
+import { buildRoundReview, isPuttingShot, RoundReviewRow } from '@/lib/roundReview';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { ClubConfig, Shot } from '@/types/golf';
 
@@ -64,11 +65,12 @@ function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
   return <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>{label}<Icon className="h-3.5 w-3.5" /></button>;
 }
 
-function ComparisonTable({ title, description, rows, simple = false, clubSort, clubSortDirection, onClubSort }: {
+function ComparisonTable({ title, description, rows, simple = false, greenDistance = false, clubSort, clubSortDirection, onClubSort }: {
   title: string;
   description: string;
   rows: RoundReviewRow[];
   simple?: boolean;
+  greenDistance?: boolean;
   clubSort?: ClubSortKey;
   clubSortDirection?: 'asc' | 'desc';
   onClubSort?: (key: ClubSortKey) => void;
@@ -95,6 +97,8 @@ function ComparisonTable({ title, description, rows, simple = false, clubSort, c
                 {!simple && <th>Prior Recent 1/3</th>}
                 <th>{header('Bad Miss', 'bad-miss')}</th>
                 <th>{header('Accuracy', 'accuracy')}</th>
+                {greenDistance && <th>Greens Hit</th>}
+                {greenDistance && <th>Shots To Green</th>}
               </tr>
             </thead>
             <tbody>
@@ -107,6 +111,8 @@ function ComparisonTable({ title, description, rows, simple = false, clubSort, c
                   {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} /></td>}
                   <td>{formatPercent(row.round.badMissPct)}</td>
                   <td>{formatPercent(row.round.onTargetPct)}</td>
+                  {greenDistance && <td>{formatPercent(row.round.greensHitRawPct)}</td>}
+                  {greenDistance && <td>{row.avgShotsToGreen === null ? '-' : row.avgShotsToGreen.toFixed(1)}</td>}
                 </tr>
               ))}
             </tbody>
@@ -118,13 +124,14 @@ function ComparisonTable({ title, description, rows, simple = false, clubSort, c
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate }: RoundReviewTabProps) {
-  const { gappingHcpTarget } = useGolfData();
+  const { gappingHcpTarget, updateRoundShotClassifications } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
   const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
   const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
     profiles,
     shots,
@@ -141,6 +148,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   if (review.round.shotCount === 0) {
     return <Card><CardContent className="py-12 text-center text-muted-foreground">No non-putting shots recorded in this round.</CardContent></Card>;
   }
+  const roundShots = shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === roundDate);
 
   const sortedClubAndTypeRows = [...review.clubAndTypeRows].sort((a, b) => {
     const direction = clubSortDirection === 'asc' ? 1 : -1;
@@ -175,20 +183,20 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
 
       <Card>
         <CardHeader>
-          <CardTitle>Distance Totals</CardTitle>
-          <CardDescription>Roll-up counts only. The distance bands below are non-overlapping.</CardDescription>
+          <CardTitle>Green Target Totals</CardTitle>
+          <CardDescription>Roll-up counts for shots targeting the green. The distance bands below are non-overlapping.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-md border bg-muted/30 p-3">
+          <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md border bg-muted/30 p-3 text-left transition-colors hover:border-primary hover:bg-primary/5">
             <div className="text-sm text-muted-foreground">All reviewed shots</div>
             <div className="text-2xl font-bold">{review.round.shotCount}</div>
-            <div className="text-xs text-muted-foreground">non-putting shots this round</div>
-          </div>
-          {review.distanceRollups.map(row => (
+            <div className="text-xs text-primary">Review / adjust round shots</div>
+          </button>
+          {review.greenDistanceRollups.map(row => (
             <div key={row.key} className="rounded-md border bg-muted/30 p-3">
               <div className="text-sm text-muted-foreground">{row.label}</div>
               <div className="text-2xl font-bold">{row.round.shotCount}</div>
-              <div className="text-xs text-muted-foreground">shots this round</div>
+              <div className="text-xs text-muted-foreground">shots targeting the green</div>
             </div>
           ))}
           {review.distanceWarning && (
@@ -199,8 +207,9 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         </CardContent>
       </Card>
 
-      {!review.distanceWarning && <ComparisonTable title="By Distance" description="Distance to target at the start of each shot. Each shot appears in one band only." rows={review.distanceRows} />}
+      {!review.distanceWarning && <ComparisonTable title="Greens Targeted By Distance" description={`Only shots targeting the green. Each shot appears in one distance band. ${review.hasShotSequence ? 'Shots To Green uses the uploaded hole sequence.' : 'Re-upload this round to add hole sequence and calculate Shots To Green.'}`} rows={review.greenDistanceRows} greenDistance />}
       <ComparisonTable title="By Lie" description="Starting lie for each non-putting shot in this round." rows={review.lieRows} simple />
+      <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={roundShots} onSave={updateRoundShotClassifications} />
     </div>
   );
 }

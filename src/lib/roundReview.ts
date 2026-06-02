@@ -11,6 +11,7 @@ export interface RoundReviewRow {
   shotTypeLabel?: string;
   powerLabel?: string;
   targetLabel?: string;
+  avgShotsToGreen?: number | null;
   round: MetricsResult;
   last5: MetricsResult;
   recentThird: MetricsResult;
@@ -21,10 +22,11 @@ export interface RoundReviewModel {
   last5: MetricsResult;
   recentThird: MetricsResult;
   clubAndTypeRows: RoundReviewRow[];
-  distanceRollups: RoundReviewRow[];
-  distanceRows: RoundReviewRow[];
+  greenDistanceRollups: RoundReviewRow[];
+  greenDistanceRows: RoundReviewRow[];
   lieRows: RoundReviewRow[];
   distanceWarning: string | null;
+  hasShotSequence: boolean;
 }
 
 const DISTANCE_ROLLUPS = new Set(['0-150', '0-100']);
@@ -64,7 +66,8 @@ function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
   recentThird: ProcessedShot[],
-  groups: Array<{ key: string; label: string; clubLabel?: string; clubSortIndex?: number; shotTypeLabel?: string; powerLabel?: string; targetLabel?: string; filter: (shot: ProcessedShot) => boolean }>
+  groups: Array<{ key: string; label: string; clubLabel?: string; clubSortIndex?: number; shotTypeLabel?: string; powerLabel?: string; targetLabel?: string; filter: (shot: ProcessedShot) => boolean }>,
+  avgShotsToGreen?: (shots: ProcessedShot[]) => number | null
 ): RoundReviewRow[] {
   return groups
     .map(group => {
@@ -78,6 +81,7 @@ function makeRows(
         shotTypeLabel: group.shotTypeLabel,
         powerLabel: group.powerLabel,
         targetLabel: group.targetLabel,
+        avgShotsToGreen: avgShotsToGreen?.(roundShots) ?? null,
         round: metrics(roundShots),
         last5: metrics(last5.filter(group.filter)),
         recentThird: metrics(recentThird.filter(group.filter)),
@@ -147,6 +151,32 @@ export function buildRoundReview(
     }];
   })).values()];
 
+  const selectedByHole = new Map<number, ProcessedShot[]>();
+  for (const shot of selected) {
+    if (shot.holeNumber === null || shot.shotNumber === null) continue;
+    const holeShots = selectedByHole.get(shot.holeNumber) ?? [];
+    holeShots.push(shot);
+    selectedByHole.set(shot.holeNumber, holeShots);
+  }
+  for (const holeShots of selectedByHole.values()) {
+    holeShots.sort((a, b) => (a.shotNumber ?? 0) - (b.shotNumber ?? 0));
+  }
+  const hasShotSequence = selected.length > 0 && selected.every(shot => shot.holeNumber !== null && shot.shotNumber !== null);
+  const getAvgShotsToGreen = (shotsInBand: ProcessedShot[]): number | null => {
+    const values = shotsInBand.flatMap(shot => {
+      if (shot.holeNumber === null || shot.shotNumber === null) return [];
+      const sequence = (selectedByHole.get(shot.holeNumber) ?? [])
+        .filter(candidate => (candidate.shotNumber ?? 0) >= (shot.shotNumber ?? 0));
+      const greenIndex = sequence.findIndex(candidate => /green|fringe|hole/i.test(candidate.endLie));
+      return greenIndex === -1 ? [] : [greenIndex + 1];
+    });
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  };
+  const greenTargetShots = (candidates: ProcessedShot[]) => candidates.filter(shot => {
+    const assignment = gappingAssignments.get(shot.id);
+    return (assignment?.target ?? shot.targetIntent.trim().toLowerCase()) === 'green';
+  });
+
   const distanceGroups = DISTANCE_FILTER_OPTIONS
     .filter(option => option.value !== 'all')
     .map(option => ({
@@ -182,9 +212,10 @@ export function buildRoundReview(
     last5: metrics(last5),
     recentThird: metrics(recentThird),
     clubAndTypeRows: makeRows(selected, last5, recentThird, clubAndTypeGroups),
-    distanceRollups: distanceWarning ? [] : makeRows(selected, last5, recentThird, distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key))),
-    distanceRows: distanceWarning ? [] : makeRows(selected, last5, recentThird, distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key))),
+    greenDistanceRollups: distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen),
+    greenDistanceRows: distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen),
     lieRows: makeRows(selected, last5, recentThird, lieGroups),
     distanceWarning,
+    hasShotSequence,
   };
 }

@@ -42,6 +42,13 @@ interface GolfDataContextType {
   upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
   refreshRoundReflections: () => Promise<void>;
   refreshShots: () => Promise<void>;
+  updateRoundShotClassifications: (updates: Array<{
+    id: string;
+    club: string;
+    shotFamily: string;
+    swingEffort: string;
+    targetIntent: string;
+  }>) => Promise<void>;
 }
 
 type RoundReflectionInput = {
@@ -279,6 +286,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           shotFamily: row.shot_family || '',
           swingEffort: row.swing_effort || '',
           targetIntent: row.target_intent || '',
+          holeNumber: row.hole_number ?? null,
+          shotNumber: row.shot_number ?? null,
           target: row.target || 0,
           total: row.total || 0,
           side: row.offline || 0,
@@ -379,6 +388,30 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     await loadShots();
   }, [loadShots]);
 
+  const updateRoundShotClassifications = useCallback(async (updates: Array<{
+    id: string;
+    club: string;
+    shotFamily: string;
+    swingEffort: string;
+    targetIntent: string;
+  }>) => {
+    if (!user) return;
+    for (const update of updates) {
+      const { error } = await supabase
+        .from('shots')
+        .update({
+          club: update.club,
+          shot_family: update.shotFamily,
+          swing_effort: update.swingEffort,
+          target_intent: update.targetIntent,
+        })
+        .eq('user_id', user.id)
+        .eq('id', update.id);
+      if (error) throw error;
+    }
+    await loadShots();
+  }, [loadShots, user]);
+
   const refreshRoundReflections = useCallback(async () => {
     await loadRoundReflections();
   }, [loadRoundReflections]);
@@ -451,6 +484,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       updateClub,
       deleteClub,
       shots, 
+      updateRoundShotClassifications,
       isLoading, 
       availableClubs,
       availableStartLies,

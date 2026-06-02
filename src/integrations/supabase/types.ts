@@ -400,10 +400,12 @@ export type Database = {
           end_distance_from_target: number | null
           end_lie: string | null
           id: string
+          hole_number: number | null
           notes: string | null
           offline: number | null
           shot_date: string | null
           shot_family: string | null
+          shot_number: number | null
           shot_quality: string | null
           shot_type: string | null
           start_lie: string | null
@@ -423,10 +425,12 @@ export type Database = {
           end_distance_from_target?: number | null
           end_lie?: string | null
           id?: string
+          hole_number?: number | null
           notes?: string | null
           offline?: number | null
           shot_date?: string | null
           shot_family?: string | null
+          shot_number?: number | null
           shot_quality?: string | null
           shot_type?: string | null
           start_lie?: string | null
@@ -446,10 +450,12 @@ export type Database = {
           end_distance_from_target?: number | null
           end_lie?: string | null
           id?: string
+          hole_number?: number | null
           notes?: string | null
           offline?: number | null
           shot_date?: string | null
           shot_family?: string | null
+          shot_number?: number | null
           shot_quality?: string | null
           shot_type?: string | null
           start_lie?: string | null

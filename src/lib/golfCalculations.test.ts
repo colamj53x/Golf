@@ -39,6 +39,8 @@ describe('parseCSV', () => {
       target: 141.17,
       endDistanceFromTarget: 25.83,
       total: 116.16,
+      holeNumber: 10,
+      shotNumber: 1,
     });
   });
 });
@@ -53,6 +55,8 @@ describe('calculateMetrics', () => {
       shotFamily: 'full',
       swingEffort: 'full',
       targetIntent: 'fairway',
+      holeNumber: null,
+      shotNumber: null,
       target: 220,
       total: 220,
       side: 0,
