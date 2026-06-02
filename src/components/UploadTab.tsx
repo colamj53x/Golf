@@ -142,10 +142,6 @@ function getClubId(club: string): string {
   return (CLUB_CODE_MAP[club] ?? CLUB_CODE_MAP[club.toUpperCase()] ?? club).toLowerCase();
 }
 
-function getClubLabel(club: string): string {
-  return CLUB_OPTIONS.find((option) => option.value === club)?.label ?? club;
-}
-
 function availableShotFamiliesForClub(club: string) {
   const clubId = getClubId(club);
   if (clubId === 'dr' || clubId === '5w' || clubId === '4h' || clubId === '5h') {
@@ -858,7 +854,18 @@ export function UploadTab() {
                     return (
                       <tr key={row.id} className={`border-t align-top ${row.accepted ? 'bg-primary/5' : ''}`}>
                         <td className="px-3 py-3">
-                          <div className="font-medium">{getClubLabel(row.club)}</div>
+                          <Select value={row.club} onValueChange={(club) => updatePendingRow(row.id, { club })}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CLUB_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <div className="text-xs text-muted-foreground">{row.roundDate}</div>
                         </td>
                         <td className="px-3 py-3">

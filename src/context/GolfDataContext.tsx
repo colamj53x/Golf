@@ -48,6 +48,8 @@ interface GolfDataContextType {
     shotFamily: string;
     swingEffort: string;
     targetIntent: string;
+    startLie: string;
+    endLie: string;
   }>) => Promise<void>;
 }
 
@@ -394,6 +396,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     shotFamily: string;
     swingEffort: string;
     targetIntent: string;
+    startLie: string;
+    endLie: string;
   }>) => {
     if (!user) return;
     for (const update of updates) {
@@ -404,6 +408,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           shot_family: update.shotFamily,
           swing_effort: update.swingEffort,
           target_intent: update.targetIntent,
+          start_lie: update.startLie,
+          end_lie: update.endLie,
         })
         .eq('user_id', user.id)
         .eq('id', update.id);

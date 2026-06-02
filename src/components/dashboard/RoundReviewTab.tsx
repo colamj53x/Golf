@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
+import { Button } from '@/components/ui/button';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
@@ -173,6 +174,11 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={() => setReviewShotsOpen(true)}>
+          Review / adjust {review.round.shotCount} round shots
+        </Button>
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard label="Shot Quality" round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
         <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.badMissPct} recentThird={review.recentThird.badMissPct} format={formatPercent} />
@@ -187,11 +193,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
           <CardDescription>Roll-up counts for shots targeting the green. The distance bands below are non-overlapping.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md border bg-muted/30 p-3 text-left transition-colors hover:border-primary hover:bg-primary/5">
-            <div className="text-sm text-muted-foreground">All reviewed shots</div>
-            <div className="text-2xl font-bold">{review.round.shotCount}</div>
-            <div className="text-xs text-primary">Review / adjust round shots</div>
-          </button>
           {review.greenDistanceRollups.map(row => (
             <div key={row.key} className="rounded-md border bg-muted/30 p-3">
               <div className="text-sm text-muted-foreground">{row.label}</div>
