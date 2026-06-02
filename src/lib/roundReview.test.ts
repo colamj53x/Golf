@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoundReview } from './roundReview';
+import { buildRoundReview, getRoundReviewShotLabel } from './roundReview';
 import { DEFAULT_CLUB_CONFIGS, Shot } from '@/types/golf';
 
 const shot = (id: string, date: string, target: number, shotQuality: string, overrides: Partial<Shot> = {}): Shot => ({
@@ -44,5 +44,26 @@ describe('buildRoundReview', () => {
     expect(review.round.shotCount).toBe(1);
     expect(review.distanceRollups.map(row => [row.key, row.round.shotCount])).toEqual([['0-150', 1], ['0-100', 1]]);
     expect(review.distanceRows.map(row => [row.key, row.round.shotCount])).toEqual([['30-39', 1]]);
+  });
+
+  it('uses the reviewed Gapping vocabulary for club and shot type rows', () => {
+    const pitch = shot('pitch', '2026-05-31', 35, '5 Handicap', { shotFamily: 'pitch', swingEffort: '9pm' });
+    const bump = shot('bump', '2026-05-31', 18, '10 Handicap', { club: '8I', shotFamily: 'bump', swingEffort: '9pm' });
+    const review = buildRoundReview([pitch, bump], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(getRoundReviewShotLabel(pitch)).toBe('Pitch Half');
+    expect(getRoundReviewShotLabel(bump)).toBe('Bump Half');
+    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch Half', '8I · Bump Half']);
+  });
+
+  it('suppresses a misleading distance breakdown when every stored target has collapsed below 10m', () => {
+    const review = buildRoundReview([
+      shot('driver', '2026-05-31', 0, '10 Handicap', { club: 'Dr', type: 'Driving', total: 220 }),
+      shot('approach', '2026-05-31', 0, '10 Handicap', { club: '8I', type: 'Approach', total: 125 }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(review.distanceWarning).toContain('look incomplete');
+    expect(review.distanceRollups).toEqual([]);
+    expect(review.distanceRows).toEqual([]);
   });
 });

@@ -51,6 +51,7 @@ type PendingUploadDraft = {
 type StoredPendingUploadDraft = PendingUploadDraft & {
   userId: string;
   replaceAll: boolean;
+  replaceMatchingRounds?: boolean;
 };
 
 type UploadShotInsert = {
@@ -256,6 +257,7 @@ export function UploadTab() {
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<{ row: number; issue: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
+  const [replaceMatchingRounds, setReplaceMatchingRounds] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<PendingUploadDraft | null>(null);
@@ -288,6 +290,7 @@ export function UploadTab() {
         reflectionsByDate: parsed.reflectionsByDate,
       });
       setReplaceAll(parsed.replaceAll);
+      setReplaceMatchingRounds(parsed.replaceMatchingRounds ?? false);
       setUploadResult({
         success: false,
         message: 'Your unsaved upload draft was restored. You can keep reviewing and save again.',
@@ -311,9 +314,10 @@ export function UploadTab() {
       ...pendingUpload,
       userId: user.id,
       replaceAll,
+      replaceMatchingRounds,
     };
     localStorage.setItem(PENDING_UPLOAD_STORAGE_KEY, JSON.stringify(payload));
-  }, [hasRestoredPendingUpload, pendingUpload, replaceAll, user]);
+  }, [hasRestoredPendingUpload, pendingUpload, replaceAll, replaceMatchingRounds, user]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -495,13 +499,22 @@ export function UploadTab() {
       }));
 
       const legacyShots = reviewedShots.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
+      const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
       let duplicateCount = 0;
 
       let shotsToInsert = reviewedShots;
       let legacyShotsToInsert = legacyShots;
 
-      if (!replaceAll) {
-        const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
+      if (!replaceAll && replaceMatchingRounds) {
+        const { error: deleteRoundsError } = await supabase
+          .from('shots')
+          .delete()
+          .eq('user_id', user.id)
+          .in('shot_date', relevantDates);
+        if (deleteRoundsError) throw new Error(getUserFriendlyError(deleteRoundsError));
+      }
+
+      if (!replaceAll && !replaceMatchingRounds) {
         const { data: existingShots, error: existingShotsError } = await supabase
           .from('shots')
           .select('club, shot_type, target, total, offline, start_lie, end_lie, strike_quality, shot_quality, end_distance_from_target, notes, shot_date')
@@ -582,7 +595,7 @@ export function UploadTab() {
         : '';
       setUploadResult({
         success: true,
-        message: `Successfully ${replaceAll ? 'replaced with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${duplicateMsg}${legacyMsg}${reflectionMsg}`,
+        message: `Successfully ${replaceAll ? 'replaced history with' : replaceMatchingRounds ? 'replaced matching rounds with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${duplicateMsg}${legacyMsg}${reflectionMsg}`,
       });
       clearPendingUpload();
       await Promise.all([refreshShots(), refreshRoundReflections()]);
@@ -711,6 +724,15 @@ export function UploadTab() {
               </p>
             </div>
           </div>
+          <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3">
+            <Switch id="replace-round-mode" checked={replaceMatchingRounds} onCheckedChange={setReplaceMatchingRounds} disabled={replaceAll} />
+            <div className="space-y-1">
+              <Label htmlFor="replace-round-mode">Replace matching round dates</Label>
+              <p className="text-xs text-muted-foreground">
+                Use this to repair or reload one round. Only dates present in the uploaded CSV are replaced.
+              </p>
+            </div>
+          </div>
 
           <div
             onDragOver={handleDragOver}
@@ -783,12 +805,13 @@ export function UploadTab() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead className="bg-muted/60">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">Club</th>
                     <th className="px-3 py-2 text-left font-medium">Predicted Shot</th>
-                    <th className="px-3 py-2 text-left font-medium">Target</th>
+                    <th className="px-3 py-2 text-left font-medium">Distance to Target</th>
+                    <th className="px-3 py-2 text-left font-medium">Target Intent</th>
                     <th className="px-3 py-2 text-left font-medium">Start Lie</th>
                     <th className="px-3 py-2 text-left font-medium">End Lie</th>
                     <th className="px-3 py-2 text-left font-medium">Shot Family</th>
@@ -810,6 +833,9 @@ export function UploadTab() {
                           <div className="text-xs text-muted-foreground">
                             Total {Math.round(row.total)}m • Side {Math.round(row.side)}m
                           </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium">{Math.round(row.target)}m</div>
                         </td>
                         <td className="px-3 py-3">
                           <Select value={row.targetIntent} onValueChange={(value) => updatePendingRow(row.id, { targetIntent: value })}>

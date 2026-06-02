@@ -18,6 +18,7 @@ export interface RoundReviewModel {
   distanceRollups: RoundReviewRow[];
   distanceRows: RoundReviewRow[];
   lieRows: RoundReviewRow[];
+  distanceWarning: string | null;
 }
 
 const DISTANCE_ROLLUPS = new Set(['0-150', '0-100']);
@@ -25,6 +26,20 @@ const LIE_ORDER = ['tee', 'fairway', 'first cut', 'rough', 'bunker', 'recovery']
 
 export function isPuttingShot(shot: Shot): boolean {
   return shot.club.trim().toLowerCase() === 'pu' || shot.type.trim().toLowerCase() === 'putting';
+}
+
+function titleCase(value: string): string {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : '';
+}
+
+export function getRoundReviewShotLabel(shot: Shot): string {
+  const family = shot.shotFamily.trim().toLowerCase();
+  const effort = shot.swingEffort.trim().toLowerCase();
+  if (!family) return shot.type || 'Unspecified';
+  if (family === 'full' && effort === 'full') return 'Full';
+  const effortLabel = effort === '9pm' ? 'Half' : effort === 'full' ? 'Full' : titleCase(effort);
+  const familyLabel = family === 'bump' ? 'Bump' : titleCase(family);
+  return effortLabel ? `${familyLabel} ${effortLabel}` : familyLabel;
 }
 
 function processShots(shots: Shot[], clubs: ClubConfig[], distanceToTargetTolerance: number): ProcessedShot[] {
@@ -84,11 +99,12 @@ export function buildRoundReview(
   const recentThird = recentThirdSize > 0 ? historical.slice(-recentThirdSize) : [];
 
   const clubAndTypeGroups = [...new Map(selected.map(shot => {
-    const label = `${shot.club || 'Unknown club'} · ${shot.type || 'Unspecified'}`;
+    const shotLabel = getRoundReviewShotLabel(shot);
+    const label = `${shot.club || 'Unknown club'} · ${shotLabel}`;
     return [label, {
       key: label,
       label,
-      filter: (candidate: ProcessedShot) => candidate.club === shot.club && candidate.type === shot.type,
+      filter: (candidate: ProcessedShot) => candidate.club === shot.club && getRoundReviewShotLabel(candidate) === shotLabel,
     }];
   })).values()];
 
@@ -116,13 +132,20 @@ export function buildRoundReview(
     return aIndex - bIndex;
   });
 
+  const distanceWarning = selected.length > 0
+    && selected.every(shot => shot.target >= 0 && shot.target <= 9)
+    && selected.some(shot => shot.total > 50)
+    ? 'The stored distance-to-target values for this round look incomplete: every reviewed shot is recorded inside 10m. Re-upload this round before relying on its distance breakdown.'
+    : null;
+
   return {
     round: metrics(selected),
     last5: metrics(last5),
     recentThird: metrics(recentThird),
     clubAndTypeRows: makeRows(selected, last5, recentThird, clubAndTypeGroups),
-    distanceRollups: makeRows(selected, last5, recentThird, distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key))),
-    distanceRows: makeRows(selected, last5, recentThird, distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key))),
+    distanceRollups: distanceWarning ? [] : makeRows(selected, last5, recentThird, distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key))),
+    distanceRows: distanceWarning ? [] : makeRows(selected, last5, recentThird, distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key))),
     lieRows: makeRows(selected, last5, recentThird, lieGroups),
+    distanceWarning,
   };
 }

@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatPercent } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildRoundReview, RoundReviewRow } from '@/lib/roundReview';
@@ -93,6 +94,7 @@ function ComparisonTable({ title, description, rows, simple = false }: {
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate }: RoundReviewTabProps) {
+  const [clubSort, setClubSort] = useState('club');
   const review = useMemo(
     () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate),
     [shots, clubs, distanceToTargetTolerance, roundDate]
@@ -102,6 +104,14 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     return <Card><CardContent className="py-12 text-center text-muted-foreground">No non-putting shots recorded in this round.</CardContent></Card>;
   }
 
+  const sortedClubAndTypeRows = [...review.clubAndTypeRows].sort((a, b) => {
+    if (clubSort === 'shots') return b.round.shotCount - a.round.shotCount;
+    if (clubSort === 'quality') return (b.round.shotQualityIndex ?? -1) - (a.round.shotQualityIndex ?? -1);
+    if (clubSort === 'bad-miss') return b.round.badMissPct - a.round.badMissPct;
+    if (clubSort === 'accuracy') return b.round.onTargetPct - a.round.onTargetPct;
+    return a.label.localeCompare(b.label);
+  });
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
@@ -110,7 +120,24 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.onTargetPct} recentThird={review.recentThird.onTargetPct} format={formatPercent} />
       </div>
 
-      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, compared with the same club and shot type before this round." rows={review.clubAndTypeRows} />
+      <div className="space-y-3">
+        <div className="flex justify-end">
+          <div className="w-full space-y-1.5 sm:w-[220px]">
+            <label className="text-sm font-medium">Sort Club And Shot Type</label>
+            <Select value={clubSort} onValueChange={setClubSort}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="club">Club and shot type</SelectItem>
+                <SelectItem value="shots">Shots</SelectItem>
+                <SelectItem value="quality">Shot quality</SelectItem>
+                <SelectItem value="bad-miss">Bad miss</SelectItem>
+                <SelectItem value="accuracy">Accuracy</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, using the same Full, Pitch Half, Chip Half, and Bump Half vocabulary as Gapping." rows={sortedClubAndTypeRows} />
+      </div>
 
       <Card>
         <CardHeader>
@@ -130,10 +157,15 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
               <div className="text-xs text-muted-foreground">shots this round</div>
             </div>
           ))}
+          {review.distanceWarning && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800 sm:col-span-3">
+              {review.distanceWarning}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <ComparisonTable title="By Distance" description="Target distance at the start of each shot. Each shot appears in one band only." rows={review.distanceRows} />
+      {!review.distanceWarning && <ComparisonTable title="By Distance" description="Distance to target at the start of each shot. Each shot appears in one band only." rows={review.distanceRows} />}
       <ComparisonTable title="By Lie" description="Starting lie for each non-putting shot in this round." rows={review.lieRows} simple />
     </div>
   );

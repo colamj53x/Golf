@@ -24,6 +24,23 @@ describe('parseCSV', () => {
     expect(result.shots[0].date.getMonth()).toBe(4);
     expect(result.shots[0].date.getDate()).toBe(31);
   });
+
+  it('maps the ParGolf export distance-to-target column', () => {
+    const csv = [
+      'Golfer,Date,Course,Type,Round Par,Round Score,Hole,Hole Par,Hole Score,Hole Length,Hole Putts,Hole m of Putts Made,Shot,Distance to Target (m),Start Lie,Proximity (m),End Lie,Distance Traveled (m),Strokes Gained to a Pro,Quality,Club,Brand,Model,Rating,Slope,Tee Name,Tee Color,Tee Number,Hole Handicap,Wind Bearing,Wind Strength,Degrees Offline,Committed,Penalties,Shape,Trajectory,Club Type,Coach Tags,Elevation (m),Shot Quality,Category,',
+      'Nic Cola, 2026-05-30 21:01:38 +0000, Albert Park Public Golf Course, Social, 35, 41, 10, 3, 4, 159, 2, 1.05, 1, 141.17, Tee, 25.83, Fairway, 116.16, -0.49, Heel, 5H, Ping, G440, 68.5, 110, Men, White, 0, 6, 258, 1.99, , 1, 0, , #pull#low, Hybrid, , , 10 Handicap, Approach,',
+    ].join('\n');
+
+    const result = parseCSV(csv);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.shots[0]).toMatchObject({
+      club: '5H',
+      target: 141.17,
+      endDistanceFromTarget: 25.83,
+      total: 116.16,
+    });
+  });
 });
 
 describe('calculateMetrics', () => {
