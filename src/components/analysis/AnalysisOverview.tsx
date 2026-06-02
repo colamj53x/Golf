@@ -13,6 +13,7 @@ import {
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { useAnalysisPuttingSessions } from '@/hooks/useAnalysisPuttingSessions';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import {
   buildAnalysisModel,
   type AnalysisConfidence,
@@ -25,6 +26,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { buildPracticePriorities } from '@/lib/practicePriorities';
+import { useShotProfiles } from '@/lib/shotProfiles';
 
 const confidenceLabel: Record<AnalysisConfidence, string> = {
   high: 'High confidence',
@@ -133,9 +136,12 @@ export function AnalysisOverview({
   onOpenLatestRound?: () => void;
   onOpenPractice?: () => void;
 } = {}) {
-  const { shots, clubs, roundReflections, isLoading: golfLoading } = useGolfData();
-  const { practiceSessions, isLoading: practiceLoading } = usePracticeData();
+  const { shots, clubs, roundReflections, gappingHcpTarget, isLoading: golfLoading } = useGolfData();
+  const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
   const puttingSessions = useAnalysisPuttingSessions();
+  const profiles = useShotProfiles();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const analysis = useMemo(() => buildAnalysisModel({
     shots,
     clubs,
@@ -143,6 +149,14 @@ export function AnalysisOverview({
     practiceSessions,
     puttingSessions,
   }), [clubs, practiceSessions, puttingSessions, roundReflections, shots]);
+  const priorities = useMemo(() => buildPracticePriorities({
+    shots,
+    profiles,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   if (golfLoading || practiceLoading) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;
@@ -187,11 +201,11 @@ export function AnalysisOverview({
             <CardDescription>Focus the next practice block on the score-risk areas with the strongest evidence.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
-            {analysis.priorities.length === 0 && <EmptyCard>Capture more course shots to establish ranked priorities.</EmptyCard>}
-            {analysis.priorities.map((priority) => (
-              <div key={priority.clubId} className="rounded-lg border p-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority {priority.rank}</div>
-                <div className="mt-1 font-bold">{priority.clubName}</div>
+            {priorities.length === 0 && <EmptyCard>Capture more course shots to establish ranked priorities.</EmptyCard>}
+            {priorities.map((priority, index) => (
+              <div key={priority.configKey} className="rounded-lg border p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority {index + 1}</div>
+                <div className="mt-1 font-bold">{priority.clubName} · {priority.shotLabel}</div>
                 <p className="mt-2 text-sm">{priority.recommendation}</p>
                 <div className="mt-2 text-xs text-muted-foreground">{priority.evidence}</div>
               </div>
@@ -204,7 +218,7 @@ export function AnalysisOverview({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {analysis.priorities[0]?.recommendation ?? 'Capture more course shots to create a focused recommendation.'}
+              {priorities[0]?.recommendation ?? 'Capture more course shots to create a focused recommendation.'}
             </p>
             {onOpenPractice && <Button className="w-full gap-2" onClick={onOpenPractice}>Open practice <ArrowRight className="h-4 w-4" /></Button>}
             {onOpenLatestRound && <Button className="w-full gap-2" variant="outline" onClick={onOpenLatestRound}>Latest round <ArrowRight className="h-4 w-4" /></Button>}

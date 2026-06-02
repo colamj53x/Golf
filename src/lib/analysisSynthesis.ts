@@ -27,6 +27,7 @@ export interface ClubInsight {
   badMissPct: number;
   damage: number;
   damagePerShot: number;
+  reliancePerRound: number;
   severity: DamageSeverity | null;
   direction: string;
   distance: string;
@@ -255,7 +256,7 @@ function clubRecommendation(clubName: string, direction: string, distance: strin
   return 'Maintain this club and monitor the next sample.';
 }
 
-function buildClubInsights(shots: Shot[], clubs: ClubConfig[]): ClubInsight[] {
+function buildClubInsights(shots: Shot[], clubs: ClubConfig[], rounds: number): ClubInsight[] {
   const grouped = new Map<string, Shot[]>();
   shots.forEach((shot) => {
     const clubId = clubIdForShot(shot, clubs);
@@ -299,6 +300,7 @@ function buildClubInsights(shots: Shot[], clubs: ClubConfig[]): ClubInsight[] {
       badMissPct: pct(badMisses / clubShots.length),
       damage,
       damagePerShot: Math.round((damage / clubShots.length) * 100) / 100,
+      reliancePerRound: rounds ? Math.round((clubShots.length / rounds) * 10) / 10 : 0,
       severity: highestSeverity(clubShots),
       direction,
       distance,
@@ -486,10 +488,14 @@ export function buildAnalysisModel({
   const confidence = roundConfidence(rounds);
   const damage = shots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0);
   const badMisses = shots.filter((shot) => calculateShotDamage(shot) >= 1).length;
-  const clubInsights = buildClubInsights(shots, clubs);
+  const clubInsights = buildClubInsights(shots, clubs, rounds);
   const priorities = [...clubInsights]
     .filter((club) => club.shots >= 8)
-    .sort((a, b) => (b.damagePerShot * 2 + b.badMissPct / 100 + (100 - (b.sqi || 0)) / 100) - (a.damagePerShot * 2 + a.badMissPct / 100 + (100 - (a.sqi || 0)) / 100))
+    .sort((a, b) => (
+      b.reliancePerRound * (b.damagePerShot + b.badMissPct / 100 + Math.max(0, 90 - (b.sqi || 0)) / 65)
+    ) - (
+      a.reliancePerRound * (a.damagePerShot + a.badMissPct / 100 + Math.max(0, 90 - (a.sqi || 0)) / 65)
+    ))
     .slice(0, 3)
     .map((club, index) => ({ ...club, rank: index + 1 }));
   const reliableClubs = [...clubInsights]

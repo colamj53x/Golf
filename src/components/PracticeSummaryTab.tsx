@@ -14,6 +14,7 @@ import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
+import { buildPracticePriorities, type PracticePriority } from '@/lib/practicePriorities';
 
 const CLUB_ORDER: Record<string, number> = Object.fromEntries(
   PRACTICE_CLUBS.map((c, i) => [c.id, i]),
@@ -42,6 +43,7 @@ interface SummaryRow {
   last20Count: number;
   last3PracticeScore: number | null;
   last3PracticeCount: number;
+  priority: PracticePriority | null;
 }
 
 type SortKey =
@@ -142,58 +144,14 @@ function priorityLabel(level: PriorityLevel): string {
 }
 
 function prioritySignal(row: SummaryRow): { level: PriorityLevel; score: number | null; title: string } {
-  const reliance = row.reliancePerRound ?? 0;
-  const hasAnySignal =
-    row.courseShotCount > 0 ||
-    row.last20Score !== null ||
-    row.lastPracticed !== null ||
-    row.last3PracticeScore !== null;
-
-  if (!hasAnySignal) {
-    return { level: 'none', score: null, title: 'No course or practice signal yet' };
-  }
-
-  let confidenceRisk = 0;
-  if (row.last20Score === null) {
-    confidenceRisk = reliance >= 0.25 ? 1 : 0;
-  } else if (row.last20Score < 40) {
-    confidenceRisk = 3;
-  } else if (row.last20Score < 65) {
-    confidenceRisk = 2;
-  }
-
-  let recencyRisk = 0;
-  if (row.lastPracticed === null) {
-    recencyRisk = reliance >= 0.25 ? 2 : 1;
-  } else {
-    const days = differenceInCalendarDays(new Date(), row.lastPracticed);
-    if (days > 62) recencyRisk = 2;
-    else if (days > 31) recencyRisk = 1;
-  }
-
-  let practiceRisk = 0;
-  if (row.last3PracticeScore === null) {
-    practiceRisk = reliance >= 0.25 ? 1 : 0;
-  } else if (row.last3PracticeScore < 60) {
-    practiceRisk = 2;
-  } else if (row.last3PracticeScore < 80) {
-    practiceRisk = 1;
-  }
-
-  const risk = confidenceRisk + recencyRisk + practiceRisk;
-  const relianceBoost = reliance >= 1 ? 1.25 : reliance >= 0.5 ? 1 : reliance >= 0.25 ? 0.75 : 0.35;
-  const score = risk * relianceBoost;
-  const level: PriorityLevel =
-    (reliance >= 1 && risk >= 4) || (reliance >= 0.5 && risk >= 5)
-      ? 'high'
-      : (reliance >= 0.25 && risk >= 2) || score >= 2.5
-        ? 'medium'
-        : 'low';
+  if (!row.priority) return { level: 'none', score: null, title: 'No on-course signal yet' };
+  const score = row.priority.courseImpactScore;
+  const level: PriorityLevel = score >= 1 ? 'high' : score >= 0.35 ? 'medium' : 'low';
 
   return {
     level,
     score,
-    title: `${priorityLabel(level)} priority · ${reliance.toFixed(1)} shots/round, confidence risk ${confidenceRisk}, recency risk ${recencyRisk}, practice risk ${practiceRisk}`,
+    title: `${priorityLabel(level)} course impact · ${row.priority.evidence}`,
   };
 }
 
@@ -271,6 +229,16 @@ export function PracticeSummaryTab({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const prioritiesByConfig = useMemo(() => new Map(
+    buildPracticePriorities({
+      shots,
+      profiles,
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      gappingHcpTarget,
+    }).map((priority) => [visibleConfigKey(priority.configKey), priority]),
+  ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const courseSignals = useMemo(() => {
     const shotToConfig = new Map<string, string>();
@@ -461,6 +429,7 @@ export function PracticeSummaryTab({
       const last20Score = scoreShots(recentCourseShots);
       const courseShotCount = courseSignals.shotsByConfig.get(g.configKey)?.length ?? 0;
       const reliancePerRound = courseSignals.roundCount > 0 ? courseShotCount / courseSignals.roundCount : null;
+      const priority = prioritiesByConfig.get(g.configKey) ?? null;
       return {
         configKey: g.configKey,
         clubId: club,
@@ -480,9 +449,10 @@ export function PracticeSummaryTab({
         last20Count: recentCourseShots.length,
         last3PracticeScore: last3Cons,
         last3PracticeCount: last3.length,
+        priority,
       };
     });
-  }, [courseSignals, groupedRows, shotsBySession]);
+  }, [courseSignals, groupedRows, prioritiesByConfig, shotsBySession]);
 
 
   // Apply sorting
@@ -581,7 +551,7 @@ export function PracticeSummaryTab({
         <CardContent>
           <p className="text-sm text-muted-foreground">
             {topPriorityRows[0]
-              ? `Start with ${topPriorityRows[0].clubName} ${topPriorityRows[0].shotName.toLowerCase()} work. It is the clearest combination of course reliance, confidence, and practice recency.`
+              ? `Start with ${topPriorityRows[0].clubName} ${topPriorityRows[0].shotName.toLowerCase()} work. It has the highest expected on-course impact from reliance, shot quality, and costly misses.`
               : 'Capture a round or practice session to generate your next recommended block.'}
           </p>
         </CardContent>
