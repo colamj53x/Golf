@@ -20,7 +20,7 @@ const LibraryTab = lazy(async () => ({ default: (await import('@/components/Libr
 const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/MoreToolsTab')).MoreToolsTab }));
 
 const mainTabs = ['today', 'play', 'review', 'practice', 'bag', 'more'] as const;
-const reviewTabs = ['diagnosis', 'rounds', 'advanced'] as const;
+const reviewTabs = ['rounds', 'advanced'] as const;
 const bagTabs = ['gapping', 'clubs', 'profiles', 'short-game'] as const;
 const moreTabs = ['upload', 'library', 'tools', 'settings'] as const;
 type MainTab = typeof mainTabs[number];
@@ -33,7 +33,7 @@ function legacyRedirect(pathname: string): string | null {
   if (pathname === '/') return '/today';
   if (pathname === '/on-course') return '/play';
   if (pathname === '/club-gapping') return '/bag/gapping';
-  if (pathname === '/analyse' || pathname === '/analyse/overview' || pathname === '/playing-data') return '/review/diagnosis';
+  if (pathname === '/analyse' || pathname === '/analyse/overview' || pathname === '/playing-data') return '/review/rounds';
   if (pathname === '/analyse/rounds' || pathname === '/playing-data/dashboard') return '/review/rounds';
   if (pathname === '/analyse/clubs' || pathname === '/playing-data/all-clubs') return '/bag/clubs';
   if (pathname === '/analyse/gapping') return '/bag/gapping';
@@ -63,11 +63,11 @@ const Index = () => {
 
   if (redirect) return <Navigate to={redirect} replace />;
   if (!isIn(mainTabs, activeTab)) return <Navigate to="/today" replace />;
-  if (activeTab === 'review' && !isIn(reviewTabs, child || 'diagnosis')) return <Navigate to="/review/diagnosis" replace />;
+  if (activeTab === 'review' && !isIn(reviewTabs, child || 'rounds')) return <Navigate to="/review/rounds" replace />;
   if (activeTab === 'bag' && !isIn(bagTabs, child || 'gapping')) return <Navigate to="/bag/gapping" replace />;
   if (activeTab === 'more' && !isIn(moreTabs, child || 'upload')) return <Navigate to="/more/upload" replace />;
 
-  const reviewTab = isIn(reviewTabs, child || '') ? child : 'diagnosis';
+  const reviewTab = isIn(reviewTabs, child || '') ? child : 'rounds';
   const bagTab = isIn(bagTabs, child || '') ? child : 'gapping';
   const moreTab = isIn(moreTabs, child || '') ? child : 'upload';
 
@@ -105,8 +105,7 @@ const Index = () => {
           {activeTab === 'play' && <ClubSelectorTab />}
           {activeTab === 'practice' && <PracticeTab />}
           {activeTab === 'review' && <>
-            <SectionTabs value={reviewTab} values={reviewTabs} labels={{ diagnosis: 'Game Diagnosis', rounds: 'Round Review', advanced: 'Advanced Reports' }} onChange={value => navigate(path('review', value))} />
-            {reviewTab === 'diagnosis' && <AnalysisOverview />}
+            <SectionTabs value={reviewTab} values={reviewTabs} labels={{ rounds: 'Round Review', advanced: 'Advanced Reports' }} onChange={value => navigate(path('review', value))} />
             {reviewTab === 'rounds' && <DashboardTab showOverview={false} onOpenUpload={() => navigate('/more/upload')} />}
             {reviewTab === 'advanced' && <div className="space-y-6"><ReportsTab /><DashboardTab initialView="overview" showLatestRound={false} /></div>}
           </>}

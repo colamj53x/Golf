@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Minus, Target, Activity, Award, ChevronDown, ChevronRight, ChevronsUpDown, Gauge } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Target, Activity, ChevronDown, ChevronRight, ChevronsUpDown, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPercent, formatDistance, MetricsResult } from '@/lib/golfCalculations';
 import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
@@ -87,6 +87,29 @@ function MetricComparisonRow({
 
 const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
 
+function BaselineComparison({
+  label,
+  value,
+  status,
+  detail,
+}: {
+  label: string;
+  value: string;
+  status: ComparisonStatus;
+  detail?: string;
+}) {
+  return (
+    <div className="rounded-md border bg-muted/40 px-2.5 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-0.5 flex items-center gap-1">
+        <span className="text-sm font-semibold">{value}</span>
+        <ComparisonIndicator status={status} />
+      </div>
+      {detail && <p className="mt-0.5 text-[11px] font-medium text-primary">{detail}</p>}
+    </div>
+  );
+}
+
 export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distanceToTargetEnabled, roundDate }: LatestRoundTabProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
 
@@ -126,13 +149,11 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
   // Calculate summary stats vs L5R
   const onTargetStatusL5R = getComparison(lastRound.onTargetPct, last5Rounds.onTargetPct, 'onTargetPct');
   const badMissStatusL5R = getComparison(lastRound.badMissPct, last5Rounds.badMissPct, 'badMissPct');
-  const strikeCentreStatusL5R = getComparison(lastRound.strikeCentrePct, last5Rounds.strikeCentrePct, 'strikeCentrePct');
   const sqiStatusL5R = getComparison(lastRound.shotQualityIndex, last5Rounds.shotQualityIndex, 'shotQualityIndex');
 
   // Calculate summary stats vs Recent 1/3
   const onTargetStatusRecent = getComparison(lastRound.onTargetPct, mostRecentThird.onTargetPct, 'onTargetPct');
   const badMissStatusRecent = getComparison(lastRound.badMissPct, mostRecentThird.badMissPct, 'badMissPct');
-  const strikeCentreStatusRecent = getComparison(lastRound.strikeCentrePct, mostRecentThird.strikeCentrePct, 'strikeCentrePct');
   const sqiStatusRecent = getComparison(lastRound.shotQualityIndex, mostRecentThird.shotQualityIndex, 'shotQualityIndex');
 
   // Helper to get border color based on both statuses
@@ -147,92 +168,58 @@ export function LatestRoundTab({ lastRound, last5Rounds, mostRecentThird, distan
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className={`stat-card border-l-4 ${getBorderColor(sqiStatusL5R, sqiStatusRecent)}`}>
           <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+            <div className="space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Shot Quality Index</p>
                 <p className="text-2xl font-bold">{formatSqi(lastRound.shotQualityIndex)}</p>
                 <p className="text-xs font-medium text-primary">{describeHandicapEquivalent(lastRound.shotQualityIndex)}</p>
-                <div className="flex gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatSqi(last5Rounds.shotQualityIndex)}</span>
-                    <ComparisonIndicator status={sqiStatusL5R} />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Recent ⅓: {formatSqi(mostRecentThird.shotQualityIndex)}</span>
-                    <ComparisonIndicator status={sqiStatusRecent} />
-                  </div>
                 </div>
+                <Gauge className="h-8 w-8 text-primary opacity-80" />
               </div>
-              <Gauge className="h-8 w-8 text-primary opacity-80" />
+              <div className="grid grid-cols-2 gap-2">
+                <BaselineComparison label="Last 5 rounds" value={formatSqi(last5Rounds.shotQualityIndex)} status={sqiStatusL5R} detail={describeHandicapEquivalent(last5Rounds.shotQualityIndex)} />
+                <BaselineComparison label="Recent 1/3" value={formatSqi(mostRecentThird.shotQualityIndex)} status={sqiStatusRecent} detail={describeHandicapEquivalent(mostRecentThird.shotQualityIndex)} />
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className={`stat-card border-l-4 ${getBorderColor(badMissStatusL5R, badMissStatusRecent)}`}>
           <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+            <div className="space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Bad Miss %</p>
                 <p className="text-2xl font-bold">{formatPercent(lastRound.badMissPct)}</p>
-                <div className="flex gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.badMissPct)}</span>
-                    <ComparisonIndicator status={badMissStatusL5R} />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.badMissPct)}</span>
-                    <ComparisonIndicator status={badMissStatusRecent} />
-                  </div>
                 </div>
+                <Activity className="h-8 w-8 text-destructive opacity-80" />
               </div>
-              <Activity className="h-8 w-8 text-destructive opacity-80" />
+              <div className="grid grid-cols-2 gap-2">
+                <BaselineComparison label="Last 5 rounds" value={formatPercent(last5Rounds.badMissPct)} status={badMissStatusL5R} />
+                <BaselineComparison label="Recent 1/3" value={formatPercent(mostRecentThird.badMissPct)} status={badMissStatusRecent} />
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className={`stat-card border-l-4 ${getBorderColor(onTargetStatusL5R, onTargetStatusRecent)}`}>
           <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+            <div className="space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">On-Target %</p>
                 <p className="text-2xl font-bold">{formatPercent(lastRound.onTargetPct)}</p>
-                <div className="flex gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.onTargetPct)}</span>
-                    <ComparisonIndicator status={onTargetStatusL5R} />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.onTargetPct)}</span>
-                    <ComparisonIndicator status={onTargetStatusRecent} />
-                  </div>
                 </div>
+                <Target className="h-8 w-8 text-primary opacity-80" />
               </div>
-              <Target className="h-8 w-8 text-primary opacity-80" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`stat-card border-l-4 ${getBorderColor(strikeCentreStatusL5R, strikeCentreStatusRecent)}`}>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Strike Centre %</p>
-                <p className="text-2xl font-bold">{formatPercent(lastRound.strikeCentrePct)}</p>
-                <div className="flex gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">L5R: {formatPercent(last5Rounds.strikeCentrePct)}</span>
-                    <ComparisonIndicator status={strikeCentreStatusL5R} />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Recent ⅓: {formatPercent(mostRecentThird.strikeCentrePct)}</span>
-                    <ComparisonIndicator status={strikeCentreStatusRecent} />
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <BaselineComparison label="Last 5 rounds" value={formatPercent(last5Rounds.onTargetPct)} status={onTargetStatusL5R} />
+                <BaselineComparison label="Recent 1/3" value={formatPercent(mostRecentThird.onTargetPct)} status={onTargetStatusRecent} />
               </div>
-              <Award className="h-8 w-8 text-accent opacity-80" />
             </div>
           </CardContent>
         </Card>

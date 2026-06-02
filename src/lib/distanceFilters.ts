@@ -20,6 +20,7 @@ export const DISTANCE_FILTER_OPTIONS: DistanceFilterOption[] = [
   { label: '30-39m', value: '30-39', minDistance: 30, maxDistance: 39 },
   { label: '20-29m', value: '20-29', minDistance: 20, maxDistance: 29 },
   { label: '10-19m', value: '10-19', minDistance: 10, maxDistance: 19 },
+  { label: '0-9m', value: '0-9', minDistance: 0, maxDistance: 9 },
 ];
 
 /**

@@ -48,6 +48,8 @@ const CHART_COLORS = [
   'hsl(262, 83%, 58%)',
 ];
 
+const ROLLUP_DISTANCE_VALUES = new Set(['0-150', '0-100']);
+
 export function ReportsByDistance() {
   const { clubs, shots, distanceToTargetTolerance } = useGolfData();
 
@@ -91,12 +93,22 @@ export function ReportsByDistance() {
       };
 
       return data;
-    }).filter((d): d is DistanceBandData => d !== null && d.shots.length >= 3);
+    }).filter((d): d is DistanceBandData => d !== null);
   }, [shots, clubs, distanceToTargetTolerance]);
+
+  const rollupData = useMemo(
+    () => distanceData.filter(band => ROLLUP_DISTANCE_VALUES.has(band.value)),
+    [distanceData]
+  );
+
+  const detailedDistanceData = useMemo(
+    () => distanceData.filter(band => !ROLLUP_DISTANCE_VALUES.has(band.value)),
+    [distanceData]
+  );
 
   // Prepare chart data
   const barChartData = useMemo(() => {
-    return distanceData.map(band => ({
+    return detailedDistanceData.map(band => ({
       name: band.label,
       'On-Target %': band.metrics.onTargetPct,
       'Greens Hit %': band.metrics.greensHitRawPct,
@@ -104,31 +116,31 @@ export function ReportsByDistance() {
       'Strike Centre %': band.metrics.strikeCentrePct,
       shots: band.metrics.shotCount,
     }));
-  }, [distanceData]);
+  }, [detailedDistanceData]);
 
   const radarData = useMemo(() => {
-    return distanceData.slice(0, 6).map(band => ({
+    return detailedDistanceData.slice(0, 6).map(band => ({
       distance: band.label.replace('m', ''),
       accuracy: band.metrics.onTargetPct,
       control: Math.max(0, 100 - band.metrics.badMissPct * 5),
       consistency: Math.max(0, 100 - band.metrics.sideVariation * 5),
     }));
-  }, [distanceData]);
+  }, [detailedDistanceData]);
 
   // Greens Hit analysis for shots within 150m
   const greensHitData = useMemo(() => {
-    return distanceData
+    return detailedDistanceData
       .filter(band => band.isWithin150m)
       .map(band => ({
         name: band.label,
         'Greens Hit %': band.metrics.greensHitRawPct,
         shots: band.metrics.shotCount,
       }));
-  }, [distanceData]);
+  }, [detailedDistanceData]);
 
   // Distance proximity analysis (for approach shots)
   const proximityData = useMemo(() => {
-    return distanceData
+    return detailedDistanceData
       .filter(band => band.metrics.avgDistanceToTarget !== null)
       .map(band => ({
         name: band.label,
@@ -136,7 +148,7 @@ export function ReportsByDistance() {
         'Within 5m %': band.metrics.proximityWithin5mPct,
         'Greens Hit %': band.metrics.greensHitRawPct,
       }));
-  }, [distanceData]);
+  }, [detailedDistanceData]);
 
   if (shots.length === 0) {
     return (
@@ -148,30 +160,29 @@ export function ReportsByDistance() {
     );
   }
 
-  // Get key summary data - focus on within 150m for greens
-  const within150mData = distanceData.find(d => d.value === '0-150');
-
   return (
     <div className="space-y-6">
-      {/* Greens Hit Summary for Within 150m */}
-      {within150mData && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-primary">Greens Hit (Within 150m)</p>
-                <p className="text-3xl font-bold text-primary">{formatPercent(within150mData.metrics.greensHitRawPct)}</p>
-                <p className="text-xs text-muted-foreground">{within150mData.metrics.shotCount} shots from {within150mData.label}</p>
+      {/* Roll-up totals */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {rollupData.map(band => (
+          <Card key={band.value} className="border-primary/50 bg-primary/5">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-primary">Greens Hit ({band.label})</p>
+                  <p className="text-3xl font-bold text-primary">{formatPercent(band.metrics.greensHitRawPct)}</p>
+                  <p className="text-xs text-muted-foreground">{band.metrics.shotCount} shots in total</p>
+                </div>
+                <Target className="h-10 w-10 text-primary opacity-70" />
               </div>
-              <Target className="h-10 w-10 text-primary opacity-70" />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* Summary Stats by Distance Band */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {distanceData.filter(d => d.isWithin150m && d.value !== '0-150').slice(0, 4).map((band, idx) => (
+        {detailedDistanceData.filter(d => d.isWithin150m).map((band, idx) => (
           <Card key={band.value} className="stat-card">
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
@@ -342,7 +353,7 @@ export function ReportsByDistance() {
                 </tr>
               </thead>
               <tbody>
-                {distanceData.map(band => (
+                {detailedDistanceData.map(band => (
                   <tr key={band.value}>
                     <td className="font-medium">{band.label}</td>
                     <td>{band.metrics.shotCount}</td>

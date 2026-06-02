@@ -279,8 +279,8 @@ export function DashboardTab({
       setRoundReflectionStatus('Local draft restored. Save when you are ready.');
       setRoundReflectionStatusTone('default');
     } else if (!roundReflectionsAvailable) {
-      setRoundReflectionStatus('Round thoughts database is not available on the live project yet. Your text can still be kept locally on this device.');
-      setRoundReflectionStatusTone('destructive');
+      setRoundReflectionStatus(`Round thoughts for ${selectedRoundDateKey} can only be kept locally on this device right now.`);
+      setRoundReflectionStatusTone('muted');
     } else if (hasRoundReflectionContent(remoteDraft)) {
       setRoundReflectionStatus('Saved to dashboard.');
       setRoundReflectionStatusTone('muted');
@@ -484,8 +484,8 @@ export function DashboardTab({
                   }
                   setRoundReflectionStatus(roundReflectionsAvailable
                     ? 'Draft saved locally on this device.'
-                    : 'Draft saved locally on this device. Database save is not available on the live project yet.');
-                  setRoundReflectionStatusTone(roundReflectionsAvailable ? 'default' : 'destructive');
+                    : `Draft for ${selectedRoundDateKey} saved locally on this device.`);
+                  setRoundReflectionStatusTone(roundReflectionsAvailable ? 'default' : 'muted');
                 }}
                 onSave={roundReflectionsAvailable ? handleSaveRoundReflection : undefined}
                 isSaving={isSavingRoundReflection}
