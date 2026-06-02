@@ -19,7 +19,7 @@ interface RoundReviewTabProps {
 }
 
 const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
-type ClubSortKey = 'club' | 'shot-type' | 'power' | 'shots' | 'quality' | 'bad-miss' | 'accuracy';
+type ClubSortKey = 'club' | 'shot-type' | 'power' | 'target' | 'shots' | 'quality' | 'bad-miss' | 'accuracy';
 
 function QualityValue({ value }: { value: number | null }) {
   return (
@@ -88,7 +88,7 @@ function ComparisonTable({ title, description, rows, simple = false, clubSort, c
           <table className="data-table">
             <thead>
               <tr>
-                {clubTable ? <><th>{header('Club', 'club')}</th><th>{header('Shot Type', 'shot-type')}</th><th>{header('Power', 'power')}</th></> : <th>{title === 'By Distance' ? 'Distance' : title === 'By Lie' ? 'Lie' : 'Club · Shot Type'}</th>}
+                {clubTable ? <><th>{header('Club', 'club')}</th><th>{header('Shot Type', 'shot-type')}</th><th>{header('Power', 'power')}</th><th>{header('Target', 'target')}</th></> : <th>{title === 'By Distance' ? 'Distance' : title === 'By Lie' ? 'Lie' : 'Club · Shot Type'}</th>}
                 <th>{header('Shots', 'shots')}</th>
                 <th>{header('Shot Quality', 'quality')}</th>
                 {!simple && <th>L5 Prior</th>}
@@ -100,7 +100,7 @@ function ComparisonTable({ title, description, rows, simple = false, clubSort, c
             <tbody>
               {rows.map(row => (
                 <tr key={row.key}>
-                  {clubTable ? <><td className="font-medium">{row.clubLabel}</td><td>{row.shotTypeLabel}</td><td>{row.powerLabel}</td></> : <td className="font-medium">{row.label}</td>}
+                  {clubTable ? <><td className="font-medium">{row.clubLabel}</td><td>{row.shotTypeLabel}</td><td>{row.powerLabel}</td><td>{row.targetLabel}</td></> : <td className="font-medium">{row.label}</td>}
                   <td>{row.round.shotCount}</td>
                   <td><QualityValue value={row.round.shotQualityIndex} /></td>
                   {!simple && <td><QualityValue value={row.last5.shotQualityIndex} /></td>}
@@ -150,7 +150,9 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     if (clubSort === 'accuracy') return direction * (a.round.onTargetPct - b.round.onTargetPct);
     if (clubSort === 'shot-type') return direction * (a.shotTypeLabel ?? '').localeCompare(b.shotTypeLabel ?? '');
     if (clubSort === 'power') return direction * (a.powerLabel ?? '').localeCompare(b.powerLabel ?? '');
-    return direction * (a.clubLabel ?? '').localeCompare(b.clubLabel ?? '');
+    if (clubSort === 'target') return direction * (a.targetLabel ?? '').localeCompare(b.targetLabel ?? '');
+    return direction * ((a.clubSortIndex ?? Number.POSITIVE_INFINITY) - (b.clubSortIndex ?? Number.POSITIVE_INFINITY)
+      || (a.clubLabel ?? '').localeCompare(b.clubLabel ?? ''));
   });
   const handleClubSort = (key: ClubSortKey) => {
     if (key === clubSort) {
@@ -158,7 +160,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
       return;
     }
     setClubSort(key);
-    setClubSortDirection(key === 'club' || key === 'shot-type' || key === 'power' ? 'asc' : 'desc');
+    setClubSortDirection(key === 'club' || key === 'shot-type' || key === 'power' || key === 'target' ? 'asc' : 'desc');
   };
 
   return (
@@ -169,7 +171,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.onTargetPct} recentThird={review.recentThird.onTargetPct} format={formatPercent} />
       </div>
 
-      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, and Power classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
+      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, Power, and Target classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
 
       <Card>
         <CardHeader>

@@ -47,13 +47,14 @@ describe('buildRoundReview', () => {
   });
 
   it('uses the reviewed Gapping vocabulary for club and shot type rows', () => {
-    const pitch = shot('pitch', '2026-05-31', 35, '5 Handicap', { shotFamily: 'pitch', swingEffort: '9pm' });
-    const bump = shot('bump', '2026-05-31', 18, '10 Handicap', { club: '8I', shotFamily: 'bump', swingEffort: '9pm' });
+    const pitch = shot('pitch', '2026-05-31', 35, '5 Handicap', { shotFamily: 'pitch', swingEffort: '9pm', targetIntent: 'green' });
+    const bump = shot('bump', '2026-05-31', 18, '10 Handicap', { club: '8I', shotFamily: 'bump', swingEffort: '9pm', targetIntent: 'green' });
     const review = buildRoundReview([pitch, bump], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
 
     expect(getRoundReviewShotLabel(pitch)).toBe('Pitch Half');
     expect(getRoundReviewShotLabel(bump)).toBe('Bump Half');
-    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch · Half', '8I · Bump · Half']);
+    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch · Half · Green', '8I · Bump · Half · Green']);
+    expect(review.clubAndTypeRows.map(row => row.targetLabel)).toEqual(['Green', 'Green']);
   });
 
   it('suppresses a misleading distance breakdown when every stored target has collapsed below 10m', () => {

@@ -1022,6 +1022,7 @@ export function buildClubGappingRows({
 export interface CourseShotGappingAssignment {
   configKey: string;
   profile: ShotProfile;
+  target: ProfileTarget;
 }
 
 export function buildCourseShotGappingAssignments({
@@ -1064,6 +1065,7 @@ export function buildCourseShotGappingAssignments({
       const assignment = {
         configKey: visibleGappingConfigKey(row.profile.id),
         profile: row.profile,
+        target: row.target,
       };
       if (!options.has(assignment.configKey)) options.set(assignment.configKey, assignment);
       for (const shot of row.sample) {

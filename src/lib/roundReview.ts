@@ -1,14 +1,16 @@
 import { calculateMetrics, getClubConfigId, getShotDateKey, MetricsResult, processShot } from '@/lib/golfCalculations';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
-import { CourseShotGappingAssignment, getClubName, getExpandedGappingShotLabel } from '@/lib/gapping';
+import { clubSortIndex, CourseShotGappingAssignment, getClubName, getExpandedGappingShotLabel } from '@/lib/gapping';
 import { ClubConfig, ProcessedShot, Shot } from '@/types/golf';
 
 export interface RoundReviewRow {
   key: string;
   label: string;
   clubLabel?: string;
+  clubSortIndex?: number;
   shotTypeLabel?: string;
   powerLabel?: string;
+  targetLabel?: string;
   round: MetricsResult;
   last5: MetricsResult;
   recentThird: MetricsResult;
@@ -62,7 +64,7 @@ function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
   recentThird: ProcessedShot[],
-  groups: Array<{ key: string; label: string; clubLabel?: string; shotTypeLabel?: string; powerLabel?: string; filter: (shot: ProcessedShot) => boolean }>
+  groups: Array<{ key: string; label: string; clubLabel?: string; clubSortIndex?: number; shotTypeLabel?: string; powerLabel?: string; targetLabel?: string; filter: (shot: ProcessedShot) => boolean }>
 ): RoundReviewRow[] {
   return groups
     .map(group => {
@@ -72,8 +74,10 @@ function makeRows(
         key: group.key,
         label: group.label,
         clubLabel: group.clubLabel,
+        clubSortIndex: group.clubSortIndex,
         shotTypeLabel: group.shotTypeLabel,
         powerLabel: group.powerLabel,
+        targetLabel: group.targetLabel,
         round: metrics(roundShots),
         last5: metrics(last5.filter(group.filter)),
         recentThird: metrics(recentThird.filter(group.filter)),
@@ -109,20 +113,29 @@ export function buildRoundReview(
   const getClubAndTypeGroup = (shot: ProcessedShot) => {
     const assignment = gappingAssignments.get(shot.id);
     const clubLabel = assignment ? getClubName(assignment.profile) : shot.club || 'Unknown club';
-    const expandedShotLabel = assignment ? getExpandedGappingShotLabel(assignment.profile) : getRoundReviewShotLabel(shot);
+    const clubOrder = clubSortIndex(assignment?.profile.clubId ?? getClubConfigId(shot.club));
+    const expandedShotLabel = assignment ? getExpandedGappingShotLabel(assignment.profile) : getRoundReviewShotLabel({
+      ...shot,
+      shotFamily: shot.shotFamily || 'full',
+      swingEffort: shot.swingEffort || 'full',
+    });
     const powerLabel = expandedShotLabel.endsWith(' Half')
       ? 'Half'
       : expandedShotLabel.endsWith(' Full') || expandedShotLabel === 'Full'
         ? 'Full'
         : '-';
     const shotTypeLabel = expandedShotLabel.replace(/ (Half|Full)$/, '') || 'Unspecified';
-    const key = assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`;
+    const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
+    const targetLabel = savedTarget === 'fairway' ? 'Fairway' : savedTarget === 'green' ? 'Green' : 'Unspecified';
+    const key = `${assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`}|${targetLabel}`;
     return {
       key,
-      label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel}`,
+      label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel} · ${targetLabel}`,
       clubLabel,
+      clubSortIndex: clubOrder,
       shotTypeLabel,
       powerLabel,
+      targetLabel,
     };
   };
 
