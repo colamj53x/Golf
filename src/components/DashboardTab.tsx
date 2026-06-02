@@ -4,7 +4,7 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, TrendingUp, TrendingDown, Minus, Award, Activity, ChevronDown, ChevronRight, ChevronsUpDown, Calendar, Gauge } from 'lucide-react';
+import { Target, TrendingUp, TrendingDown, Minus, Award, Activity, ChevronDown, ChevronRight, ChevronsUpDown, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -21,9 +21,9 @@ import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
 import { ProcessedShot } from '@/types/golf';
 import { calculateClubRatings } from '@/lib/clubRatings';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
-import { LatestRoundTab } from '@/components/dashboard/LatestRoundTab';
+import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
-import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
+import { isPuttingShot } from '@/lib/roundReview';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
@@ -79,6 +79,12 @@ export function DashboardTab({
   const [roundReflectionStatus, setRoundReflectionStatus] = useState<string | null>(null);
   const [roundReflectionStatusTone, setRoundReflectionStatusTone] = useState<'default' | 'destructive' | 'muted'>('muted');
   const userId = user?.id ?? null;
+  const roundReviewDateKeys = useMemo(() => [...new Set(
+    shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
+  )].sort((a, b) => b.localeCompare(a)), [shots]);
+  const roundReviewSelectedDateKey = roundReviewDateKeys.includes(selectedRoundDate)
+    ? selectedRoundDate
+    : roundReviewDateKeys[0] ?? null;
 
   const toggleTrendCategory = (categoryKey: string) => {
     setExpandedTrendCategories(prev => {
@@ -199,20 +205,6 @@ export function DashboardTab({
 
     // Calculate club ratings
     const ratings = calculateClubRatings(processed, currentConfig || undefined);
-    const recentRounds = latestRoundDateKeys.slice(0, 5).map((roundDate) => {
-      const roundShots = filteredShots
-        .filter(s => getShotDateKey(s.date) === roundDate)
-        .map(shot => {
-          const configId = getClubConfigId(shot.club);
-          const config = clubs.find(c => c.id === configId);
-          return processShot(shot, config, distanceToTargetTolerance);
-        });
-      return {
-        roundDate,
-        metrics: calculateMetrics(roundShots, currentConfig || undefined),
-      };
-    });
-
     return {
       processed,
       trendMetrics,
@@ -222,7 +214,6 @@ export function DashboardTab({
       last5Rounds,
       roundDateKeys: latestRoundDateKeys,
       selectedRoundDateKey,
-      recentRounds,
       distanceToTargetEnabled: currentConfig?.distanceToTargetEnabled ?? false,
       ratings,
       clubName: selectedClub !== 'all' ? selectedClub : 'All Clubs',
@@ -230,7 +221,9 @@ export function DashboardTab({
   }, [shots, selectedClub, selectedStartLie, selectedDistanceFilter, selectedRoundDate, clubs, distanceToTargetTolerance]);
 
   useEffect(() => {
-    const selectedRoundDateKey = processedData?.selectedRoundDateKey;
+    const selectedRoundDateKey = showOverview
+      ? processedData?.selectedRoundDateKey
+      : roundReviewSelectedDateKey;
     if (!selectedRoundDateKey) {
       setRoundReflectionDraft(createEmptyRoundReflectionDraft());
       setRoundReflectionStatus(null);
@@ -287,7 +280,7 @@ export function DashboardTab({
     } else {
       setRoundReflectionStatus(null);
     }
-  }, [processedData?.selectedRoundDateKey, roundReflections, roundReflectionsAvailable, userId]);
+  }, [processedData?.selectedRoundDateKey, roundReflections, roundReflectionsAvailable, roundReviewSelectedDateKey, showOverview, userId]);
 
   if (isLoading) {
     return (
@@ -326,22 +319,26 @@ export function DashboardTab({
     );
   }
 
-  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, roundDateKeys, selectedRoundDateKey, recentRounds, distanceToTargetEnabled, ratings, clubName } = processedData;
+  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, roundDateKeys, selectedRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
+  const activeRoundDateKey = showOverview ? selectedRoundDateKey : roundReviewSelectedDateKey;
+  const activeRoundShotCount = activeRoundDateKey
+    ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
+    : 0;
 
   const handleSaveRoundReflection = async () => {
-    if (!selectedRoundDateKey) return;
+    if (!activeRoundDateKey) return;
     setIsSavingRoundReflection(true);
     setRoundReflectionStatus('Saving round thoughts...');
     setRoundReflectionStatusTone('muted');
     try {
-      await upsertRoundReflection(selectedRoundDateKey, roundReflectionDraft);
+      await upsertRoundReflection(activeRoundDateKey, roundReflectionDraft);
       if (typeof window !== 'undefined' && userId) {
-        localStorage.removeItem(getRoundReflectionDraftStorageKey(userId, selectedRoundDateKey));
+        localStorage.removeItem(getRoundReflectionDraftStorageKey(userId, activeRoundDateKey));
         const legacyRawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
         if (legacyRawDraft) {
           try {
             const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
-            if (legacyDraft.userId === userId && legacyDraft.roundDate === selectedRoundDateKey) {
+            if (legacyDraft.userId === userId && legacyDraft.roundDate === activeRoundDateKey) {
               localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
             }
           } catch {
@@ -364,7 +361,7 @@ export function DashboardTab({
       {/* Controls */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {showOverview ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Club</label>
               <Select value={selectedClub} onValueChange={setSelectedClub}>
@@ -432,9 +429,23 @@ export function DashboardTab({
                 </SelectContent>
               </Select>
             </div>
-          </div>
+          </div> : <div className="space-y-1.5">
+            <label className="text-sm font-medium">Round</label>
+            <Select value={activeRoundDateKey ?? ''} onValueChange={setSelectedRoundDate}>
+              <SelectTrigger className="w-full sm:w-[220px]">
+                <SelectValue placeholder="Select round" />
+              </SelectTrigger>
+              <SelectContent>
+                {roundReviewDateKeys.map((roundDate, index) => (
+                  <SelectItem key={roundDate} value={roundDate}>
+                    {roundDate}{index === 0 ? ' · Latest' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>}
           <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
-            <span className="font-medium text-foreground">{overall.shotCount}</span> shots analyzed
+            <span className="font-medium text-foreground">{showOverview ? overall.shotCount : activeRoundShotCount}</span> shots analyzed
           </div>
         </CardContent>
       </Card>
@@ -455,27 +466,26 @@ export function DashboardTab({
         {/* Latest Round Tab */}
         {showLatestRound && <TabsContent value="latest-round" className="mt-6">
           <div className="space-y-6">
-            <LatestRoundTab 
-              lastRound={lastRound}
-              last5Rounds={last5Rounds}
-              mostRecentThird={trendMetrics.mostRecent}
-              distanceToTargetEnabled={distanceToTargetEnabled}
-              roundDate={selectedRoundDateKey ?? ''}
+            <RoundReviewTab
+              shots={shots}
+              clubs={clubs}
+              distanceToTargetTolerance={distanceToTargetTolerance}
+              roundDate={activeRoundDateKey ?? ''}
             />
-            {selectedRoundDateKey && (
+            {activeRoundDateKey && (
               <RoundReflectionEditor
-                title={`Round Thoughts · ${selectedRoundDateKey}`}
+                title={`Round Thoughts · ${activeRoundDateKey}`}
                 description="Capture what actually happened in the round so future training and feedback can use both the numbers and your own notes."
                 value={roundReflectionDraft}
                 onChange={(next) => {
                   setRoundReflectionDraft(next);
                   if (typeof window !== 'undefined' && userId) {
-                    const storageKey = getRoundReflectionDraftStorageKey(userId, selectedRoundDateKey);
+                    const storageKey = getRoundReflectionDraftStorageKey(userId, activeRoundDateKey);
                     if (hasRoundReflectionContent(next)) {
                       localStorage.setItem(storageKey, JSON.stringify(next));
                       localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify({
                         userId,
-                        roundDate: selectedRoundDateKey,
+                        roundDate: activeRoundDateKey,
                         value: next,
                       } satisfies StoredReflectionDraft));
                     } else {
@@ -484,7 +494,7 @@ export function DashboardTab({
                   }
                   setRoundReflectionStatus(roundReflectionsAvailable
                     ? 'Draft saved locally on this device.'
-                    : `Draft for ${selectedRoundDateKey} saved locally on this device.`);
+                    : `Draft for ${activeRoundDateKey} saved locally on this device.`);
                   setRoundReflectionStatusTone(roundReflectionsAvailable ? 'default' : 'muted');
                 }}
                 onSave={roundReflectionsAvailable ? handleSaveRoundReflection : undefined}
@@ -494,33 +504,6 @@ export function DashboardTab({
                 saveLabel="Save Round Thoughts"
               />
             )}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Recent round reviews
-                </CardTitle>
-                <CardDescription>Open any of your last five captured rounds and its saved thoughts.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-5">
-                {recentRounds.map(({ roundDate, metrics }) => (
-                  <button
-                    key={roundDate}
-                    type="button"
-                    onClick={() => setSelectedRoundDate(roundDate)}
-                    className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${roundDate === selectedRoundDateKey ? 'border-primary bg-primary/5' : ''}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold">{roundDate}</span>
-                      <Gauge className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="mt-3 text-2xl font-bold">{metrics.shotQualityIndex === null ? '-' : Math.round(metrics.shotQualityIndex)}</div>
-                    <div className="text-xs text-muted-foreground">SQI · {metrics.shotCount} shots</div>
-                    <div className="mt-1 text-xs text-primary">{describeHandicapEquivalent(metrics.shotQualityIndex)}</div>
-                  </button>
-                ))}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>}
 
