@@ -42,6 +42,15 @@ const driverShot: Shot = {
   notes: '',
 };
 
+const shortProfile = (power: 'full' | '9pm'): ShotProfile => ({
+  ...driverProfile,
+  id: `sw_pitch_${power}`,
+  clubId: 'sw',
+  shotType: 'pitch',
+  power,
+  targets: ['green'],
+});
+
 describe('buildClubGappingRows', () => {
   it('builds a tee gapping row from a normalized driver shot', () => {
     const rows = buildClubGappingRows({
@@ -64,5 +73,67 @@ describe('buildClubGappingRows', () => {
       qualityCutoff: 10,
     });
     expect(rows[0].profile.id).toBe('dr_full_full');
+  });
+
+  it('uses the import-reviewed category before distance inference', () => {
+    const pitchHalf = shortProfile('9pm');
+    const pitchFull = shortProfile('full');
+    const reviewedShot: Shot = {
+      ...driverShot,
+      id: 'reviewed-pitch',
+      club: 'SW',
+      type: 'Short',
+      shotFamily: 'pitch',
+      swingEffort: '9pm',
+      targetIntent: 'green',
+      target: 75,
+      total: 62,
+      startLie: 'Fairway',
+      endLie: 'Green',
+    };
+    const rows = buildClubGappingRows({
+      profiles: { [pitchHalf.id]: pitchHalf, [pitchFull.id]: pitchFull },
+      shots: [reviewedShot],
+      shotContext: 'fairway',
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {},
+    });
+
+    expect(rows.filter(row => row.shotCount > 0).map(row => row.profile.id)).toEqual(['sw_pitch_9pm']);
+  });
+
+  it('uses the saved per-shot override before the import-reviewed category', () => {
+    const pitchHalf = shortProfile('9pm');
+    const pitchFull = shortProfile('full');
+    const reviewedShot: Shot = {
+      ...driverShot,
+      id: 'overridden-pitch',
+      club: 'SW',
+      type: 'Short',
+      shotFamily: 'pitch',
+      swingEffort: '9pm',
+      targetIntent: 'green',
+      target: 75,
+      total: 62,
+      startLie: 'Fairway',
+      endLie: 'Green',
+    };
+    const rows = buildClubGappingRows({
+      profiles: { [pitchHalf.id]: pitchHalf, [pitchFull.id]: pitchFull },
+      shots: [reviewedShot],
+      shotContext: 'fairway',
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {
+        [reviewedShot.id]: { profileId: pitchFull.id, target: 'green' },
+      },
+    });
+
+    expect(rows.filter(row => row.shotCount > 0).map(row => row.profile.id)).toEqual(['sw_pitch_full']);
   });
 });

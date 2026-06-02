@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useGolfData } from '@/context/GolfDataContext';
+import { usePracticeData } from '@/context/PracticeDataContext';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { formatPercent } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
+import { buildCourseShotGappingAssignments } from '@/lib/gapping';
 import { buildRoundReview, RoundReviewRow } from '@/lib/roundReview';
+import { useShotProfiles } from '@/lib/shotProfiles';
 import { ClubConfig, Shot } from '@/types/golf';
 
 interface RoundReviewTabProps {
@@ -14,6 +19,7 @@ interface RoundReviewTabProps {
 }
 
 const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
+type ClubSortKey = 'club' | 'shot-type' | 'power' | 'shots' | 'quality' | 'bad-miss' | 'accuracy';
 
 function QualityValue({ value }: { value: number | null }) {
   return (
@@ -47,12 +53,30 @@ function SummaryCard({ label, round, last5, recentThird, format }: {
   );
 }
 
-function ComparisonTable({ title, description, rows, simple = false }: {
+function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
+  label: string;
+  sortKey: ClubSortKey;
+  activeSort: ClubSortKey;
+  direction: 'asc' | 'desc';
+  onSort: (key: ClubSortKey) => void;
+}) {
+  const Icon = activeSort === sortKey ? direction === 'asc' ? ArrowUp : ArrowDown : ArrowUpDown;
+  return <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>{label}<Icon className="h-3.5 w-3.5" /></button>;
+}
+
+function ComparisonTable({ title, description, rows, simple = false, clubSort, clubSortDirection, onClubSort }: {
   title: string;
   description: string;
   rows: RoundReviewRow[];
   simple?: boolean;
+  clubSort?: ClubSortKey;
+  clubSortDirection?: 'asc' | 'desc';
+  onClubSort?: (key: ClubSortKey) => void;
 }) {
+  const clubTable = title === 'By Club And Shot Type' && clubSort && clubSortDirection && onClubSort;
+  const header = (label: string, key: ClubSortKey) => clubTable
+    ? <SortableHeader label={label} sortKey={key} activeSort={clubSort} direction={clubSortDirection} onSort={onClubSort} />
+    : label;
   return (
     <Card>
       <CardHeader>
@@ -64,19 +88,19 @@ function ComparisonTable({ title, description, rows, simple = false }: {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{title === 'By Distance' ? 'Distance' : title === 'By Lie' ? 'Lie' : 'Club · Shot Type'}</th>
-                <th>Shots</th>
-                <th>Shot Quality</th>
+                {clubTable ? <><th>{header('Club', 'club')}</th><th>{header('Shot Type', 'shot-type')}</th><th>{header('Power', 'power')}</th></> : <th>{title === 'By Distance' ? 'Distance' : title === 'By Lie' ? 'Lie' : 'Club · Shot Type'}</th>}
+                <th>{header('Shots', 'shots')}</th>
+                <th>{header('Shot Quality', 'quality')}</th>
                 {!simple && <th>L5 Prior</th>}
                 {!simple && <th>Prior Recent 1/3</th>}
-                <th>Bad Miss</th>
-                <th>Accuracy</th>
+                <th>{header('Bad Miss', 'bad-miss')}</th>
+                <th>{header('Accuracy', 'accuracy')}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
                 <tr key={row.key}>
-                  <td className="font-medium">{row.label}</td>
+                  {clubTable ? <><td className="font-medium">{row.clubLabel}</td><td>{row.shotTypeLabel}</td><td>{row.powerLabel}</td></> : <td className="font-medium">{row.label}</td>}
                   <td>{row.round.shotCount}</td>
                   <td><QualityValue value={row.round.shotQualityIndex} /></td>
                   {!simple && <td><QualityValue value={row.last5.shotQualityIndex} /></td>}
@@ -94,10 +118,24 @@ function ComparisonTable({ title, description, rows, simple = false }: {
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate }: RoundReviewTabProps) {
-  const [clubSort, setClubSort] = useState('club');
+  const { gappingHcpTarget } = useGolfData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
+  const profiles = useShotProfiles();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const [clubSort, setClubSort] = useState<ClubSortKey>('club');
+  const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
+  const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
+    profiles,
+    shots,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+  }).shotToAssignment, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
   const review = useMemo(
-    () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate),
-    [shots, clubs, distanceToTargetTolerance, roundDate]
+    () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments),
+    [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments]
   );
 
   if (review.round.shotCount === 0) {
@@ -105,12 +143,23 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   }
 
   const sortedClubAndTypeRows = [...review.clubAndTypeRows].sort((a, b) => {
-    if (clubSort === 'shots') return b.round.shotCount - a.round.shotCount;
-    if (clubSort === 'quality') return (b.round.shotQualityIndex ?? -1) - (a.round.shotQualityIndex ?? -1);
-    if (clubSort === 'bad-miss') return b.round.badMissPct - a.round.badMissPct;
-    if (clubSort === 'accuracy') return b.round.onTargetPct - a.round.onTargetPct;
-    return a.label.localeCompare(b.label);
+    const direction = clubSortDirection === 'asc' ? 1 : -1;
+    if (clubSort === 'shots') return direction * (a.round.shotCount - b.round.shotCount);
+    if (clubSort === 'quality') return direction * ((a.round.shotQualityIndex ?? -1) - (b.round.shotQualityIndex ?? -1));
+    if (clubSort === 'bad-miss') return direction * (a.round.badMissPct - b.round.badMissPct);
+    if (clubSort === 'accuracy') return direction * (a.round.onTargetPct - b.round.onTargetPct);
+    if (clubSort === 'shot-type') return direction * (a.shotTypeLabel ?? '').localeCompare(b.shotTypeLabel ?? '');
+    if (clubSort === 'power') return direction * (a.powerLabel ?? '').localeCompare(b.powerLabel ?? '');
+    return direction * (a.clubLabel ?? '').localeCompare(b.clubLabel ?? '');
   });
+  const handleClubSort = (key: ClubSortKey) => {
+    if (key === clubSort) {
+      setClubSortDirection(direction => direction === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setClubSort(key);
+    setClubSortDirection(key === 'club' || key === 'shot-type' || key === 'power' ? 'asc' : 'desc');
+  };
 
   return (
     <div className="space-y-6">
@@ -120,24 +169,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.onTargetPct} recentThird={review.recentThird.onTargetPct} format={formatPercent} />
       </div>
 
-      <div className="space-y-3">
-        <div className="flex justify-end">
-          <div className="w-full space-y-1.5 sm:w-[220px]">
-            <label className="text-sm font-medium">Sort Club And Shot Type</label>
-            <Select value={clubSort} onValueChange={setClubSort}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="club">Club and shot type</SelectItem>
-                <SelectItem value="shots">Shots</SelectItem>
-                <SelectItem value="quality">Shot quality</SelectItem>
-                <SelectItem value="bad-miss">Bad miss</SelectItem>
-                <SelectItem value="accuracy">Accuracy</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, using the same Full, Pitch Half, Chip Half, and Bump Half vocabulary as Gapping." rows={sortedClubAndTypeRows} />
-      </div>
+      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, and Power classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
 
       <Card>
         <CardHeader>

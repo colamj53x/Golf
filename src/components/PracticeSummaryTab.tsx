@@ -11,7 +11,7 @@ import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/prac
 import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { buildClubGappingRows, loadShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
+import { buildCourseShotGappingAssignments, visibleGappingConfigKey } from '@/lib/gapping';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { buildPracticePriorities, type PracticePriority } from '@/lib/practicePriorities';
@@ -63,12 +63,6 @@ function names(configKey: string) {
     club: PRACTICE_CLUBS.find(c => c.id === club)?.name ?? club,
     shot: SHOT_TYPES.find(s => s.id === shotType)?.name ?? shotType,
   };
-}
-
-function visibleConfigKey(configKey: string): string {
-  const { club, shotType, power } = parsePracticeConfigKey(configKey);
-  if (!club || !shotType || !power) return configKey;
-  return `${club}_${shotType}_${power === 'full' ? 'full' : 'half'}`;
 }
 
 function getShotLabel(shotType: string): string {
@@ -229,6 +223,14 @@ export function PracticeSummaryTab({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
+    profiles,
+    shots,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
   const prioritiesByConfig = useMemo(() => new Map(
     buildPracticePriorities({
       shots,
@@ -237,34 +239,11 @@ export function PracticeSummaryTab({
       practiceConfigs,
       shotsBySession,
       gappingHcpTarget,
-    }).map((priority) => [visibleConfigKey(priority.configKey), priority]),
+    }).map((priority) => [visibleGappingConfigKey(priority.configKey), priority]),
   ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
 
   const courseSignals = useMemo(() => {
-    const shotToConfig = new Map<string, string>();
     const shotsByConfig = new Map<string, Shot[]>();
-    const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
-    const shotCategoryOverrides = loadShotCategoryOverrides();
-
-    for (const shotContext of contexts) {
-      const rows = buildClubGappingRows({
-        profiles,
-        shots,
-        shotContext,
-        practiceSessions,
-        practiceConfigs,
-        shotsBySession,
-        gappingHcpTarget,
-        shotCategoryOverrides,
-      });
-
-      for (const row of rows) {
-        const configKey = visibleConfigKey(row.profile.id);
-        for (const shot of row.sample) {
-          if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
-        }
-      }
-    }
 
     const courseShots = shots.filter((shot) => {
       const clubId = getClubConfigId(shot.club);
@@ -274,48 +253,22 @@ export function PracticeSummaryTab({
 
     for (const shot of courseShots) {
       const clubId = getClubConfigId(shot.club);
-      const configKey = shotToConfig.get(shot.id) ?? fallbackCourseConfigKey(clubId);
+      const configKey = gappingAssignments.shotToAssignment.get(shot.id)?.configKey ?? fallbackCourseConfigKey(clubId);
       if (!configKey) continue;
       shotsByConfig.set(configKey, [...(shotsByConfig.get(configKey) ?? []), shot]);
     }
 
     return { shotsByConfig, roundCount: roundDates.size };
-  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+  }, [gappingAssignments, shots]);
 
-  const gappingOptions = useMemo(() => {
-    const options = new Map<string, { configKey: string; profile: ShotProfile }>();
-    const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
-    const shotCategoryOverrides = loadShotCategoryOverrides();
-
-    for (const shotContext of contexts) {
-      const rows = buildClubGappingRows({
-        profiles,
-        shots,
-        shotContext,
-        practiceSessions,
-        practiceConfigs,
-        shotsBySession,
-        gappingHcpTarget,
-        shotCategoryOverrides,
-      });
-
-      for (const row of rows) {
-        const configKey = visibleConfigKey(row.profile.id);
-        if (!options.has(configKey)) {
-          options.set(configKey, { configKey, profile: row.profile });
-        }
-      }
-    }
-
-    return options;
-  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+  const gappingOptions = gappingAssignments.options;
 
   // Group practice log sessions by visible gapping key. Values still come from logs only.
   const groupedRows = useMemo(() => {
     const byConfig = new Map<string, PracticeSession[]>();
     for (const s of practiceSessions) {
       const rawKey = s.clubId.includes('_') ? s.clubId : `${s.clubId}_full_full`;
-      const key = visibleConfigKey(rawKey);
+      const key = visibleGappingConfigKey(rawKey);
       (byConfig.get(key) ?? byConfig.set(key, []).get(key)!).push(s);
     }
 

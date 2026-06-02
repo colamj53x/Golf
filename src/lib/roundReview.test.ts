@@ -53,7 +53,7 @@ describe('buildRoundReview', () => {
 
     expect(getRoundReviewShotLabel(pitch)).toBe('Pitch Half');
     expect(getRoundReviewShotLabel(bump)).toBe('Bump Half');
-    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch Half', '8I · Bump Half']);
+    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch · Half', '8I · Bump · Half']);
   });
 
   it('suppresses a misleading distance breakdown when every stored target has collapsed below 10m', () => {
@@ -62,7 +62,7 @@ describe('buildRoundReview', () => {
       shot('approach', '2026-05-31', 0, '10 Handicap', { club: '8I', type: 'Approach', total: 125 }),
     ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
 
-    expect(review.distanceWarning).toContain('look incomplete');
+    expect(review.distanceWarning).toContain('are incomplete');
     expect(review.distanceRollups).toEqual([]);
     expect(review.distanceRows).toEqual([]);
   });

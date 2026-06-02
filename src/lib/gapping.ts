@@ -291,6 +291,21 @@ export function visibleProfileId(profileId: string): string {
   return profileId;
 }
 
+export function visibleGappingConfigKey(configKey: string): string {
+  const parsed = parsePracticeConfigKey(configKey);
+  if (!parsed.club || !parsed.shotType || !parsed.power) return configKey;
+  return `${parsed.club}_${parsed.shotType}_${parsed.power === 'full' ? 'full' : 'half'}`;
+}
+
+export function getExpandedGappingShotLabel(profile: ShotProfile): string {
+  const shotLabel = getShotLabel(profile);
+  if (profile.shotType === 'full' && profile.power === 'full') return shotLabel;
+  if (profile.shotType === 'bump' || profile.shotType === 'pitch' || profile.shotType === 'chip') {
+    return `${shotLabel} ${profile.power === 'full' ? 'Full' : 'Half'}`;
+  }
+  return shotLabel;
+}
+
 export function getShotBadgeClass(profile: ShotProfile, isHardestShortShot = false): string {
   if (profile.shotType === 'punch') return '';
   if (!isShortShot(profile)) return '';
@@ -417,6 +432,8 @@ function matchesTargetIntent(
   target: ProfileTarget,
   window: { min: number | null; max: number | null },
 ): boolean {
+  const savedIntent = shot.targetIntent.trim().toLowerCase();
+  if (savedIntent === 'green' || savedIntent === 'fairway') return savedIntent === target;
   const greenIntent = isGreenIntentShot(shot, window);
   return target === 'green' ? greenIntent : !greenIntent;
 }
@@ -776,6 +793,13 @@ function matchesProfileShot(
   const override = shotCategoryOverrides[shot.id];
   if (override) return visibleProfileId(override.profileId) === profile.id;
 
+  const savedFamily = shot.shotFamily.trim().toLowerCase();
+  const savedEffort = shot.swingEffort.trim().toLowerCase();
+  if (savedFamily) {
+    const savedPower = savedEffort === 'full' ? 'full' : '9pm';
+    return visibleProfileId(`${profile.clubId}_${savedFamily}_${savedPower}`) === profile.id;
+  }
+
   const punchShot = isPunchShot(shot, fullTargetMax);
   if (profile.shotType === 'punch') return punchShot;
   const chipPower = getClosestChipPower(shot);
@@ -993,4 +1017,60 @@ export function buildClubGappingRows({
       shotCategoryOverrides,
     )))
     .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0) || (shotContext !== 'tee' && isVisibleShortBucket(row.profile) && row.displayTotal !== null));
+}
+
+export interface CourseShotGappingAssignment {
+  configKey: string;
+  profile: ShotProfile;
+}
+
+export function buildCourseShotGappingAssignments({
+  profiles,
+  shots,
+  practiceSessions,
+  practiceConfigs,
+  shotsBySession,
+  gappingHcpTarget,
+  shotCategoryOverrides = loadShotCategoryOverrides(),
+}: {
+  profiles: ShotProfileMap;
+  shots: Shot[];
+  practiceSessions: PracticeSession[];
+  practiceConfigs: ClubPracticeConfig[];
+  shotsBySession: ShotsBySession;
+  gappingHcpTarget: number;
+  shotCategoryOverrides?: ShotCategoryOverrides;
+}): {
+  shotToAssignment: Map<string, CourseShotGappingAssignment>;
+  options: Map<string, CourseShotGappingAssignment>;
+} {
+  const shotToAssignment = new Map<string, CourseShotGappingAssignment>();
+  const options = new Map<string, CourseShotGappingAssignment>();
+  const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
+
+  for (const shotContext of contexts) {
+    const rows = buildClubGappingRows({
+      profiles,
+      shots,
+      shotContext,
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      gappingHcpTarget,
+      shotCategoryOverrides,
+    });
+
+    for (const row of rows) {
+      const assignment = {
+        configKey: visibleGappingConfigKey(row.profile.id),
+        profile: row.profile,
+      };
+      if (!options.has(assignment.configKey)) options.set(assignment.configKey, assignment);
+      for (const shot of row.sample) {
+        if (!shotToAssignment.has(shot.id)) shotToAssignment.set(shot.id, assignment);
+      }
+    }
+  }
+
+  return { shotToAssignment, options };
 }

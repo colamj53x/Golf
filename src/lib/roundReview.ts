@@ -1,10 +1,14 @@
 import { calculateMetrics, getClubConfigId, getShotDateKey, MetricsResult, processShot } from '@/lib/golfCalculations';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
+import { CourseShotGappingAssignment, getClubName, getExpandedGappingShotLabel } from '@/lib/gapping';
 import { ClubConfig, ProcessedShot, Shot } from '@/types/golf';
 
 export interface RoundReviewRow {
   key: string;
   label: string;
+  clubLabel?: string;
+  shotTypeLabel?: string;
+  powerLabel?: string;
   round: MetricsResult;
   last5: MetricsResult;
   recentThird: MetricsResult;
@@ -58,7 +62,7 @@ function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
   recentThird: ProcessedShot[],
-  groups: Array<{ key: string; label: string; filter: (shot: ProcessedShot) => boolean }>
+  groups: Array<{ key: string; label: string; clubLabel?: string; shotTypeLabel?: string; powerLabel?: string; filter: (shot: ProcessedShot) => boolean }>
 ): RoundReviewRow[] {
   return groups
     .map(group => {
@@ -67,6 +71,9 @@ function makeRows(
       return {
         key: group.key,
         label: group.label,
+        clubLabel: group.clubLabel,
+        shotTypeLabel: group.shotTypeLabel,
+        powerLabel: group.powerLabel,
         round: metrics(roundShots),
         last5: metrics(last5.filter(group.filter)),
         recentThird: metrics(recentThird.filter(group.filter)),
@@ -79,7 +86,8 @@ export function buildRoundReview(
   shots: Shot[],
   clubs: ClubConfig[],
   distanceToTargetTolerance: number,
-  selectedRoundDate: string
+  selectedRoundDate: string,
+  gappingAssignments = new Map<string, CourseShotGappingAssignment>()
 ): RoundReviewModel {
   const courseShots = shots.filter(shot => !isPuttingShot(shot));
   const historicalShots = courseShots.filter(shot => getShotDateKey(shot.date) < selectedRoundDate);
@@ -98,13 +106,31 @@ export function buildRoundReview(
   const recentThirdSize = Math.ceil(historical.length / 3);
   const recentThird = recentThirdSize > 0 ? historical.slice(-recentThirdSize) : [];
 
+  const getClubAndTypeGroup = (shot: ProcessedShot) => {
+    const assignment = gappingAssignments.get(shot.id);
+    const clubLabel = assignment ? getClubName(assignment.profile) : shot.club || 'Unknown club';
+    const expandedShotLabel = assignment ? getExpandedGappingShotLabel(assignment.profile) : getRoundReviewShotLabel(shot);
+    const powerLabel = expandedShotLabel.endsWith(' Half')
+      ? 'Half'
+      : expandedShotLabel.endsWith(' Full') || expandedShotLabel === 'Full'
+        ? 'Full'
+        : '-';
+    const shotTypeLabel = expandedShotLabel.replace(/ (Half|Full)$/, '') || 'Unspecified';
+    const key = assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`;
+    return {
+      key,
+      label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel}`,
+      clubLabel,
+      shotTypeLabel,
+      powerLabel,
+    };
+  };
+
   const clubAndTypeGroups = [...new Map(selected.map(shot => {
-    const shotLabel = getRoundReviewShotLabel(shot);
-    const label = `${shot.club || 'Unknown club'} · ${shotLabel}`;
-    return [label, {
-      key: label,
-      label,
-      filter: (candidate: ProcessedShot) => candidate.club === shot.club && getRoundReviewShotLabel(candidate) === shotLabel,
+    const group = getClubAndTypeGroup(shot);
+    return [group.key, {
+      ...group,
+      filter: (candidate: ProcessedShot) => getClubAndTypeGroup(candidate).key === group.key,
     }];
   })).values()];
 
@@ -135,7 +161,7 @@ export function buildRoundReview(
   const distanceWarning = selected.length > 0
     && selected.every(shot => shot.target >= 0 && shot.target <= 9)
     && selected.some(shot => shot.total > 50)
-    ? 'The stored distance-to-target values for this round look incomplete: every reviewed shot is recorded inside 10m. Re-upload this round before relying on its distance breakdown.'
+    ? 'The stored distance-to-target values for this round are incomplete: every reviewed shot is recorded inside 10m. Go to More > Upload, turn on Replace matching round dates, and re-upload the CSV for this round. Review will refresh with the repaired distance-to-target values.'
     : null;
 
   return {
