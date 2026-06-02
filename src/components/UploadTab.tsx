@@ -563,6 +563,7 @@ export function UploadTab() {
       let insertedCount = 0;
       let usedSequenceShotInsert = true;
       let usedLegacyShotInsert = false;
+      const requiresShotSequence = shotsToInsert.some(shot => shot.hole_number !== null && shot.shot_number !== null);
 
       for (let index = 0; index < shotsToInsert.length; index += batchSize) {
         const modernBatch = shotsToInsert.slice(index, index + batchSize);
@@ -577,6 +578,9 @@ export function UploadTab() {
         const { error } = await supabase.from('shots').insert(preferredBatch);
         if (error) {
           if (usedSequenceShotInsert && isMissingReviewedUploadSchemaError(error)) {
+            if (requiresShotSequence) {
+              throw Object.assign(new Error('Shot sequence database update required.'), { code: 'SHOT_SEQUENCE_SCHEMA_REQUIRED' });
+            }
             const { error: reviewedRetryError } = await supabase.from('shots').insert(reviewedWithoutSequenceBatch);
             if (!reviewedRetryError) {
               usedSequenceShotInsert = false;
