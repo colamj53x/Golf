@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
-import { Button } from '@/components/ui/button';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
-import { formatPercent, getShotDateKey } from '@/lib/golfCalculations';
+import { formatPercent } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
-import { buildRoundReview, isPuttingShot, RoundReviewRow } from '@/lib/roundReview';
+import { buildRoundReview, RoundReviewRow } from '@/lib/roundReview';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { ClubConfig, Shot } from '@/types/golf';
 
@@ -125,14 +123,13 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate }: RoundReviewTabProps) {
-  const { gappingHcpTarget, updateRoundShotClassifications } = useGolfData();
+  const { gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
   const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
   const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
     profiles,
     shots,
@@ -149,8 +146,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   if (review.round.shotCount === 0) {
     return <Card><CardContent className="py-12 text-center text-muted-foreground">No non-putting shots recorded in this round.</CardContent></Card>;
   }
-  const roundShots = shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === roundDate);
-
   const sortedClubAndTypeRows = [...review.clubAndTypeRows].sort((a, b) => {
     const direction = clubSortDirection === 'asc' ? 1 : -1;
     if (clubSort === 'shots') return direction * (a.round.shotCount - b.round.shotCount);
@@ -174,11 +169,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={() => setReviewShotsOpen(true)}>
-          Review / adjust {review.round.shotCount} round shots
-        </Button>
-      </div>
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard label="Shot Quality" round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
         <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.badMissPct} recentThird={review.recentThird.badMissPct} format={formatPercent} />
@@ -210,7 +200,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
 
       {!review.distanceWarning && <ComparisonTable title="Greens Targeted By Distance" description={`Only shots targeting the green. Each shot appears in one distance band. ${review.hasShotSequence ? 'Shots To Green uses the uploaded hole sequence.' : 'Re-upload this round to add hole sequence and calculate Shots To Green.'}`} rows={review.greenDistanceRows} greenDistance />}
       <ComparisonTable title="By Lie" description="Starting lie for each non-putting shot in this round." rows={review.lieRows} simple />
-      <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={roundShots} onSave={updateRoundShotClassifications} />
     </div>
   );
 }

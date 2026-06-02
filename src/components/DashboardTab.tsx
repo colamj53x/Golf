@@ -22,6 +22,7 @@ import { ProcessedShot } from '@/types/golf';
 import { calculateClubRatings } from '@/lib/clubRatings';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
+import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
 import { isPuttingShot } from '@/lib/roundReview';
 
@@ -66,6 +67,7 @@ export function DashboardTab({
     roundReflections,
     roundReflectionsAvailable,
     upsertRoundReflection,
+    updateRoundShotClassifications,
   } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
@@ -78,6 +80,7 @@ export function DashboardTab({
   const [isSavingRoundReflection, setIsSavingRoundReflection] = useState(false);
   const [roundReflectionStatus, setRoundReflectionStatus] = useState<string | null>(null);
   const [roundReflectionStatusTone, setRoundReflectionStatusTone] = useState<'default' | 'destructive' | 'muted'>('muted');
+  const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
   const userId = user?.id ?? null;
   const roundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
@@ -324,6 +327,9 @@ export function DashboardTab({
   const activeRoundShotCount = activeRoundDateKey
     ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
     : 0;
+  const activeRoundShots = activeRoundDateKey
+    ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
+    : [];
 
   const handleSaveRoundReflection = async () => {
     if (!activeRoundDateKey) return;
@@ -444,11 +450,14 @@ export function DashboardTab({
               </SelectContent>
             </Select>
           </div>}
-          <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
-            <span className="font-medium text-foreground">{showOverview ? overall.shotCount : activeRoundShotCount}</span> shots analyzed
-          </div>
+          {showOverview ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
+            <span className="font-medium text-foreground">{overall.shotCount}</span> shots analyzed
+          </div> : <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary lg:text-right">
+            <span className="font-medium text-foreground">{activeRoundShotCount}</span> shots analyzed
+          </button>}
         </CardContent>
       </Card>
+      {!showOverview && <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={activeRoundShots} onSave={updateRoundShotClassifications} />}
 
       {/* Dashboard Sub-Tabs */}
       <Tabs value={dashboardView} onValueChange={setDashboardView}>

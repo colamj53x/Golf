@@ -25,7 +25,21 @@ const familiesForClub = (club: string) => {
 export function RoundShotReviewDialog({ open, onOpenChange, shots, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; shots: Shot[]; onSave: (updates: SavedDraft[]) => Promise<void> }) {
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (open) setDrafts(shots.map(shot => ({ ...shot, club: normalizeClubCode(shot.club), shotFamily: shot.shotFamily || 'full', swingEffort: shot.swingEffort || 'full', targetIntent: shot.targetIntent || 'fairway', accepted: false }))); }, [open, shots]);
+  useEffect(() => {
+    if (!open) return;
+    const orderedShots = shots
+      .map((shot, index) => ({ shot, index }))
+      .sort((a, b) => {
+        if (a.shot.holeNumber !== null && b.shot.holeNumber !== null) {
+          return a.shot.holeNumber - b.shot.holeNumber
+            || (a.shot.shotNumber ?? Number.POSITIVE_INFINITY) - (b.shot.shotNumber ?? Number.POSITIVE_INFINITY)
+            || a.index - b.index;
+        }
+        return a.index - b.index;
+      })
+      .map(({ shot }) => shot);
+    setDrafts(orderedShots.map(shot => ({ ...shot, club: normalizeClubCode(shot.club), shotFamily: shot.shotFamily || 'full', swingEffort: shot.swingEffort || 'full', targetIntent: shot.targetIntent || 'fairway', accepted: false })));
+  }, [open, shots]);
   const update = (id: string, values: Partial<ReviewDraft>) => setDrafts(current => current.map(draft => draft.id === id ? { ...draft, ...values, accepted: values.accepted ?? false } : draft));
   const save = async () => {
     setSaving(true);
