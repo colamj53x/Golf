@@ -19,7 +19,7 @@ const ReportsTab = lazy(async () => ({ default: (await import('@/components/repo
 const LibraryTab = lazy(async () => ({ default: (await import('@/components/LibraryTab')).LibraryTab }));
 const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/MoreToolsTab')).MoreToolsTab }));
 
-const mainTabs = ['today', 'play', 'practice', 'review', 'bag', 'more'] as const;
+const mainTabs = ['today', 'play', 'review', 'practice', 'bag', 'more'] as const;
 const reviewTabs = ['diagnosis', 'rounds', 'advanced'] as const;
 const bagTabs = ['gapping', 'clubs', 'profiles', 'short-game'] as const;
 const moreTabs = ['upload', 'library', 'tools', 'settings'] as const;
@@ -75,23 +75,23 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container py-4">
-          <div className="space-y-3">
-            <div className="flex min-w-0 items-center justify-between gap-4">
+          <div className="space-y-3 lg:flex lg:items-center lg:gap-4 lg:space-y-0">
+            <div className="flex min-w-0 items-center justify-between gap-4 lg:contents">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary"><Goal className="h-6 w-6 text-primary-foreground" /></div>
-                <div className="min-w-0"><h1 className="truncate text-xl font-bold">Nic&apos;s Golf Hub</h1><p className="truncate text-sm text-muted-foreground">Know what matters. Practise with intent.</p></div>
+                <div className="min-w-0"><h1 className="truncate text-xl font-bold">Nic&apos;s Golf Hub</h1><p className="hidden truncate text-sm text-muted-foreground xl:block">Know what matters. Practise with intent.</p></div>
               </div>
-              <div className="flex min-w-0 shrink-0 items-center gap-3">
+              <div className="flex min-w-0 shrink-0 items-center gap-3 lg:order-3">
                 <span className="hidden max-w-[260px] truncate text-sm text-muted-foreground sm:inline">{user?.email}</span>
                 <Button variant="outline" size="sm" onClick={signOut}><LogOut className="mr-2 h-4 w-4" />Sign Out</Button>
               </div>
             </div>
-            <Tabs value={activeTab} onValueChange={value => isIn(mainTabs, value) && navigate(path(value))}>
+            <Tabs value={activeTab} onValueChange={value => isIn(mainTabs, value) && navigate(path(value))} className="min-w-0 lg:flex-1">
               <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
                 <TabsTrigger value="today" className="shrink-0 gap-2"><Home className="h-4 w-4" />Today</TabsTrigger>
                 <TabsTrigger value="play" className="shrink-0 gap-2"><Crosshair className="h-4 w-4" />Play</TabsTrigger>
-                <TabsTrigger value="practice" className="shrink-0 gap-2"><Target className="h-4 w-4" />Practice</TabsTrigger>
                 <TabsTrigger value="review" className="shrink-0 gap-2"><BarChart3 className="h-4 w-4" />Review</TabsTrigger>
+                <TabsTrigger value="practice" className="shrink-0 gap-2"><Target className="h-4 w-4" />Practice</TabsTrigger>
                 <TabsTrigger value="bag" className="shrink-0 gap-2"><BriefcaseBusiness className="h-4 w-4" />Bag</TabsTrigger>
                 <TabsTrigger value="more" className="shrink-0 gap-2"><MoreHorizontal className="h-4 w-4" />More</TabsTrigger>
               </TabsList>

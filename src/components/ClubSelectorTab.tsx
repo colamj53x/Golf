@@ -967,7 +967,7 @@ export function ClubSelectorTab({
                         <TableCell>{getShotTypeLabel(row.shotType)}</TableCell>
                         {MATRIX_POWER_COLUMNS.map((column) => (
                           <TableCell key={column.id} className="align-top">
-                            <MatrixCell cell={row.cells[column.id]} />
+                            <MatrixCell cell={row.cells[column.id]} shotType={row.shotType} />
                           </TableCell>
                         ))}
                       </TableRow>
@@ -1201,20 +1201,24 @@ function ConfidenceMetric({ label, value }: { label: string; value: number | nul
   );
 }
 
-function MatrixCell({ cell }: { cell?: WedgeMatrixCell }) {
+function MatrixCell({ cell, shotType }: { cell?: WedgeMatrixCell; shotType: string }) {
   if (!cell) {
     return <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">-</div>;
   }
 
+  const highlightTotal = shotType === 'bump' || shotType === 'chip';
+  const highlightCarry = shotType === 'pitch';
+  const primaryMetricClass = 'rounded-md border border-emerald-300 bg-emerald-100 px-2 py-1 text-emerald-950';
+
   return (
     <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/20 p-2 text-xs">
-      <div className="min-w-0">
-        <div className="text-muted-foreground">Carry</div>
-        <div className="font-semibold">{formatDistance(cell.carry)}</div>
-      </div>
-      <div className="min-w-0">
+      <div className={`min-w-0 ${highlightTotal ? primaryMetricClass : ''}`}>
         <div className="text-muted-foreground">Total</div>
         <div className="font-semibold">{formatDistance(cell.total)}</div>
+      </div>
+      <div className={`min-w-0 ${highlightCarry ? primaryMetricClass : ''}`}>
+        <div className="text-muted-foreground">Carry</div>
+        <div className="font-semibold">{formatDistance(cell.carry)}</div>
       </div>
       <div className="min-w-0">
         <div className="text-muted-foreground">Bias</div>
