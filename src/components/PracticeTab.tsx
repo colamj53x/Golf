@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PracticeDashboardTab } from '@/components/PracticeDashboardTab';
 import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
 import { PracticePlanTab } from '@/components/PracticePlanTab';
@@ -10,13 +9,13 @@ import { DriverPracticeView } from '@/components/DriverPracticeView';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PuttingPracticeSetId } from '@/lib/putting/drills';
-import { Dumbbell, Layers3, Wand2 } from 'lucide-react';
+import { Dumbbell } from 'lucide-react';
 
 type PuttingView = 'home' | 'indoor';
 type FullSwingView = 'home' | 'driver';
 
 const secondaryNavItems = [
-  { value: 'summary', label: 'Summary' },
+  { value: 'summary', label: 'Next Session' },
   { value: 'logs', label: 'Logs' },
   { value: 'plan', label: 'Plan' },
   { value: 'types', label: 'Shot Types' },
@@ -31,21 +30,11 @@ const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
 
 const fullSwingTiles = [
   {
-    title: 'Technique',
-    description: 'Setup, movement, and swing feels will live here.',
-    icon: Wand2,
-  },
-  {
     title: 'Club',
     description: 'Driver is the first club ready for your drill instructions.',
     icon: Dumbbell,
     detail: 'Driver',
     view: 'driver' as FullSwingView,
-  },
-  {
-    title: 'Combined Sets',
-    description: 'Multi-club practice sets will live here once defined.',
-    icon: Layers3,
   },
 ];
 

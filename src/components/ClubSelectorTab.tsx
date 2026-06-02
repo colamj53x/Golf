@@ -775,7 +775,11 @@ function calculateRecommendations(
     .slice(0, 10);
 }
 
-export function ClubSelectorTab() {
+export function ClubSelectorTab({
+  defaultView = 'club-selector',
+}: {
+  defaultView?: 'club-selector' | 'wedge-matrix';
+} = {}) {
   const { shots, clubs, isLoading, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
@@ -887,16 +891,16 @@ export function ClubSelectorTab() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="wedge-matrix" className="w-full">
+      <Tabs defaultValue={defaultView} className="w-full">
         <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
-          <TabsTrigger value="wedge-matrix" className="shrink-0">Wedge Matrix</TabsTrigger>
-          <TabsTrigger value="club-selector" className="shrink-0">Club Selector By Lie</TabsTrigger>
+          <TabsTrigger value="club-selector" className="shrink-0">Shot Picker</TabsTrigger>
+          <TabsTrigger value="wedge-matrix" className="shrink-0">Short Game Matrix</TabsTrigger>
         </TabsList>
 
         <TabsContent value="wedge-matrix">
           <Card>
             <CardHeader>
-              <CardTitle>Wedge Matrix</CardTitle>
+              <CardTitle>Short Game Matrix</CardTitle>
               <CardDescription>
                 Chip, pitch, and bump-and-run numbers from the same shot mapping used by Club Gapping.
               </CardDescription>
@@ -972,7 +976,7 @@ export function ClubSelectorTab() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Crosshair className="h-5 w-5" />
-                  Club Selector By Lie
+                  Shot Picker
                 </CardTitle>
                 <CardDescription>
                   Uses shot profile mapping, lie-filtered course samples, and the same mapped targets shown in Club Gapping.

@@ -3,7 +3,7 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, CircleDot, Dumbbell, Goal, Settings as SettingsIcon, Save, Pencil, Sparkles } from 'lucide-react';
+import { Goal, Settings as SettingsIcon, Save, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -12,17 +12,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
-import { DrillBankTab } from '@/components/DrillBankTab';
-import { PuttingDrillBankTab } from '@/components/putting/PuttingDrillBankTab';
-import { BlastMotionTargetsCard } from '@/components/putting/BlastMotionTargetsCard';
 
 const SETTINGS_SECTIONS = [
-  {
-    href: '#settings-blast-targets',
-    title: 'Blast Motion Targets',
-    description: 'Putting mechanics targets synced across devices.',
-    icon: Sparkles,
-  },
   {
     href: '#settings-global',
     title: 'Global Settings',
@@ -34,24 +25,6 @@ const SETTINGS_SECTIONS = [
     title: 'Shot Options & Cues',
     description: 'Where shots appear and what cues they use.',
     icon: Goal,
-  },
-  {
-    href: '#settings-full-swing-drills',
-    title: 'Full Swing Drill Bank',
-    description: 'Technique, baseline, and scored drills.',
-    icon: Dumbbell,
-  },
-  {
-    href: '#settings-putting-drills',
-    title: 'Putting Drill Bank',
-    description: 'Indoor putting sets and scored drills.',
-    icon: CircleDot,
-  },
-  {
-    href: '#settings-definitions',
-    title: 'Definitions',
-    description: 'Metric reference notes.',
-    icon: BookOpen,
   },
 ];
 
@@ -270,46 +243,11 @@ export function SettingsTab() {
         <ShotProfilesCard />
       </section>
 
-      <BlastMotionTargetsCard />
-
-      <section id="settings-full-swing-drills" className="scroll-mt-6">
-        <DrillBankTab />
-      </section>
-
-      <section id="settings-putting-drills" className="scroll-mt-6">
-        <PuttingDrillBankTab />
-      </section>
-
-      <Card id="settings-definitions" className="scroll-mt-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Definitions Reference</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <div>
-            <strong className="text-foreground">On-Target:</strong> Lateral finish inside the accepted miss width for that club/shot
-          </div>
-          <div>
-            <strong className="text-foreground">Right/Left %:</strong> Shots finishing outside the accepted miss width in that direction
-          </div>
-          <div>
-            <strong className="text-foreground">Short %:</strong> Shots finishing meaningfully short of the expected distance, unless "As Intended"
-          </div>
-          <div>
-            <strong className="text-foreground">Bad Miss %:</strong> Penalty or Recovery required (punch-out, chip-out)
-          </div>
-          <div>
-            <strong className="text-foreground">Distance-to-Target:</strong> Only calculated for shots "targeting the green" (target within tolerance of stock distance)
-          </div>
-          <div>
-            <strong className="text-foreground">Greens Targeted %:</strong> Percentage of shots where target is within tolerance of stock distance
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-function ShotProfilesCard() {
+export function ShotProfilesCard() {
   const profiles = useShotProfiles();
   const enabledCountForClub = (clubId: string) => (
     Object.values(profiles).filter(profile => profile.clubId === clubId && profile.enabled).length

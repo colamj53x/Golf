@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Brain,
   CalendarRange,
+  ClipboardList,
   CircleDot,
   Gauge,
   Layers3,
@@ -18,6 +20,7 @@ import {
   type SqiSegment,
 } from '@/lib/analysisSynthesis';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -122,7 +125,13 @@ function SqiPerspectivePanel({
   );
 }
 
-export function AnalysisOverview() {
+export function AnalysisOverview({
+  onOpenLatestRound,
+  onOpenPractice,
+}: {
+  onOpenLatestRound?: () => void;
+  onOpenPractice?: () => void;
+} = {}) {
   const { shots, clubs, roundReflections, isLoading: golfLoading } = useGolfData();
   const { practiceSessions, isLoading: practiceLoading } = usePracticeData();
   const puttingSessions = useAnalysisPuttingSessions();
@@ -168,6 +177,38 @@ export function AnalysisOverview() {
         <MetricCard icon={AlertTriangle} label="Costly miss" value={`${analysis.badMissPct}%`} detail="Misses likely to cost position or a shot" tone="warn" />
         <MetricCard icon={CircleDot} label="Damage" value={`${analysis.damagePerRound}`} detail={`${analysis.scoringDamage} estimated shots across captured rounds`} tone="warn" />
         <MetricCard icon={Activity} label="Current form" value={trendLabel[analysis.trend]} detail="Recent 25% of rounds compared with early 25%" />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Top 3 priorities</CardTitle>
+            <CardDescription>Focus the next practice block on the score-risk areas with the strongest evidence.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            {analysis.priorities.length === 0 && <EmptyCard>Capture more course shots to establish ranked priorities.</EmptyCard>}
+            {analysis.priorities.map((priority) => (
+              <div key={priority.clubId} className="rounded-lg border p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority {priority.rank}</div>
+                <div className="mt-1 font-bold">{priority.clubName}</div>
+                <p className="mt-2 text-sm">{priority.recommendation}</p>
+                <div className="mt-2 text-xs text-muted-foreground">{priority.evidence}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Next practice recommendation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {analysis.priorities[0]?.recommendation ?? 'Capture more course shots to create a focused recommendation.'}
+            </p>
+            {onOpenPractice && <Button className="w-full gap-2" onClick={onOpenPractice}>Open practice <ArrowRight className="h-4 w-4" /></Button>}
+            {onOpenLatestRound && <Button className="w-full gap-2" variant="outline" onClick={onOpenLatestRound}>Latest round <ArrowRight className="h-4 w-4" /></Button>}
+          </CardContent>
+        </Card>
       </section>
 
       <Card>

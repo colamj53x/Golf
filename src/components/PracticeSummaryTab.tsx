@@ -1,6 +1,6 @@
 import { useMemo, useState, Fragment } from 'react';
 import { differenceInCalendarDays, format } from 'date-fns';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Target } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -519,6 +519,12 @@ export function PracticeSummaryTab({
     });
     return arr;
   }, [rows, sortKey, sortDir]);
+  const topPriorityRows = useMemo(() => (
+    [...rows]
+      .filter(row => prioritySignal(row).score !== null)
+      .sort((a, b) => (prioritySignal(b).score ?? -1) - (prioritySignal(a).score ?? -1))
+      .slice(0, 3)
+  ), [rows]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -567,9 +573,46 @@ export function PracticeSummaryTab({
   }
 
   return (
-    <Card>
+    <div className="space-y-6">
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader>
+          <CardTitle>Next Practice Session</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {topPriorityRows[0]
+              ? `Start with ${topPriorityRows[0].clubName} ${topPriorityRows[0].shotName.toLowerCase()} work. It is the clearest combination of course reliance, confidence, and practice recency.`
+              : 'Capture a round or practice session to generate your next recommended block.'}
+          </p>
+        </CardContent>
+      </Card>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-bold">Top 3 Practice Priorities</h2>
+          <p className="text-sm text-muted-foreground">Start with the shots most likely to improve your next round.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {topPriorityRows.map((row, index) => {
+            const priority = prioritySignal(row);
+            return (
+              <Card key={row.configKey}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority {index + 1}</span>
+                    <Target className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="mt-3 font-bold">{row.clubName} · {row.shotName}</div>
+                  <p className="mt-2 text-xs text-muted-foreground">{priority.title}</p>
+                  {onOpenLog && <Button className="mt-4" size="sm" variant="outline" onClick={() => onOpenLog(row.configKey)}>Open practice log</Button>}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+      <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <CardTitle>Practice Summary</CardTitle>
+        <CardTitle>Practice Detail</CardTitle>
         {onAddClubShot && (
           <Button variant="outline" size="sm" onClick={onAddClubShot}>
             Add Club/Shot
@@ -729,6 +772,7 @@ export function PracticeSummaryTab({
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

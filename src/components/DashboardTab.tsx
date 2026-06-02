@@ -27,6 +27,9 @@ import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
+  initialView?: 'latest-round' | 'overview';
+  showLatestRound?: boolean;
+  showOverview?: boolean;
 }
 
 const ROUND_REFLECTION_DRAFT_STORAGE_KEY = 'golf-dashboard-round-reflection-draft';
@@ -46,7 +49,12 @@ type StoredReflectionDraft = {
   };
 };
 
-export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
+export function DashboardTab({
+  onOpenUpload,
+  initialView = 'latest-round',
+  showLatestRound = true,
+  showOverview = true,
+}: DashboardTabProps) {
   const { user } = useAuth();
   const {
     clubs,
@@ -63,7 +71,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState<string>('all');
   const [selectedRoundDate, setSelectedRoundDate] = useState<string>('');
-  const [dashboardView, setDashboardView] = useState<string>('latest-round');
+  const [dashboardView, setDashboardView] = useState<string>(initialView);
   const [expandedTrendCategories, setExpandedTrendCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
   const [expandedCapabilityCategories, setExpandedCapabilityCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
   const [roundReflectionDraft, setRoundReflectionDraft] = useState(createEmptyRoundReflectionDraft());
@@ -433,7 +441,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
 
       {/* Dashboard Sub-Tabs */}
       <Tabs value={dashboardView} onValueChange={setDashboardView}>
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+        {showLatestRound && showOverview && <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="latest-round" className="shrink-0 gap-2">
             <Calendar className="h-4 w-4" />
             Round Review
@@ -442,10 +450,10 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
             <TrendingUp className="h-4 w-4" />
             Overview
           </TabsTrigger>
-        </TabsList>
+        </TabsList>}
 
         {/* Latest Round Tab */}
-        <TabsContent value="latest-round" className="mt-6">
+        {showLatestRound && <TabsContent value="latest-round" className="mt-6">
           <div className="space-y-6">
             <LatestRoundTab 
               lastRound={lastRound}
@@ -514,10 +522,10 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Overview Tab - Original Dashboard Content */}
-        <TabsContent value="overview" className="mt-6 space-y-6">
+        {showOverview && <TabsContent value="overview" className="mt-6 space-y-6">
 
       {/* Summary Cards - Last 5 Rounds vs Overall */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -853,7 +861,7 @@ export function DashboardTab({ onOpenUpload }: DashboardTabProps) {
           </div>
         </CardContent>
       </Card>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );
