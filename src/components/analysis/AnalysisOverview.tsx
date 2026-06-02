@@ -103,7 +103,6 @@ function SqiPerspectivePanel({
           <TableRow>
             <TableHead>Rounds</TableHead>
             <TableHead className="text-right">SQI</TableHead>
-            <TableHead>Handicap perspective</TableHead>
             <TableHead className="text-right">Damage / round</TableHead>
           </TableRow>
         </TableHeader>
@@ -114,8 +113,10 @@ function SqiPerspectivePanel({
                 <div className="font-semibold">{segment.label}</div>
                 <div className="text-xs text-muted-foreground">{segment.rounds} captured rounds</div>
               </TableCell>
-              <TableCell className="text-right text-lg font-bold">{segment.sqi ?? '-'}</TableCell>
-              <TableCell className="whitespace-nowrap text-sm">{segment.handicapEquivalent}</TableCell>
+              <TableCell className="text-right">
+                <div className="text-lg font-bold">{segment.sqi ?? '-'}</div>
+                <div className="whitespace-nowrap text-xs text-muted-foreground">{segment.handicapEquivalent}</div>
+              </TableCell>
               <TableCell className="text-right">{segment.rounds ? segment.damagePerRound : '-'}</TableCell>
             </TableRow>
           ))}
@@ -227,7 +228,7 @@ export function AnalysisOverview({
             <SqiPerspectivePanel
               title="Round timeline"
               description="Captured rounds in date order. Compare your recent quarter with the rounds that established your starting point."
-              segments={analysis.chronologicalSqi}
+              segments={[...analysis.chronologicalSqi].reverse()}
             />
           </div>
           <div className="space-y-2">
@@ -238,7 +239,7 @@ export function AnalysisOverview({
             <SqiPerspectivePanel
               title="Performance bands"
               description="Captured rounds ranked by SQI. This shows the difference between your better scoring days and the rounds that need protecting."
-              segments={analysis.qualitySqi}
+              segments={[...analysis.qualitySqi].reverse()}
             />
           </div>
         </CardContent>
