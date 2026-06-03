@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGolfData } from '@/context/GolfDataContext';
+import { usePracticeData } from '@/context/PracticeDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,14 +11,19 @@ import { Toggle } from '@/components/ui/toggle';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
+import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, parsePracticeConfigKey } from '@/types/practiceClubs';
 import {
+  clubFullNormalRuleKey,
+  isClubFullNormalClassification,
   saveShotClassificationRules,
   shotClassificationRuleKey,
   useShotClassificationRules,
   type ShotClassificationRules,
 } from '@/lib/shotClassificationRules';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
+import { buildCourseShotGappingAssignments } from '@/lib/gapping';
+import { getClubConfigId } from '@/lib/golfCalculations';
 
 const SETTINGS_SECTIONS = [
   {
@@ -285,11 +291,28 @@ export function SettingsTab() {
 }
 
 function ShotClassificationRulesCard() {
+  const { shots, gappingHcpTarget } = useGolfData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
+  const profiles = useShotProfiles();
   const rules = useShotClassificationRules();
   const [draft, setDraft] = useState<Record<string, string>>(() => rulesToDraft(rules));
+  const [fullNormalDraft, setFullNormalDraft] = useState<Record<string, boolean>>(() => rulesToFullNormalDraft(rules));
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+
+  const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
+    profiles,
+    shots,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    shotClassificationRules: rules,
+  }), [profiles, shots, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, rules]);
 
   useEffect(() => {
     setDraft(rulesToDraft(rules));
+    setFullNormalDraft(rulesToFullNormalDraft(rules));
   }, [rules]);
 
   const setRuleDraft = (clubId: string, shotType: string, value: string) => {
@@ -297,8 +320,56 @@ function ShotClassificationRulesCard() {
     setDraft(prev => ({ ...prev, [key]: value }));
   };
 
+  const setClubFullNormalDraft = (clubId: string, checked: boolean) => {
+    setFullNormalDraft(prev => ({ ...prev, [clubId]: checked }));
+  };
+
+  const importLatestGappingRules = (clubId: string) => {
+    const recentClubShots = shots
+      .filter((shot) => getClubConfigId(shot.club) === clubId && Number.isFinite(shot.target))
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 80);
+    const buckets = new Map<string, { fullTargets: number[]; reducedTargets: number[] }>();
+
+    for (const shot of recentClubShots) {
+      const assignment = gappingAssignments.shotToAssignment.get(shot.id);
+      if (!assignment) continue;
+      const parsed = parsePracticeConfigKey(assignment.configKey);
+      if (parsed.club !== clubId || !parsed.shotType || !parsed.power) continue;
+      const bucket = buckets.get(parsed.shotType) ?? { fullTargets: [], reducedTargets: [] };
+      if (parsed.power === 'full') bucket.fullTargets.push(shot.target);
+      else bucket.reducedTargets.push(shot.target);
+      buckets.set(parsed.shotType, bucket);
+    }
+
+    const imported: Record<string, string> = {};
+    for (const [shotType, bucket] of buckets.entries()) {
+      if (bucket.fullTargets.length === 0) continue;
+      const lowestFull = Math.min(...bucket.fullTargets);
+      const highestReduced = bucket.reducedTargets.length ? Math.max(...bucket.reducedTargets) : null;
+      const cutoff = highestReduced !== null && highestReduced < lowestFull
+        ? Math.round((highestReduced + lowestFull) / 2)
+        : Math.round(lowestFull);
+      imported[shotClassificationRuleKey(clubId, shotType)] = String(Math.max(0, cutoff));
+    }
+
+    if (Object.keys(imported).length === 0) {
+      toast.info('No recent gapping shot-type split found for this club');
+      return;
+    }
+
+    setDraft(prev => ({ ...prev, ...imported }));
+    setFullNormalDraft(prev => ({ ...prev, [clubId]: false }));
+    toast.success(`Imported ${Object.keys(imported).length} cutoff${Object.keys(imported).length === 1 ? '' : 's'} from recent gapping shots`);
+  };
+
   const handleSave = () => {
     const nextRules: ShotClassificationRules = {};
+    for (const club of PRACTICE_CLUBS) {
+      if (fullNormalDraft[club.id]) {
+        nextRules[clubFullNormalRuleKey(club.id)] = { fullMinTarget: null, allFullNormal: true };
+      }
+    }
     for (const [key, value] of Object.entries(draft)) {
       const trimmed = value.trim();
       if (!trimmed) continue;
@@ -312,6 +383,7 @@ function ShotClassificationRulesCard() {
 
   const handleReset = () => {
     setDraft(rulesToDraft(rules));
+    setFullNormalDraft(rulesToFullNormalDraft(rules));
     toast.info('Shot classification changes reverted');
   };
 
@@ -346,9 +418,25 @@ function ShotClassificationRulesCard() {
                 <span>{club.name}</span>
               </AccordionTrigger>
               <AccordionContent>
+                <div className="mb-3 flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id={`classification-full-normal-${club.id}`}
+                      checked={fullNormalDraft[club.id] ?? false}
+                      onCheckedChange={(checked) => setClubFullNormalDraft(club.id, checked === true)}
+                    />
+                    <Label htmlFor={`classification-full-normal-${club.id}`} className="text-sm leading-tight">
+                      Classify every {club.name} shot as Full / Normal
+                    </Label>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => importLatestGappingRules(club.id)}>
+                    Import latest from gapping
+                  </Button>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {SHOT_TYPES.map(shot => {
                     const key = shotClassificationRuleKey(club.id, shot.id);
+                    const allFullNormal = fullNormalDraft[club.id] ?? false;
                     return (
                       <div key={shot.id} className="rounded-md border bg-background p-3">
                         <Label htmlFor={`classification-${key}`} className="text-sm font-medium">
@@ -363,6 +451,7 @@ function ShotClassificationRulesCard() {
                             inputMode="decimal"
                             value={draft[key] ?? ''}
                             onChange={(event) => setRuleDraft(club.id, shot.id, event.target.value)}
+                            disabled={allFullNormal}
                             className="h-8 w-24 text-sm"
                             placeholder="-"
                           />
@@ -385,6 +474,13 @@ function rulesToDraft(rules: ShotClassificationRules): Record<string, string> {
   return Object.fromEntries(Object.entries(rules).map(([key, rule]) => [
     key,
     rule.fullMinTarget === null ? '' : String(rule.fullMinTarget),
+  ]));
+}
+
+function rulesToFullNormalDraft(rules: ShotClassificationRules): Record<string, boolean> {
+  return Object.fromEntries(PRACTICE_CLUBS.map((club) => [
+    club.id,
+    isClubFullNormalClassification(rules, club.id),
   ]));
 }
 

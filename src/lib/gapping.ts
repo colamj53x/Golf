@@ -4,6 +4,7 @@ import { pctWithinTarget } from '@/lib/practiceConsistency';
 import {
   classifyPowerByTarget,
   getShotClassificationRule,
+  isClubFullNormalClassification,
   loadShotClassificationRules,
   type ShotClassificationRules,
 } from '@/lib/shotClassificationRules';
@@ -800,6 +801,10 @@ function matchesProfileShot(
   const override = shotCategoryOverrides[shot.id];
   if (override) return visibleProfileId(override.profileId) === profile.id;
 
+  if (isClubFullNormalClassification(shotClassificationRules, profile.clubId)) {
+    return profile.shotType === 'full' && profile.power === 'full';
+  }
+
   const savedFamily = shot.shotFamily.trim().toLowerCase();
   const savedEffort = shot.swingEffort.trim().toLowerCase();
   const ruleShotType = savedFamily || profile.shotType;
@@ -1024,7 +1029,10 @@ export function buildClubGappingRows({
       return (profile.enabled && profile.showOnCourse && (profile.power === 'full' || isVisibleShortBucket(profile))) || hasRangePractice || hasClassificationRule;
     })
     .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
-    .filter((profile) => !(['pw', 'gw', 'sw'].includes(profile.clubId) && profile.shotType === 'full'))
+    .filter((profile) => (
+      !(['pw', 'gw', 'sw'].includes(profile.clubId) && profile.shotType === 'full')
+      || isClubFullNormalClassification(shotClassificationRules, profile.clubId)
+    ))
     .filter((profile) => !isShortShot(profile) || isVisibleShortBucket(profile))
     .filter((profile) => shotContext !== 'tee' || (profile.shotType === 'full' && profile.power === 'full'))
     .flatMap((profile) => profile.targets.map((target) => buildRow(

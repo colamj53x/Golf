@@ -5,6 +5,7 @@ export const SHOT_CLASSIFICATION_RULES_EVENT = 'golf-shot-classification-rules-c
 
 export interface ShotClassificationRule {
   fullMinTarget: number | null;
+  allFullNormal?: boolean;
 }
 
 export type ShotClassificationRules = Record<string, ShotClassificationRule>;
@@ -12,6 +13,10 @@ let cache: ShotClassificationRules | null = null;
 
 export function shotClassificationRuleKey(clubId: string, shotType: string): string {
   return `${clubId}_${shotType}`;
+}
+
+export function clubFullNormalRuleKey(clubId: string): string {
+  return `${clubId}__all_full_normal`;
 }
 
 function emitRulesChanged(): void {
@@ -22,11 +27,12 @@ function emitRulesChanged(): void {
 function normalizeRule(value: unknown): ShotClassificationRule | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const fullMinTarget = (value as { fullMinTarget?: unknown }).fullMinTarget;
+  const allFullNormal = (value as { allFullNormal?: unknown }).allFullNormal === true;
   if (fullMinTarget === null || fullMinTarget === undefined || fullMinTarget === '') {
-    return { fullMinTarget: null };
+    return { fullMinTarget: null, ...(allFullNormal ? { allFullNormal } : {}) };
   }
   if (typeof fullMinTarget !== 'number' || !Number.isFinite(fullMinTarget) || fullMinTarget < 0) return null;
-  return { fullMinTarget };
+  return { fullMinTarget, ...(allFullNormal ? { allFullNormal } : {}) };
 }
 
 function normalizeRules(value: unknown): ShotClassificationRules {
@@ -34,7 +40,7 @@ function normalizeRules(value: unknown): ShotClassificationRules {
   const rules: ShotClassificationRules = {};
   for (const [key, ruleValue] of Object.entries(value)) {
     const rule = normalizeRule(ruleValue);
-    if (rule?.fullMinTarget !== null) rules[key] = rule;
+    if (rule && (rule.fullMinTarget !== null || rule.allFullNormal)) rules[key] = rule;
   }
   return rules;
 }
@@ -70,6 +76,10 @@ export function getShotClassificationRule(
   shotType: string,
 ): ShotClassificationRule | null {
   return rules[shotClassificationRuleKey(clubId, shotType)] ?? null;
+}
+
+export function isClubFullNormalClassification(rules: ShotClassificationRules, clubId: string): boolean {
+  return rules[clubFullNormalRuleKey(clubId)]?.allFullNormal === true;
 }
 
 export function classifyPowerByTarget(rule: ShotClassificationRule | null, target: number): 'full' | '9pm' | null {
