@@ -77,6 +77,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
 }) {
   const clubTable = title === 'By Club And Shot Type' && clubSort && clubSortDirection && onClubSort;
   const lieTable = title === 'By Lie';
+  const primaryColumnLabel = greenDistance ? 'Distance' : lieTable ? 'Lie' : 'Club · Shot Type';
   const header = (label: string, key: ClubSortKey) => clubTable
     ? <SortableHeader label={label} sortKey={key} activeSort={clubSort} direction={clubSortDirection} onSort={onClubSort} />
     : label;
@@ -91,7 +92,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
           <table className="data-table">
             <thead>
               <tr>
-                {clubTable ? <><th>{header('Club', 'club')}</th><th>{header('Shot Type', 'shot-type')}</th><th>{header('Power', 'power')}</th><th>{header('Target', 'target')}</th></> : <th>{title === 'By Distance' ? 'Distance' : title === 'By Lie' ? 'Lie' : 'Club · Shot Type'}</th>}
+                {clubTable ? <><th>{header('Club', 'club')}</th><th>{header('Shot Type', 'shot-type')}</th><th>{header('Power', 'power')}</th><th>{header('Target', 'target')}</th></> : <th>{primaryColumnLabel}</th>}
                 <th>{header('Shots', 'shots')}</th>
                 {lieTable && <th>% Total</th>}
                 <th>{header('Shot Quality', 'quality')}</th>
@@ -99,7 +100,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
                 {!simple && <th>Prior Recent 1/3</th>}
                 <th>{header('Bad Miss', 'bad-miss')}</th>
                 <th>{header('Accuracy', 'accuracy')}</th>
-                {greenDistance && <th>Most Used Club / Shot</th>}
+                {greenDistance && <th>Most Used Club</th>}
                 {greenDistance && <th>Greens Hit</th>}
                 {greenDistance && <th>Shots To Green</th>}
               </tr>
@@ -115,7 +116,16 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
                   {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} /></td>}
                   <td>{formatPercent(row.round.badMissPct)}</td>
                   <td>{formatPercent(row.round.onTargetPct)}</td>
-                  {greenDistance && <td>{row.dominantClubShotLabel && row.dominantClubShotPct !== null && row.dominantClubShotPct !== undefined ? `${row.dominantClubShotLabel} (${formatPercent(row.dominantClubShotPct)})` : '-'}</td>}
+                  {greenDistance && (
+                    <td>
+                      {row.dominantClubShotLabel && row.dominantClubShotPct !== null && row.dominantClubShotPct !== undefined ? (
+                        <div>
+                          <div className="font-medium">{row.dominantClubShotLabel}</div>
+                          <div className="text-xs text-muted-foreground">{formatPercent(row.dominantClubShotPct)} of shots</div>
+                        </div>
+                      ) : '-'}
+                    </td>
+                  )}
                   {greenDistance && <td>{formatPercent(row.round.greensHitRawPct)}</td>}
                   {greenDistance && <td>{row.avgShotsToGreen === null ? '-' : row.avgShotsToGreen.toFixed(1)}</td>}
                 </tr>
