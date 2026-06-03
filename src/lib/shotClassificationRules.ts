@@ -8,6 +8,7 @@ export interface ShotClassificationRule {
 }
 
 export type ShotClassificationRules = Record<string, ShotClassificationRule>;
+let cache: ShotClassificationRules | null = null;
 
 export function shotClassificationRuleKey(clubId: string, shotType: string): string {
   return `${clubId}_${shotType}`;
@@ -38,7 +39,7 @@ function normalizeRules(value: unknown): ShotClassificationRules {
   return rules;
 }
 
-export function loadShotClassificationRules(): ShotClassificationRules {
+function readShotClassificationRules(): ShotClassificationRules {
   if (typeof localStorage === 'undefined') return {};
   try {
     return normalizeRules(JSON.parse(localStorage.getItem(SHOT_CLASSIFICATION_RULES_KEY) || '{}'));
@@ -47,9 +48,15 @@ export function loadShotClassificationRules(): ShotClassificationRules {
   }
 }
 
+export function loadShotClassificationRules(): ShotClassificationRules {
+  if (cache === null) cache = readShotClassificationRules();
+  return cache;
+}
+
 export function saveShotClassificationRules(rules: ShotClassificationRules): void {
   if (typeof localStorage === 'undefined') return;
   const normalized = normalizeRules(rules);
+  cache = normalized;
   localStorage.setItem(SHOT_CLASSIFICATION_RULES_KEY, JSON.stringify(normalized));
   void import('@/lib/durableLocalSettings').then(({ persistDurableLocalSettingsSoon }) => {
     persistDurableLocalSettingsSoon();
@@ -72,13 +79,17 @@ export function classifyPowerByTarget(rule: ShotClassificationRule | null, targe
 
 function subscribe(callback: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
-  window.addEventListener('storage', callback);
-  window.addEventListener(SHOT_CLASSIFICATION_RULES_EVENT, callback);
-  window.addEventListener('golf-durable-local-settings-hydrated', callback);
+  const handleChange = () => {
+    cache = null;
+    callback();
+  };
+  window.addEventListener('storage', handleChange);
+  window.addEventListener(SHOT_CLASSIFICATION_RULES_EVENT, handleChange);
+  window.addEventListener('golf-durable-local-settings-hydrated', handleChange);
   return () => {
-    window.removeEventListener('storage', callback);
-    window.removeEventListener(SHOT_CLASSIFICATION_RULES_EVENT, callback);
-    window.removeEventListener('golf-durable-local-settings-hydrated', callback);
+    window.removeEventListener('storage', handleChange);
+    window.removeEventListener(SHOT_CLASSIFICATION_RULES_EVENT, handleChange);
+    window.removeEventListener('golf-durable-local-settings-hydrated', handleChange);
   };
 }
 
