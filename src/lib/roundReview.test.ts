@@ -59,6 +59,44 @@ describe('buildRoundReview', () => {
     expect(review.clubAndTypeRows.map(row => row.targetLabel)).toEqual(['Green', 'Green']);
   });
 
+  it('infers unspecified targets for club and shot type rows', () => {
+    const review = buildRoundReview([
+      shot('driver', '2026-05-31', 220, '10 Handicap', { club: 'Dr', type: 'Driving' }),
+      shot('five-wood', '2026-05-31', 190, '10 Handicap', { club: '5W' }),
+      shot('four-hybrid', '2026-05-31', 180, '10 Handicap', { club: '4H' }),
+      shot('five-hybrid', '2026-05-31', 170, '10 Handicap', { club: '5H' }),
+      shot('punch', '2026-05-31', 115, '10 Handicap', { club: '7I', shotFamily: 'punch', swingEffort: 'full' }),
+      shot('iron', '2026-05-31', 125, '10 Handicap', { club: '9I' }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(review.clubAndTypeRows.map(row => [row.clubLabel, row.shotTypeLabel, row.targetLabel])).toEqual([
+      ['Dr', 'Full', 'Fairway'],
+      ['5W', 'Full', 'Fairway'],
+      ['4H', 'Full', 'Fairway'],
+      ['5H', 'Full', 'Green'],
+      ['7I', 'Punch', 'Fairway'],
+      ['9I', 'Full', 'Green'],
+    ]);
+  });
+
+  it('adds green distance dominant club shot and lie share percentages', () => {
+    const review = buildRoundReview([
+      shot('nine-one', '2026-05-31', 125, '10 Handicap', { club: '9I' }),
+      shot('nine-two', '2026-05-31', 126, '10 Handicap', { club: '9I' }),
+      shot('pw', '2026-05-31', 124, '10 Handicap', { club: 'PW', startLie: 'Rough' }),
+      shot('driver', '2026-05-31', 220, '10 Handicap', { club: 'Dr', type: 'Driving', startLie: 'Tee' }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    const distanceRow = review.greenDistanceRows.find(row => row.key === '100-150');
+    expect(distanceRow?.dominantClubShotLabel).toBe('9I / Full');
+    expect(distanceRow?.dominantClubShotPct).toBeCloseTo(66.67, 1);
+    expect(review.lieRows.map(row => [row.label, row.shareOfTotalPct])).toEqual([
+      ['Tee', 25],
+      ['Fairway', 50],
+      ['Rough', 25],
+    ]);
+  });
+
   it('suppresses a misleading distance breakdown when every stored target has collapsed below 10m', () => {
     const review = buildRoundReview([
       shot('driver', '2026-05-31', 0, '10 Handicap', { club: 'Dr', type: 'Driving', total: 220 }),

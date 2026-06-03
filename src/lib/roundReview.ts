@@ -11,6 +11,9 @@ export interface RoundReviewRow {
   shotTypeLabel?: string;
   powerLabel?: string;
   targetLabel?: string;
+  shareOfTotalPct?: number | null;
+  dominantClubShotLabel?: string | null;
+  dominantClubShotPct?: number | null;
   avgShotsToGreen?: number | null;
   round: MetricsResult;
   last5: MetricsResult;
@@ -65,6 +68,17 @@ function metrics(shots: ProcessedShot[]): MetricsResult {
   return calculateMetrics(shots, undefined);
 }
 
+function isUnspecifiedTarget(value: string | undefined): boolean {
+  const normalized = (value ?? '').trim().toLowerCase();
+  return !normalized || normalized === 'unspecified' || normalized === 'unknown' || normalized === '-';
+}
+
+function inferUnspecifiedTarget(clubId: string, shotTypeLabel: string): 'fairway' | 'green' {
+  if (shotTypeLabel.trim().toLowerCase().includes('punch')) return 'fairway';
+  if (clubId === 'dr' || clubId === '5w' || clubId === '4h') return 'fairway';
+  return 'green';
+}
+
 function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
@@ -91,6 +105,41 @@ function makeRows(
       };
     })
     .filter((row): row is RoundReviewRow => row !== null);
+}
+
+function getMostUsedClubShot(
+  shots: ProcessedShot[],
+  getClubAndTypeGroup: (shot: ProcessedShot) => Pick<RoundReviewRow, 'clubLabel' | 'shotTypeLabel' | 'powerLabel' | 'clubSortIndex'>
+): Pick<RoundReviewRow, 'dominantClubShotLabel' | 'dominantClubShotPct'> {
+  if (shots.length === 0) return { dominantClubShotLabel: null, dominantClubShotPct: null };
+
+  const counts = new Map<string, { label: string; count: number; clubSortIndex: number; shotTypeLabel: string }>();
+  for (const shot of shots) {
+    const group = getClubAndTypeGroup(shot);
+    const shotType = group.shotTypeLabel ?? 'Unspecified';
+    const power = group.powerLabel && group.powerLabel !== '-' && group.powerLabel !== shotType ? ` ${group.powerLabel}` : '';
+    const label = `${group.clubLabel ?? 'Unknown club'} / ${shotType}${power}`;
+    const current = counts.get(label) ?? {
+      label,
+      count: 0,
+      clubSortIndex: group.clubSortIndex ?? Number.POSITIVE_INFINITY,
+      shotTypeLabel: group.shotTypeLabel ?? '',
+    };
+    current.count += 1;
+    counts.set(label, current);
+  }
+
+  const top = [...counts.values()].sort((a, b) =>
+    b.count - a.count
+    || a.clubSortIndex - b.clubSortIndex
+    || a.shotTypeLabel.localeCompare(b.shotTypeLabel)
+    || a.label.localeCompare(b.label)
+  )[0];
+
+  return {
+    dominantClubShotLabel: top.label,
+    dominantClubShotPct: (top.count / shots.length) * 100,
+  };
 }
 
 export function buildRoundReview(
@@ -149,17 +198,19 @@ export function buildRoundReview(
         ? 'Full'
         : '-';
     const shotTypeLabel = expandedShotLabel.replace(/ (Half|Full)$/, '') || 'Unspecified';
+    const clubId = assignment?.profile.clubId ?? getClubConfigId(shot.club);
     const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
-    const targetLabel = savedTarget === 'fairway' ? 'Fairway' : savedTarget === 'green' ? 'Green' : 'Unspecified';
-    const key = `${assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`}|${targetLabel}`;
+    const target = isUnspecifiedTarget(savedTarget) ? inferUnspecifiedTarget(clubId, shotTypeLabel) : savedTarget;
+    const inferredTargetLabel = target === 'fairway' ? 'Fairway' : target === 'green' ? 'Green' : 'Unspecified';
+    const key = `${assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`}|${inferredTargetLabel}`;
     return {
       key,
-      label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel} · ${targetLabel}`,
+      label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel} · ${inferredTargetLabel}`,
       clubLabel,
       clubSortIndex: clubOrder,
       shotTypeLabel,
       powerLabel,
-      targetLabel,
+      targetLabel: inferredTargetLabel,
     };
   };
 
@@ -194,7 +245,13 @@ export function buildRoundReview(
   };
   const greenTargetShots = (candidates: ProcessedShot[]) => candidates.filter(shot => {
     const assignment = gappingAssignments.get(shot.id);
-    return (assignment?.target ?? shot.targetIntent.trim().toLowerCase()) === 'green';
+    const group = getClubAndTypeGroup(shot);
+    const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
+    const clubId = assignment?.profile.clubId ?? getClubConfigId(shot.club);
+    const target = isUnspecifiedTarget(savedTarget)
+      ? inferUnspecifiedTarget(clubId, group.shotTypeLabel ?? '')
+      : savedTarget;
+    return target === 'green';
   });
 
   const distanceGroups = DISTANCE_FILTER_OPTIONS
@@ -227,6 +284,18 @@ export function buildRoundReview(
     ? 'The stored distance-to-target values for this round are incomplete: every reviewed shot is recorded inside 10m. Go to More > Upload, turn on Replace matching round dates, and re-upload the CSV for this round. Review will refresh with the repaired distance-to-target values.'
     : null;
 
+  const greenDistanceRollups = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen);
+  const greenDistanceRows = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen)
+    .map(row => ({
+      ...row,
+      ...getMostUsedClubShot(greenTargetShots(selected).filter(shot => filterShotsByTargetDistance([shot], row.key).length === 1), getClubAndTypeGroup),
+    }));
+  const lieRows = makeRows(selected, last5, recentThird, lieGroups)
+    .map(row => ({
+      ...row,
+      shareOfTotalPct: selected.length ? (row.round.shotCount / selected.length) * 100 : null,
+    }));
+
   return {
     scope,
     label: scope === 'all' ? 'All Rounds' : scope === 'last20' ? `Last ${Math.min(20, roundDates.length)} Rounds` : selectedDate,
@@ -234,9 +303,9 @@ export function buildRoundReview(
     last5: metrics(last5),
     recentThird: metrics(recentThird),
     clubAndTypeRows: makeRows(selected, last5, recentThird, clubAndTypeGroups),
-    greenDistanceRollups: distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen),
-    greenDistanceRows: distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen),
-    lieRows: makeRows(selected, last5, recentThird, lieGroups),
+    greenDistanceRollups,
+    greenDistanceRows,
+    lieRows,
     distanceWarning,
     hasShotSequence,
   };
