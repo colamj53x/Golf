@@ -24,7 +24,7 @@ import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/dist
 import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
 import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
-import { isPuttingShot } from '@/lib/roundReview';
+import { isPuttingShot, RoundReviewScope } from '@/lib/roundReview';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
@@ -34,6 +34,8 @@ interface DashboardTabProps {
 }
 
 const ROUND_REFLECTION_DRAFT_STORAGE_KEY = 'golf-dashboard-round-reflection-draft';
+const ROUND_REVIEW_LAST20 = 'aggregate:last20';
+const ROUND_REVIEW_ALL = 'aggregate:all';
 const getRoundReflectionDraftStorageKey = (userId: string, roundDate: string) =>
   `${ROUND_REFLECTION_DRAFT_STORAGE_KEY}:${userId}:${roundDate}`;
 
@@ -85,6 +87,11 @@ export function DashboardTab({
   const roundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
   )].sort((a, b) => b.localeCompare(a)), [shots]);
+  const roundReviewScope: RoundReviewScope = selectedRoundDate === ROUND_REVIEW_ALL
+    ? 'all'
+    : selectedRoundDate === ROUND_REVIEW_LAST20
+      ? 'last20'
+      : 'round';
   const roundReviewSelectedDateKey = roundReviewDateKeys.includes(selectedRoundDate)
     ? selectedRoundDate
     : roundReviewDateKeys[0] ?? null;
@@ -224,6 +231,12 @@ export function DashboardTab({
   }, [shots, selectedClub, selectedStartLie, selectedDistanceFilter, selectedRoundDate, clubs, distanceToTargetTolerance]);
 
   useEffect(() => {
+    if (!showOverview && roundReviewScope !== 'round') {
+      setRoundReflectionDraft(createEmptyRoundReflectionDraft());
+      setRoundReflectionStatus(null);
+      return;
+    }
+
     const selectedRoundDateKey = showOverview
       ? processedData?.selectedRoundDateKey
       : roundReviewSelectedDateKey;
@@ -283,7 +296,7 @@ export function DashboardTab({
     } else {
       setRoundReflectionStatus(null);
     }
-  }, [processedData?.selectedRoundDateKey, roundReflections, roundReflectionsAvailable, roundReviewSelectedDateKey, showOverview, userId]);
+  }, [processedData?.selectedRoundDateKey, roundReflections, roundReflectionsAvailable, roundReviewScope, roundReviewSelectedDateKey, showOverview, userId]);
 
   if (isLoading) {
     return (
@@ -324,10 +337,17 @@ export function DashboardTab({
 
   const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, roundDateKeys, selectedRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
   const activeRoundDateKey = showOverview ? selectedRoundDateKey : roundReviewSelectedDateKey;
-  const activeRoundShotCount = activeRoundDateKey
-    ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
-    : 0;
-  const activeRoundShots = activeRoundDateKey
+  const activeRoundReviewDates = roundReviewScope === 'all'
+    ? new Set(roundReviewDateKeys)
+    : roundReviewScope === 'last20'
+      ? new Set(roundReviewDateKeys.slice(0, 20))
+      : new Set(activeRoundDateKey ? [activeRoundDateKey] : []);
+  const activeRoundShotCount = showOverview
+    ? activeRoundDateKey
+      ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
+      : 0
+    : shots.filter(shot => !isPuttingShot(shot) && activeRoundReviewDates.has(getShotDateKey(shot.date))).length;
+  const activeRoundShots = activeRoundDateKey && roundReviewScope === 'round'
     ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
     : [];
 
@@ -437,11 +457,13 @@ export function DashboardTab({
             </div>
           </div> : <div className="space-y-1.5">
             <label className="text-sm font-medium">Round</label>
-            <Select value={activeRoundDateKey ?? ''} onValueChange={setSelectedRoundDate}>
+            <Select value={roundReviewScope === 'round' ? activeRoundDateKey ?? '' : selectedRoundDate} onValueChange={setSelectedRoundDate}>
               <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue placeholder="Select round" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={ROUND_REVIEW_LAST20}>Last 20 rounds</SelectItem>
+                <SelectItem value={ROUND_REVIEW_ALL}>All rounds</SelectItem>
                 {roundReviewDateKeys.map((roundDate, index) => (
                   <SelectItem key={roundDate} value={roundDate}>
                     {roundDate}{index === 0 ? ' · Latest' : ''}
@@ -450,14 +472,14 @@ export function DashboardTab({
               </SelectContent>
             </Select>
           </div>}
-          {showOverview ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
-            <span className="font-medium text-foreground">{overall.shotCount}</span> shots analyzed
+          {showOverview || roundReviewScope !== 'round' ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
+            <span className="font-medium text-foreground">{showOverview ? overall.shotCount : activeRoundShotCount}</span> shots analyzed
           </div> : <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary lg:text-right">
             <span className="font-medium text-foreground">{activeRoundShotCount}</span> shots analyzed
           </button>}
         </CardContent>
       </Card>
-      {!showOverview && <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={activeRoundShots} onSave={updateRoundShotClassifications} />}
+      {!showOverview && roundReviewScope === 'round' && <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={activeRoundShots} onSave={updateRoundShotClassifications} />}
 
       {/* Dashboard Sub-Tabs */}
       <Tabs value={dashboardView} onValueChange={setDashboardView}>
@@ -480,8 +502,9 @@ export function DashboardTab({
               clubs={clubs}
               distanceToTargetTolerance={distanceToTargetTolerance}
               roundDate={activeRoundDateKey ?? ''}
+              scope={roundReviewScope}
             />
-            {activeRoundDateKey && (
+            {activeRoundDateKey && roundReviewScope === 'round' && (
               <RoundReflectionEditor
                 title={`Round Thoughts · ${activeRoundDateKey}`}
                 description="Capture what actually happened in the round so future training and feedback can use both the numbers and your own notes."

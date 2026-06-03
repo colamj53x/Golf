@@ -18,6 +18,8 @@ export interface RoundReviewRow {
 }
 
 export interface RoundReviewModel {
+  scope: RoundReviewScope;
+  label: string;
   round: MetricsResult;
   last5: MetricsResult;
   recentThird: MetricsResult;
@@ -31,6 +33,7 @@ export interface RoundReviewModel {
 
 const DISTANCE_ROLLUPS = new Set(['0-150', '0-100']);
 const LIE_ORDER = ['tee', 'fairway', 'first cut', 'rough', 'bunker', 'recovery'];
+export type RoundReviewScope = 'round' | 'last20' | 'all';
 
 export function isPuttingShot(shot: Shot): boolean {
   return shot.club.trim().toLowerCase() === 'pu' || shot.type.trim().toLowerCase() === 'putting';
@@ -95,16 +98,33 @@ export function buildRoundReview(
   clubs: ClubConfig[],
   distanceToTargetTolerance: number,
   selectedRoundDate: string,
-  gappingAssignments = new Map<string, CourseShotGappingAssignment>()
+  gappingAssignments = new Map<string, CourseShotGappingAssignment>(),
+  scope: RoundReviewScope = 'round'
 ): RoundReviewModel {
   const courseShots = shots.filter(shot => !isPuttingShot(shot));
-  const historicalShots = courseShots.filter(shot => getShotDateKey(shot.date) < selectedRoundDate);
+  const roundDates = [...new Set(courseShots.map(shot => getShotDateKey(shot.date)))]
+    .sort((a, b) => b.localeCompare(a));
+  const latestRoundDate = roundDates[0] ?? selectedRoundDate;
+  const selectedDate = roundDates.includes(selectedRoundDate) ? selectedRoundDate : latestRoundDate;
+  const selectedDates = scope === 'all'
+    ? new Set(roundDates)
+    : scope === 'last20'
+      ? new Set(roundDates.slice(0, 20))
+      : new Set(selectedDate ? [selectedDate] : []);
+  const selectedBoundaryDate = scope === 'last20'
+    ? roundDates.slice(0, 20).at(-1) ?? selectedDate
+    : scope === 'all'
+      ? null
+      : selectedDate;
+  const historicalShots = selectedBoundaryDate
+    ? courseShots.filter(shot => getShotDateKey(shot.date) < selectedBoundaryDate)
+    : [];
   const priorRoundDates = [...new Set(historicalShots.map(shot => getShotDateKey(shot.date)))]
     .sort((a, b) => b.localeCompare(a));
   const last5Dates = new Set(priorRoundDates.slice(0, 5));
 
   const selected = processShots(
-    courseShots.filter(shot => getShotDateKey(shot.date) === selectedRoundDate),
+    courseShots.filter(shot => selectedDates.has(getShotDateKey(shot.date))),
     clubs,
     distanceToTargetTolerance
   );
@@ -208,6 +228,8 @@ export function buildRoundReview(
     : null;
 
   return {
+    scope,
+    label: scope === 'all' ? 'All Rounds' : scope === 'last20' ? `Last ${Math.min(20, roundDates.length)} Rounds` : selectedDate,
     round: metrics(selected),
     last5: metrics(last5),
     recentThird: metrics(recentThird),

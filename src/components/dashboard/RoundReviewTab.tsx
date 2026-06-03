@@ -7,7 +7,7 @@ import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { formatPercent } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
-import { buildRoundReview, RoundReviewRow } from '@/lib/roundReview';
+import { buildRoundReview, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { ClubConfig, Shot } from '@/types/golf';
 
@@ -16,6 +16,7 @@ interface RoundReviewTabProps {
   clubs: ClubConfig[];
   distanceToTargetTolerance: number;
   roundDate: string;
+  scope?: RoundReviewScope;
 }
 
 const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
@@ -122,7 +123,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
   );
 }
 
-export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate }: RoundReviewTabProps) {
+export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round' }: RoundReviewTabProps) {
   const { gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
@@ -139,8 +140,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     gappingHcpTarget,
   }).shotToAssignment, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
   const review = useMemo(
-    () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments),
-    [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments]
+    () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope),
+    [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope]
   );
 
   if (review.round.shotCount === 0) {
@@ -170,7 +171,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label="Shot Quality" round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
+        <SummaryCard label={scope === 'round' ? 'Shot Quality' : `${review.label} Shot Quality`} round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
         <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.badMissPct} recentThird={review.recentThird.badMissPct} format={formatPercent} />
         <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.onTargetPct} recentThird={review.recentThird.onTargetPct} format={formatPercent} />
       </div>

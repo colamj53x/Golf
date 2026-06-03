@@ -79,4 +79,29 @@ describe('buildRoundReview', () => {
     expect(review.hasShotSequence).toBe(true);
     expect(review.greenDistanceRows.map(row => [row.key, row.avgShotsToGreen])).toEqual([['30-39', 2], ['0-9', 1]]);
   });
+
+  it('aggregates the last 20 rounds and compares against earlier rounds', () => {
+    const review = buildRoundReview([
+      shot('prior', '2026-05-10', 35, '20 Handicap'),
+      ...Array.from({ length: 21 }, (_, index) =>
+        shot(`round-${index}`, `2026-05-${String(11 + index).padStart(2, '0')}`, 35, index === 0 ? '20 Handicap' : 'Pro')
+      ),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31', undefined, 'last20');
+
+    expect(review.scope).toBe('last20');
+    expect(review.round.shotCount).toBe(20);
+    expect(review.last5.shotCount).toBe(2);
+  });
+
+  it('can aggregate every round without inventing prior comparisons', () => {
+    const review = buildRoundReview([
+      shot('one', '2026-05-30', 35, '20 Handicap'),
+      shot('two', '2026-05-31', 35, 'Pro'),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31', undefined, 'all');
+
+    expect(review.scope).toBe('all');
+    expect(review.round.shotCount).toBe(2);
+    expect(review.last5.shotCount).toBe(0);
+    expect(review.recentThird.shotCount).toBe(0);
+  });
 });
