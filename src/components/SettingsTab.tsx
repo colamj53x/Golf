@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Goal, Settings as SettingsIcon, Save, Pencil } from 'lucide-react';
+import { Goal, Settings as SettingsIcon, Save, Pencil, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -11,6 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS } from '@/types/practiceClubs';
+import {
+  saveShotClassificationRules,
+  shotClassificationRuleKey,
+  useShotClassificationRules,
+  type ShotClassificationRules,
+} from '@/lib/shotClassificationRules';
 import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 
 const SETTINGS_SECTIONS = [
@@ -25,6 +31,12 @@ const SETTINGS_SECTIONS = [
     title: 'Shot Options & Cues',
     description: 'Where shots appear and what cues they use.',
     icon: Goal,
+  },
+  {
+    href: '#settings-shot-classification',
+    title: 'Shot Classification Rules',
+    description: 'Distance-to-target cutoffs for Full and Half shots.',
+    icon: SlidersHorizontal,
   },
 ];
 
@@ -264,8 +276,116 @@ export function SettingsTab() {
         <ShotProfilesCard />
       </section>
 
+      <section id="settings-shot-classification" className="scroll-mt-6">
+        <ShotClassificationRulesCard />
+      </section>
+
     </div>
   );
+}
+
+function ShotClassificationRulesCard() {
+  const rules = useShotClassificationRules();
+  const [draft, setDraft] = useState<Record<string, string>>(() => rulesToDraft(rules));
+
+  useEffect(() => {
+    setDraft(rulesToDraft(rules));
+  }, [rules]);
+
+  const setRuleDraft = (clubId: string, shotType: string, value: string) => {
+    const key = shotClassificationRuleKey(clubId, shotType);
+    setDraft(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    const nextRules: ShotClassificationRules = {};
+    for (const [key, value] of Object.entries(draft)) {
+      const trimmed = value.trim();
+      if (!trimmed) continue;
+      const fullMinTarget = Number(trimmed);
+      if (!Number.isFinite(fullMinTarget) || fullMinTarget < 0) continue;
+      nextRules[key] = { fullMinTarget };
+    }
+    saveShotClassificationRules(nextRules);
+    toast.success('Shot classification rules saved');
+  };
+
+  const handleReset = () => {
+    setDraft(rulesToDraft(rules));
+    toast.info('Shot classification changes reverted');
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <SlidersHorizontal className="h-5 w-5" />
+            Shot Classification Rules
+          </CardTitle>
+          <CardDescription>
+            Classify on-course shots from distance to target. If a rule is set, Full means target distance is at least the cutoff; below it is Half.
+          </CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleReset}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} className="gap-2">
+            <Save className="h-4 w-4" />
+            Save
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Example: for 6 Iron / Normal, enter 120 to classify targets of 120m or longer as Full, and targets under 120m as Half.
+        </div>
+        <Accordion type="multiple" className="rounded-md border">
+          {PRACTICE_CLUBS.map(club => (
+            <AccordionItem key={club.id} value={club.id} className="px-4 last:border-b-0">
+              <AccordionTrigger className="hover:no-underline">
+                <span>{club.name}</span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {SHOT_TYPES.map(shot => {
+                    const key = shotClassificationRuleKey(club.id, shot.id);
+                    return (
+                      <div key={shot.id} className="rounded-md border bg-background p-3">
+                        <Label htmlFor={`classification-${key}`} className="text-sm font-medium">
+                          {shot.name}
+                        </Label>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Full &gt;=</span>
+                          <Input
+                            id={`classification-${key}`}
+                            type="number"
+                            min="0"
+                            inputMode="decimal"
+                            value={draft[key] ?? ''}
+                            onChange={(event) => setRuleDraft(club.id, shot.id, event.target.value)}
+                            className="h-8 w-24 text-sm"
+                            placeholder="-"
+                          />
+                          <span className="text-xs text-muted-foreground">m</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      </CardContent>
+    </Card>
+  );
+}
+
+function rulesToDraft(rules: ShotClassificationRules): Record<string, string> {
+  return Object.fromEntries(Object.entries(rules).map(([key, rule]) => [
+    key,
+    rule.fullMinTarget === null ? '' : String(rule.fullMinTarget),
+  ]));
 }
 
 export function ShotProfilesCard() {

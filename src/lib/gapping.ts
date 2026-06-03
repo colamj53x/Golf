@@ -1,6 +1,12 @@
 import type { ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
+import {
+  classifyPowerByTarget,
+  getShotClassificationRule,
+  loadShotClassificationRules,
+  type ShotClassificationRules,
+} from '@/lib/shotClassificationRules';
 import type { ProfileTarget, ShotProfile, ShotProfileMap, ShotProfileTargetValues } from '@/lib/shotProfiles';
 import { DEFAULT_CLUB_CONFIGS } from '@/types/golf';
 import type { Shot } from '@/types/golf';
@@ -789,12 +795,22 @@ function matchesProfileShot(
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
   shotCategoryOverrides: ShotCategoryOverrides,
+  shotClassificationRules: ShotClassificationRules,
 ): boolean {
   const override = shotCategoryOverrides[shot.id];
   if (override) return visibleProfileId(override.profileId) === profile.id;
 
   const savedFamily = shot.shotFamily.trim().toLowerCase();
   const savedEffort = shot.swingEffort.trim().toLowerCase();
+  const ruleShotType = savedFamily || profile.shotType;
+  const rulePower = classifyPowerByTarget(
+    getShotClassificationRule(shotClassificationRules, profile.clubId, ruleShotType),
+    shot.target,
+  );
+  if (rulePower) {
+    return visibleProfileId(`${profile.clubId}_${ruleShotType}_${rulePower}`) === profile.id;
+  }
+
   if (savedFamily) {
     const savedPower = savedEffort === 'full' ? 'full' : '9pm';
     return visibleProfileId(`${profile.clubId}_${savedFamily}_${savedPower}`) === profile.id;
@@ -832,6 +848,7 @@ function buildRow(
   profiles: ShotProfileMap,
   globalQualityCutoff: number,
   shotCategoryOverrides: ShotCategoryOverrides,
+  shotClassificationRules: ShotClassificationRules,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
   const fullTargetTotal = getFullShotTargetTotal(profile.clubId, profiles, practiceConfigs, courseShots);
@@ -879,6 +896,7 @@ function buildRow(
     practiceConfigs,
     shotsBySession,
     shotCategoryOverrides,
+    shotClassificationRules,
   ));
   const cleanedClubShots = withoutDistanceOutliers(clubShots);
   const shouldSplitByIntent = profile.targets.length > 1;
@@ -969,6 +987,7 @@ export function buildClubGappingRows({
   shotsBySession,
   gappingHcpTarget,
   shotCategoryOverrides,
+  shotClassificationRules = loadShotClassificationRules(),
 }: {
   profiles: ShotProfileMap;
   shots: Shot[];
@@ -978,6 +997,7 @@ export function buildClubGappingRows({
   shotsBySession: ShotsBySession;
   gappingHcpTarget: number;
   shotCategoryOverrides: ShotCategoryOverrides;
+  shotClassificationRules?: ShotClassificationRules;
 }): GappingRow[] {
   const contextShots = shots.filter((shot) => matchesShotContext(shot, shotContext));
   const profilesWithRangeSessions = { ...profiles };
@@ -998,8 +1018,10 @@ export function buildClubGappingRows({
   return Object.values(profilesWithRangeSessions)
     .filter((profile) => {
       const hasRangePractice = shotContext !== 'tee' && hasRangePracticeForProfile(profile, practiceSessions);
+      const hasClassificationRule = Boolean(getShotClassificationRule(shotClassificationRules, profile.clubId, profile.shotType))
+        && (profile.power === 'full' || profile.power === '9pm');
       if (shotContext === 'tee') return profile.enabled && profile.showOnCourse;
-      return (profile.enabled && profile.showOnCourse && (profile.power === 'full' || isVisibleShortBucket(profile))) || hasRangePractice;
+      return (profile.enabled && profile.showOnCourse && (profile.power === 'full' || isVisibleShortBucket(profile))) || hasRangePractice || hasClassificationRule;
     })
     .filter((profile) => shotContext === 'tee' || profile.clubId !== 'dr')
     .filter((profile) => !(['pw', 'gw', 'sw'].includes(profile.clubId) && profile.shotType === 'full'))
@@ -1015,6 +1037,7 @@ export function buildClubGappingRows({
       profiles,
       gappingHcpTarget,
       shotCategoryOverrides,
+      shotClassificationRules,
     )))
     .filter((row) => row.intentShotCount > 0 || (shotContext !== 'tee' && row.rangeShotCount > 0) || (shotContext !== 'tee' && isVisibleShortBucket(row.profile) && row.displayTotal !== null));
 }
@@ -1033,6 +1056,7 @@ export function buildCourseShotGappingAssignments({
   shotsBySession,
   gappingHcpTarget,
   shotCategoryOverrides = loadShotCategoryOverrides(),
+  shotClassificationRules = loadShotClassificationRules(),
 }: {
   profiles: ShotProfileMap;
   shots: Shot[];
@@ -1041,6 +1065,7 @@ export function buildCourseShotGappingAssignments({
   shotsBySession: ShotsBySession;
   gappingHcpTarget: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
+  shotClassificationRules?: ShotClassificationRules;
 }): {
   shotToAssignment: Map<string, CourseShotGappingAssignment>;
   options: Map<string, CourseShotGappingAssignment>;
@@ -1059,6 +1084,7 @@ export function buildCourseShotGappingAssignments({
       shotsBySession,
       gappingHcpTarget,
       shotCategoryOverrides,
+      shotClassificationRules,
     });
 
     for (const row of rows) {

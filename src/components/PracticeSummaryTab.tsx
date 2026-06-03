@@ -11,6 +11,7 @@ import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/prac
 import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { buildCourseShotGappingAssignments, visibleGappingConfigKey } from '@/lib/gapping';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
@@ -219,6 +220,7 @@ export function PracticeSummaryTab({
   const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
   const [sortKey, setSortKey] = useState<SortKey>('club');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
@@ -230,7 +232,8 @@ export function PracticeSummaryTab({
     practiceConfigs,
     shotsBySession,
     gappingHcpTarget,
-  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+    shotClassificationRules,
+  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
   const prioritiesByConfig = useMemo(() => new Map(
     buildPracticePriorities({
       shots,
@@ -239,8 +242,9 @@ export function PracticeSummaryTab({
       practiceConfigs,
       shotsBySession,
       gappingHcpTarget,
+      shotClassificationRules,
     }).map((priority) => [visibleGappingConfigKey(priority.configKey), priority]),
-  ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+  ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
 
   const courseSignals = useMemo(() => {
     const shotsByConfig = new Map<string, Shot[]>();

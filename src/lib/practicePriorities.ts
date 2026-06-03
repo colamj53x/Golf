@@ -2,6 +2,7 @@ import type { ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { calculateShotDamage, describeHandicapEquivalent, shotConfidence, shotQualityScore, type AnalysisConfidence } from '@/lib/analysisSynthesis';
 import { buildClubGappingRows, getShotLabel, loadShotCategoryOverrides, visibleProfileId, type ShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
+import type { ShotClassificationRules } from '@/lib/shotClassificationRules';
 import type { ShotProfile, ShotProfileMap } from '@/lib/shotProfiles';
 import type { Shot } from '@/types/golf';
 import type { ClubPracticeConfig, PracticeSession } from '@/types/practice';
@@ -34,6 +35,7 @@ interface BuildPracticePrioritiesInput {
   shotsBySession: ShotsBySession;
   gappingHcpTarget: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
+  shotClassificationRules?: ShotClassificationRules;
 }
 
 const round = (value: number, digits = 1) => Math.round(value * (10 ** digits)) / (10 ** digits);
@@ -84,6 +86,7 @@ export function buildPracticePriorities({
   shotsBySession,
   gappingHcpTarget,
   shotCategoryOverrides = loadShotCategoryOverrides(),
+  shotClassificationRules,
 }: BuildPracticePrioritiesInput): PracticePriority[] {
   const shotToConfig = new Map<string, string>();
   const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
@@ -98,6 +101,7 @@ export function buildPracticePriorities({
       shotsBySession,
       gappingHcpTarget,
       shotCategoryOverrides,
+      shotClassificationRules,
     });
     for (const row of rows) {
       const configKey = visibleProfileId(row.profile.id);

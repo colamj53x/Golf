@@ -9,6 +9,7 @@ const KEYS = [
   'drill_hidden_v1',
   'drill_overrides_v1',
   'golf_gapping_shot_category_overrides_v1',
+  'golf_shot_classification_rules_v1',
 ] as const;
 
 export async function hydrateDurableLocalSettings(userId: string): Promise<void> {

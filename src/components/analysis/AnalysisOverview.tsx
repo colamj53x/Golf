@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { buildPracticePriorities } from '@/lib/practicePriorities';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 
 const confidenceLabel: Record<AnalysisConfidence, string> = {
@@ -140,6 +141,7 @@ export function AnalysisOverview({
   const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
   const puttingSessions = useAnalysisPuttingSessions();
   const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const analysis = useMemo(() => buildAnalysisModel({
@@ -156,7 +158,8 @@ export function AnalysisOverview({
     practiceConfigs,
     shotsBySession,
     gappingHcpTarget,
-  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+    shotClassificationRules,
+  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
 
   if (golfLoading || practiceLoading) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;

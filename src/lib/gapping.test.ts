@@ -53,6 +53,18 @@ const shortProfile = (power: 'full' | '9pm'): ShotProfile => ({
   targets: ['green'],
 });
 
+const fullIronProfile = (power: 'full' | '9pm', enabled = true): ShotProfile => ({
+  ...driverProfile,
+  id: `6i_full_${power}`,
+  clubId: '6i',
+  shotType: 'full',
+  power,
+  enabled,
+  showInPractice: enabled,
+  showOnCourse: enabled,
+  targets: ['green'],
+});
+
 describe('buildClubGappingRows', () => {
   it('builds a tee gapping row from a normalized driver shot', () => {
     const rows = buildClubGappingRows({
@@ -137,5 +149,73 @@ describe('buildClubGappingRows', () => {
     });
 
     expect(rows.filter(row => row.shotCount > 0).map(row => row.profile.id)).toEqual(['sw_pitch_full']);
+  });
+
+  it('uses distance-to-target classification rules before saved upload effort', () => {
+    const full = fullIronProfile('full');
+    const half = fullIronProfile('9pm', false);
+    const shot: Shot = {
+      ...driverShot,
+      id: 'six-iron-half-rule',
+      club: '6I',
+      type: 'Approach',
+      shotFamily: 'full',
+      swingEffort: 'full',
+      targetIntent: 'green',
+      target: 110,
+      total: 112,
+      startLie: 'Fairway',
+      endLie: 'Green',
+    };
+    const rows = buildClubGappingRows({
+      profiles: { [full.id]: full, [half.id]: half },
+      shots: [shot],
+      shotContext: 'fairway',
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {},
+      shotClassificationRules: {
+        '6i_full': { fullMinTarget: 120 },
+      },
+    });
+
+    expect(rows.filter(row => row.shotCount > 0).map(row => row.profile.id)).toEqual(['6i_full_9pm']);
+  });
+
+  it('keeps per-shot overrides above distance-to-target classification rules', () => {
+    const full = fullIronProfile('full');
+    const half = fullIronProfile('9pm', false);
+    const shot: Shot = {
+      ...driverShot,
+      id: 'six-iron-manual-override',
+      club: '6I',
+      type: 'Approach',
+      shotFamily: 'full',
+      swingEffort: 'full',
+      targetIntent: 'green',
+      target: 110,
+      total: 112,
+      startLie: 'Fairway',
+      endLie: 'Green',
+    };
+    const rows = buildClubGappingRows({
+      profiles: { [full.id]: full, [half.id]: half },
+      shots: [shot],
+      shotContext: 'fairway',
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {
+        [shot.id]: { profileId: full.id, target: 'green' },
+      },
+      shotClassificationRules: {
+        '6i_full': { fullMinTarget: 120 },
+      },
+    });
+
+    expect(rows.filter(row => row.shotCount > 0).map(row => row.profile.id)).toEqual(['6i_full_full']);
   });
 });

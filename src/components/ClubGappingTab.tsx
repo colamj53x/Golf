@@ -37,6 +37,7 @@ import {
   type ShotSortKey,
 } from '@/lib/gapping';
 import { updateShotProfile, useShotProfiles } from '@/lib/shotProfiles';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { persistDurableLocalSettingsSoon } from '@/lib/durableLocalSettings';
 import { Shot } from '@/types/golf';
 
@@ -44,6 +45,7 @@ export function ClubGappingTab() {
   const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [shotContext, setShotContext] = useState<ShotContext>('tee');
@@ -76,8 +78,9 @@ export function ClubGappingTab() {
       shotsBySession,
       gappingHcpTarget,
       shotCategoryOverrides,
+      shotClassificationRules,
     });
-  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
+  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();

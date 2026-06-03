@@ -8,6 +8,7 @@ import { formatPercent } from '@/lib/golfCalculations';
 import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
 import { buildRoundReview, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { ClubConfig, Shot } from '@/types/golf';
 
@@ -142,6 +143,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const { gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
@@ -153,7 +155,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     practiceConfigs,
     shotsBySession,
     gappingHcpTarget,
-  }).shotToAssignment, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession]);
+    shotClassificationRules,
+  }).shotToAssignment, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
   const review = useMemo(
     () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope),
     [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope]

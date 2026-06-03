@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/lib/gapping';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
@@ -793,6 +794,7 @@ export function ClubSelectorTab({
   const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [targetDistance, setTargetDistance] = useState('120');
@@ -827,7 +829,8 @@ export function ClubSelectorTab({
     shotsBySession,
     gappingHcpTarget,
     shotCategoryOverrides,
-  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides]);
+    shotClassificationRules,
+  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules]);
   const recommendations = useMemo(
     () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry),
     [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry],
@@ -843,6 +846,7 @@ export function ClubSelectorTab({
       shotsBySession,
       gappingHcpTarget,
       shotCategoryOverrides,
+      shotClassificationRules,
     })
       .filter((row) => row.target === 'green')
       .filter((row) => isMatrixShotProfile(row.profile))
@@ -887,7 +891,7 @@ export function ClubSelectorTab({
     }
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
-  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, shotCategoryOverrides, matrixLieContext, matrixSort]);
+  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules, matrixLieContext, matrixSort]);
 
   if (isLoading) {
     return (
