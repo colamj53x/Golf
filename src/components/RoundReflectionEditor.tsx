@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,11 +19,12 @@ interface RoundReflectionEditorProps {
   description: string;
   value: RoundReflectionDraft;
   onChange: (next: RoundReflectionDraft) => void;
-  onSave?: () => Promise<void> | void;
+  onSave?: () => Promise<boolean | void> | boolean | void;
   isSaving?: boolean;
   saveLabel?: string;
   statusMessage?: string | null;
   statusTone?: 'default' | 'destructive' | 'muted';
+  collapsible?: boolean;
 }
 
 type ReflectionField = {
@@ -89,44 +91,100 @@ export function RoundReflectionEditor({
   saveLabel = 'Save Round Thoughts',
   statusMessage = null,
   statusTone = 'muted',
+  collapsible = false,
 }: RoundReflectionEditorProps) {
+  const [isEditing, setIsEditing] = useState(!collapsible);
+  const [valueBeforeEditing, setValueBeforeEditing] = useState(value);
   const statusClassName = statusTone === 'destructive'
     ? 'text-destructive'
     : statusTone === 'default'
       ? 'text-foreground'
       : 'text-muted-foreground';
+  const fieldsWithContent = FIELDS.filter((field) => value[field.key].trim().length > 0);
+
+  useEffect(() => {
+    setIsEditing(!collapsible);
+  }, [collapsible, title]);
+
+  const startEditing = () => {
+    setValueBeforeEditing(value);
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    onChange(valueBeforeEditing);
+    setIsEditing(false);
+  };
+
+  const save = async () => {
+    if (!onSave) {
+      setIsEditing(false);
+      return;
+    }
+    const didSave = await onSave();
+    if (didSave !== false) {
+      setIsEditing(false);
+    }
+  };
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+        {collapsible && !isEditing && (
+          <Button variant="outline" className="shrink-0" onClick={startEditing}>
+            {fieldsWithContent.length > 0 ? 'Edit thoughts' : 'Add thoughts'}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          {FIELDS.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <Label htmlFor={field.key}>{field.label}</Label>
-              <Textarea
-                id={field.key}
-                value={value[field.key]}
-                onChange={(event) => onChange({
-                  ...value,
-                  [field.key]: event.target.value,
-                })}
-                placeholder={field.placeholder}
-                className="min-h-[110px]"
-              />
-            </div>
-          ))}
-        </div>
+        {isEditing ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {FIELDS.map((field) => (
+              <div key={field.key} className="space-y-2">
+                <Label htmlFor={field.key}>{field.label}</Label>
+                <Textarea
+                  id={field.key}
+                  value={value[field.key]}
+                  onChange={(event) => onChange({
+                    ...value,
+                    [field.key]: event.target.value,
+                  })}
+                  placeholder={field.placeholder}
+                  className="min-h-[110px]"
+                />
+              </div>
+            ))}
+          </div>
+        ) : fieldsWithContent.length > 0 ? (
+          <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
+            {fieldsWithContent.map((field) => (
+              <section key={field.key} className="space-y-1">
+                <h4 className="text-sm font-semibold text-foreground">{field.label}</h4>
+                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                  {value[field.key]}
+                </p>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No round thoughts added yet.</p>
+        )}
         {statusMessage && (
           <p className={`text-sm ${statusClassName}`}>{statusMessage}</p>
         )}
-        {onSave && (
-          <div className="flex justify-end">
-            <Button onClick={() => void onSave()} disabled={isSaving}>
-              {isSaving ? 'Saving...' : saveLabel}
+        {(onSave || collapsible) && isEditing && (
+          <div className="flex justify-end gap-2">
+            {collapsible && (
+              <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                Cancel
+              </Button>
+            )}
+            <Button onClick={() => void save()} disabled={isSaving}>
+              {isSaving ? 'Saving...' : onSave ? saveLabel : 'Done'}
             </Button>
           </div>
         )}

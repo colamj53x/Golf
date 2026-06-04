@@ -352,7 +352,7 @@ export function DashboardTab({
     : [];
 
   const handleSaveRoundReflection = async () => {
-    if (!activeRoundDateKey) return;
+    if (!activeRoundDateKey) return false;
     setIsSavingRoundReflection(true);
     setRoundReflectionStatus('Saving round thoughts...');
     setRoundReflectionStatusTone('muted');
@@ -374,9 +374,11 @@ export function DashboardTab({
       }
       setRoundReflectionStatus('Round thoughts saved.');
       setRoundReflectionStatusTone('default');
+      return true;
     } catch {
       setRoundReflectionStatus('Save failed. Your text is still kept locally on this device, so you can retry without retyping.');
       setRoundReflectionStatusTone('destructive');
+      return false;
     } finally {
       setIsSavingRoundReflection(false);
     }
@@ -534,6 +536,7 @@ export function DashboardTab({
                 statusMessage={roundReflectionStatus}
                 statusTone={roundReflectionStatusTone}
                 saveLabel="Save Round Thoughts"
+                collapsible
               />
             )}
           </div>
