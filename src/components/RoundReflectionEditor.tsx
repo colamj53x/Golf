@@ -142,7 +142,7 @@ export function RoundReflectionEditor({
       </CardHeader>
       <CardContent className="space-y-4">
         {isEditing ? (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="mx-auto grid max-w-3xl gap-5">
             {FIELDS.map((field) => (
               <div key={field.key} className="space-y-2">
                 <Label htmlFor={field.key}>{field.label}</Label>
@@ -154,19 +154,21 @@ export function RoundReflectionEditor({
                     [field.key]: event.target.value,
                   })}
                   placeholder={field.placeholder}
-                  className="min-h-[110px]"
+                  className="min-h-[120px] leading-6"
                 />
               </div>
             ))}
           </div>
         ) : fieldsWithContent.length > 0 ? (
-          <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
+          <div className="mx-auto max-w-3xl space-y-6">
             {fieldsWithContent.map((field) => (
-              <section key={field.key} className="space-y-1">
+              <section key={field.key} className="space-y-2">
                 <h4 className="text-sm font-semibold text-foreground">{field.label}</h4>
-                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                  {value[field.key]}
-                </p>
+                {value[field.key].trim().split(/\n\s*\n/).map((paragraph, index) => (
+                  <p key={index} className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                    {paragraph}
+                  </p>
+                ))}
               </section>
             ))}
           </div>

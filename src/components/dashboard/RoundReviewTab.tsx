@@ -5,7 +5,6 @@ import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { formatPercent } from '@/lib/golfCalculations';
-import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
 import { buildRoundReview, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
@@ -20,35 +19,51 @@ interface RoundReviewTabProps {
   scope?: RoundReviewScope;
 }
 
-const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)} / 100`;
+const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)}`;
 type ClubSortKey = 'club' | 'shot-type' | 'power' | 'target' | 'shots' | 'quality' | 'bad-miss' | 'accuracy';
 
-function QualityValue({ value }: { value: number | null }) {
-  return (
-    <div>
-      <div className="font-semibold">{formatSqi(value)}</div>
-      <div className="text-xs text-primary">{describeHandicapEquivalent(value)}</div>
-    </div>
-  );
+function getRelativeValueClass(value: number | null, peers: Array<number | null>, higherIsBetter = true): string {
+  if (value === null) return 'text-muted-foreground';
+  const available = peers.filter((peer): peer is number => peer !== null);
+  if (available.length < 2 || available.every(peer => peer === available[0])) return 'text-foreground';
+  const best = higherIsBetter ? Math.max(...available) : Math.min(...available);
+  const worst = higherIsBetter ? Math.min(...available) : Math.max(...available);
+  if (value === best) return 'text-green-600 dark:text-green-400';
+  if (value === worst) return 'text-red-600 dark:text-red-400';
+  return 'text-amber-600 dark:text-amber-400';
 }
 
-function SummaryCard({ label, round, last5, recentThird, format }: {
+function getAbsoluteQualityClass(value: number | null): string {
+  if (value === null) return 'text-muted-foreground';
+  if (value >= 80) return 'text-green-600 dark:text-green-400';
+  if (value >= 60) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
+function QualityValue({ value, peers }: { value: number | null; peers?: Array<number | null> }) {
+  return <span className={`font-semibold ${peers ? getRelativeValueClass(value, peers) : getAbsoluteQualityClass(value)}`}>{formatSqi(value)}</span>;
+}
+
+function SummaryCard({ label, round, last5, recentThird, format, higherIsBetter = true }: {
   label: string;
   round: number | null;
   last5: number | null;
   recentThird: number | null;
   format: (value: number | null) => string;
+  higherIsBetter?: boolean;
 }) {
+  const peers = [round, last5, recentThird];
+  const valueClass = (value: number | null) => getRelativeValueClass(value, peers, higherIsBetter);
   return (
     <Card>
       <CardContent className="space-y-3 pt-4">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-2xl font-bold">{format(round)}</p>
+          <p className={`text-2xl font-bold ${valueClass(round)}`}>{format(round)}</p>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-md border bg-muted/40 p-2"><div className="text-muted-foreground">Last 5 prior rounds</div><div className="mt-1 font-semibold">{format(last5)}</div></div>
-          <div className="rounded-md border bg-muted/40 p-2"><div className="text-muted-foreground">Prior recent 1/3</div><div className="mt-1 font-semibold">{format(recentThird)}</div></div>
+          <div className="rounded-md border bg-muted/40 p-2"><div className="text-muted-foreground">Last 5 prior rounds</div><div className={`mt-1 font-semibold ${valueClass(last5)}`}>{format(last5)}</div></div>
+          <div className="rounded-md border bg-muted/40 p-2"><div className="text-muted-foreground">Prior recent 1/3</div><div className={`mt-1 font-semibold ${valueClass(recentThird)}`}>{format(recentThird)}</div></div>
         </div>
       </CardContent>
     </Card>
@@ -107,14 +122,15 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
               </tr>
             </thead>
             <tbody>
-              {rows.map(row => (
-                <tr key={row.key}>
+              {rows.map(row => {
+                const qualityPeers = simple ? undefined : [row.round.shotQualityIndex, row.last5.shotQualityIndex, row.recentThird.shotQualityIndex];
+                return <tr key={row.key}>
                   {clubTable ? <><td className="font-medium">{row.clubLabel}</td><td>{row.shotTypeLabel}</td><td>{row.powerLabel}</td><td>{row.targetLabel}</td></> : <td className="font-medium">{row.label}</td>}
                   <td>{row.round.shotCount}</td>
                   {lieTable && <td>{formatPercent(row.shareOfTotalPct ?? null)}</td>}
-                  <td><QualityValue value={row.round.shotQualityIndex} /></td>
-                  {!simple && <td><QualityValue value={row.last5.shotQualityIndex} /></td>}
-                  {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} /></td>}
+                  <td><QualityValue value={row.round.shotQualityIndex} peers={qualityPeers} /></td>
+                  {!simple && <td><QualityValue value={row.last5.shotQualityIndex} peers={qualityPeers} /></td>}
+                  {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} peers={qualityPeers} /></td>}
                   <td>{formatPercent(row.round.badMissPct)}</td>
                   <td>{formatPercent(row.round.onTargetPct)}</td>
                   {greenDistance && (
@@ -130,7 +146,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
                   {greenDistance && <td>{formatPercent(row.round.greensHitRawPct)}</td>}
                   {greenDistance && <td>{row.avgShotsToGreen === null ? '-' : row.avgShotsToGreen.toFixed(1)}</td>}
                 </tr>
-              ))}
+              })}
             </tbody>
           </table>
         </div>
@@ -190,8 +206,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard label={scope === 'round' ? 'Shot Quality' : `${review.label} Shot Quality`} round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
-        <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.badMissPct} recentThird={review.recentThird.badMissPct} format={formatPercent} />
-        <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.onTargetPct} recentThird={review.recentThird.onTargetPct} format={formatPercent} />
+        <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.shotCount ? review.last5.badMissPct : null} recentThird={review.recentThird.shotCount ? review.recentThird.badMissPct : null} format={formatPercent} higherIsBetter={false} />
+        <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.shotCount ? review.last5.onTargetPct : null} recentThird={review.recentThird.shotCount ? review.recentThird.onTargetPct : null} format={formatPercent} />
       </div>
 
       <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, Power, and Target classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
