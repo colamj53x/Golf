@@ -83,6 +83,7 @@ export function DashboardTab({
   const [roundReflectionStatus, setRoundReflectionStatus] = useState<string | null>(null);
   const [roundReflectionStatusTone, setRoundReflectionStatusTone] = useState<'default' | 'destructive' | 'muted'>('muted');
   const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
+  const [roundThoughtsEditRequest, setRoundThoughtsEditRequest] = useState(0);
   const userId = user?.id ?? null;
   const roundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
@@ -506,8 +507,13 @@ export function DashboardTab({
               roundDate={activeRoundDateKey ?? ''}
               scope={roundReviewScope}
               thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
+              onEditThoughts={() => {
+                setRoundThoughtsEditRequest(request => request + 1);
+                requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}
             />
             {activeRoundDateKey && roundReviewScope === 'round' && (
+              <div id="round-thoughts-editor" className="scroll-mt-6">
               <RoundReflectionEditor
                 title={`Round Thoughts · ${activeRoundDateKey}`}
                 description="Capture what actually happened in the round so future training and feedback can use both the numbers and your own notes."
@@ -538,7 +544,9 @@ export function DashboardTab({
                 statusTone={roundReflectionStatusTone}
                 saveLabel="Save Round Thoughts"
                 collapsible
+                editRequestKey={roundThoughtsEditRequest}
               />
+              </div>
             )}
           </div>
         </TabsContent>}

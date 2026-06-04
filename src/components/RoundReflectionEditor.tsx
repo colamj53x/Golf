@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +25,7 @@ interface RoundReflectionEditorProps {
   statusMessage?: string | null;
   statusTone?: 'default' | 'destructive' | 'muted';
   collapsible?: boolean;
+  editRequestKey?: number;
 }
 
 type ReflectionField = {
@@ -92,9 +93,11 @@ export function RoundReflectionEditor({
   statusMessage = null,
   statusTone = 'muted',
   collapsible = false,
+  editRequestKey = 0,
 }: RoundReflectionEditorProps) {
   const [isEditing, setIsEditing] = useState(!collapsible);
   const [valueBeforeEditing, setValueBeforeEditing] = useState(value);
+  const latestValue = useRef(value);
   const statusClassName = statusTone === 'destructive'
     ? 'text-destructive'
     : statusTone === 'default'
@@ -105,6 +108,17 @@ export function RoundReflectionEditor({
   useEffect(() => {
     setIsEditing(!collapsible);
   }, [collapsible, title]);
+
+  useEffect(() => {
+    latestValue.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    if (editRequestKey > 0) {
+      setValueBeforeEditing(latestValue.current);
+      setIsEditing(true);
+    }
+  }, [editRequestKey]);
 
   const startEditing = () => {
     setValueBeforeEditing(value);
