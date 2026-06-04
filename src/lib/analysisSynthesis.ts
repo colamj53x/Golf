@@ -87,8 +87,10 @@ export interface AnalysisModel {
   rounds: number;
   confidence: AnalysisConfidence;
   badMissPct: number;
+  baselineBadMissPct: number;
   scoringDamage: number;
   damagePerRound: number;
+  baselineDamagePerRound: number;
   diagnosis: string;
   topLeak: string;
   priorities: PriorityInsight[];
@@ -104,6 +106,7 @@ export interface AnalysisModel {
 
 interface AnalysisInput {
   shots: Shot[];
+  baselineShots?: Shot[];
   clubs: ClubConfig[];
   roundReflections: RoundReflection[];
   practiceSessions: PracticeSession[];
@@ -256,19 +259,26 @@ function clubRecommendation(clubName: string, direction: string, distance: strin
   return 'Maintain this club and monitor the next sample.';
 }
 
-function buildClubInsights(shots: Shot[], clubs: ClubConfig[], rounds: number): ClubInsight[] {
+function buildClubInsights(shots: Shot[], clubs: ClubConfig[], rounds: number, baselineShots: Shot[] = shots): ClubInsight[] {
   const grouped = new Map<string, Shot[]>();
+  const baselineGrouped = new Map<string, Shot[]>();
   shots.forEach((shot) => {
     const clubId = clubIdForShot(shot, clubs);
     grouped.set(clubId, [...(grouped.get(clubId) || []), shot]);
+  });
+  baselineShots.forEach((shot) => {
+    const clubId = clubIdForShot(shot, clubs);
+    baselineGrouped.set(clubId, [...(baselineGrouped.get(clubId) || []), shot]);
   });
 
   return [...grouped.entries()].map(([clubId, clubShots]) => {
     const club = clubs.find((item) => item.id === clubId);
     const sorted = [...clubShots].sort((a, b) => b.date.getTime() - a.date.getTime());
     const scores = sorted.map((shot) => shotQualityScore(shot.shotQuality)).filter((score): score is number => score !== null);
-    const recentScores = scores.slice(0, 20);
-    const baselineSqi = average(scores);
+    const recentScores = scores;
+    const baselineSqi = average((baselineGrouped.get(clubId) ?? clubShots)
+      .map((shot) => shotQualityScore(shot.shotQuality))
+      .filter((score): score is number => score !== null));
     const recentSqi = average(recentScores);
     const config = club || { acceptableSideBand: 8, acceptableDistanceBand: 10 };
     const left = clubShots.filter((shot) => shot.side < -config.acceptableSideBand).length;
@@ -472,6 +482,7 @@ function trendText(trend: AnalysisTrend): string {
 
 export function buildAnalysisModel({
   shots,
+  baselineShots = shots,
   clubs,
   roundReflections,
   practiceSessions,
@@ -479,16 +490,19 @@ export function buildAnalysisModel({
 }: AnalysisInput): AnalysisModel {
   const sorted = [...shots].sort((a, b) => b.date.getTime() - a.date.getTime());
   const scores = sorted.map((shot) => shotQualityScore(shot.shotQuality)).filter((score): score is number => score !== null);
-  const currentScores = scores.slice(0, 50);
+  const currentScores = scores;
   const sqi = average(currentScores);
-  const baselineSqi = average(scores);
+  const baselineSqi = average(baselineShots.map((shot) => shotQualityScore(shot.shotQuality)).filter((score): score is number => score !== null));
   const change = sqi === null || baselineSqi === null ? null : round(sqi - baselineSqi);
   const { chronologicalSqi, qualitySqi, roundScores } = buildSqiPerspectives(shots);
   const rounds = new Set(shots.map(roundDateKey)).size;
+  const baselineRounds = new Set(baselineShots.map(roundDateKey)).size;
   const confidence = roundConfidence(rounds);
   const damage = shots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0);
+  const baselineDamage = baselineShots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0);
   const badMisses = shots.filter((shot) => calculateShotDamage(shot) >= 1).length;
-  const clubInsights = buildClubInsights(shots, clubs, rounds);
+  const baselineBadMisses = baselineShots.filter((shot) => calculateShotDamage(shot) >= 1).length;
+  const clubInsights = buildClubInsights(shots, clubs, rounds, baselineShots);
   const priorities = [...clubInsights]
     .filter((club) => club.shots >= 8)
     .sort((a, b) => (
@@ -538,8 +552,10 @@ export function buildAnalysisModel({
     rounds,
     confidence,
     badMissPct: shots.length ? pct(badMisses / shots.length) : 0,
+    baselineBadMissPct: baselineShots.length ? pct(baselineBadMisses / baselineShots.length) : 0,
     scoringDamage: Math.round(damage * 10) / 10,
     damagePerRound: rounds ? Math.round((damage / rounds) * 10) / 10 : 0,
+    baselineDamagePerRound: baselineRounds ? Math.round((baselineDamage / baselineRounds) * 10) / 10 : 0,
     diagnosis,
     topLeak: top ? `${top.clubName}: ${top.direction.toLowerCase()} / ${top.distance.toLowerCase()}` : 'More data needed',
     priorities,

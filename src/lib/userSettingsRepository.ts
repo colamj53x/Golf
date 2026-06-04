@@ -14,6 +14,7 @@ export interface GolfUserSettings {
   practiceDistanceTolerancePct: number;
   practiceBallFlightTolerancePct: number;
   practiceOtherTolerancePct: number;
+  todayRecentShotCount: number;
 }
 
 export async function loadGolfUserSettings(userId: string): Promise<GolfUserSettings | null> {
@@ -62,5 +63,6 @@ export function parseGolfUserSettings(
     practiceDistanceTolerancePct: numberOr(value.practiceDistanceTolerancePct, fallback.practiceDistanceTolerancePct),
     practiceBallFlightTolerancePct: numberOr(value.practiceBallFlightTolerancePct, fallback.practiceBallFlightTolerancePct),
     practiceOtherTolerancePct: numberOr(value.practiceOtherTolerancePct, fallback.practiceOtherTolerancePct),
+    todayRecentShotCount: numberOr(value.todayRecentShotCount, fallback.todayRecentShotCount),
   };
 }

@@ -27,6 +27,21 @@ export interface PracticePriority {
   evidence: string;
 }
 
+export interface DistancePriority {
+  distanceKey: string;
+  distanceLabel: string;
+  courseShotCount: number;
+  reliancePerRound: number;
+  sqi: number | null;
+  badMissPct: number;
+  damagePerRound: number;
+  courseImpactScore: number;
+  confidence: AnalysisConfidence;
+  topClubShot: string;
+  recommendation: string;
+  evidence: string;
+}
+
 interface BuildPracticePrioritiesInput {
   shots: Shot[];
   profiles: ShotProfileMap;
@@ -36,6 +51,7 @@ interface BuildPracticePrioritiesInput {
   gappingHcpTarget: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
+  perConfigShotLimit?: number | null;
 }
 
 const round = (value: number, digits = 1) => Math.round(value * (10 ** digits)) / (10 ** digits);
@@ -87,6 +103,7 @@ export function buildPracticePriorities({
   gappingHcpTarget,
   shotCategoryOverrides = loadShotCategoryOverrides(),
   shotClassificationRules,
+  perConfigShotLimit = 20,
 }: BuildPracticePrioritiesInput): PracticePriority[] {
   const shotToConfig = new Map<string, string>();
   const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
@@ -121,7 +138,8 @@ export function buildPracticePriorities({
 
   return [...grouped.entries()].map(([configKey, configShots]) => {
     const profile = profileForKey(configKey, profiles);
-    const recent = [...configShots].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 20);
+    const sortedConfigShots = [...configShots].sort((a, b) => b.date.getTime() - a.date.getTime());
+    const recent = perConfigShotLimit === null ? sortedConfigShots : sortedConfigShots.slice(0, perConfigShotLimit);
     const qualityScores = recent.map((shot) => shotQualityScore(shot.shotQuality)).filter((value): value is number => value !== null);
     const sqi = mean(qualityScores);
     const badMisses = recent.filter((shot) => calculateShotDamage(shot) >= 1).length;
@@ -152,6 +170,99 @@ export function buildPracticePriorities({
       ...base,
       recommendation: recommendationFor(base),
       evidence: `${base.reliancePerRound.toFixed(1)} uses/round · SQI ${base.sqi ?? '-'} (${base.handicapEquivalent}) · ${base.badMissPct}% costly misses`,
+    };
+  }).sort((a, b) => b.courseImpactScore - a.courseImpactScore);
+}
+
+function distanceBand(target: number): { key: string; label: string } | null {
+  if (!Number.isFinite(target) || target <= 0 || target > 150) return null;
+  if (target > 100) return { key: '100-150', label: '100–150m' };
+  const upper = Math.ceil(target / 10) * 10;
+  const lower = Math.max(0, upper - 10);
+  return { key: `${lower}-${upper}`, label: `${lower}–${upper}m` };
+}
+
+export function buildDistancePriorities({
+  shots,
+  profiles,
+  practiceSessions,
+  practiceConfigs,
+  shotsBySession,
+  gappingHcpTarget,
+  shotCategoryOverrides = loadShotCategoryOverrides(),
+  shotClassificationRules,
+}: BuildPracticePrioritiesInput): DistancePriority[] {
+  const shotToConfig = new Map<string, string>();
+  const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
+
+  for (const shotContext of contexts) {
+    const rows = buildClubGappingRows({
+      profiles,
+      shots,
+      shotContext,
+      practiceSessions,
+      practiceConfigs,
+      shotsBySession,
+      gappingHcpTarget,
+      shotCategoryOverrides,
+      shotClassificationRules,
+    });
+    for (const row of rows) {
+      const configKey = visibleProfileId(row.profile.id);
+      for (const shot of row.sample) {
+        if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
+      }
+    }
+  }
+
+  const grouped = new Map<string, { band: { key: string; label: string }; shots: Shot[] }>();
+  for (const shot of shots) {
+    const band = distanceBand(shot.target);
+    if (!band) continue;
+    const current = grouped.get(band.key) ?? { band, shots: [] };
+    current.shots.push(shot);
+    grouped.set(band.key, current);
+  }
+
+  const roundCount = new Set(shots.map((shot) => getShotDateKey(shot.date))).size;
+  return [...grouped.values()].map(({ band, shots: bandShots }) => {
+    const qualityScores = bandShots.map((shot) => shotQualityScore(shot.shotQuality)).filter((value): value is number => value !== null);
+    const sqi = mean(qualityScores);
+    const badMisses = bandShots.filter((shot) => calculateShotDamage(shot) >= 1).length;
+    const totalDamage = bandShots.reduce((sum, shot) => sum + calculateShotDamage(shot), 0);
+    const reliancePerRound = roundCount ? bandShots.length / roundCount : 0;
+    const badMissPct = bandShots.length ? (badMisses / bandShots.length) * 100 : 0;
+    const damagePerShot = bandShots.length ? totalDamage / bandShots.length : 0;
+    const qualityWeakness = sqi === null ? 0.25 : clamp((90 - sqi) / 65);
+    const missCost = clamp((badMissPct / 100) + (damagePerShot / 2), 0, 1.5);
+    const courseImpactScore = reliancePerRound * (qualityWeakness + missCost);
+
+    const optionGroups = new Map<string, Shot[]>();
+    for (const shot of bandShots) {
+      const configKey = shotToConfig.get(shot.id) ?? fallbackConfigKey(shot) ?? getClubConfigId(shot.club);
+      optionGroups.set(configKey, [...(optionGroups.get(configKey) ?? []), shot]);
+    }
+    const [topConfigKey, topOptionShots] = [...optionGroups.entries()].sort((a, b) => {
+      const optionImpact = (entry: [string, Shot[]]) => entry[1].reduce((sum, shot) => sum + calculateShotDamage(shot) + (shotQualityScore(shot.shotQuality) === null ? 0 : (90 - (shotQualityScore(shot.shotQuality) ?? 90)) / 65), 0);
+      return optionImpact(b) - optionImpact(a);
+    })[0] ?? ['', []];
+    const topProfile = profileForKey(topConfigKey, profiles);
+    const topClubName = PRACTICE_CLUBS.find((club) => club.id === topProfile.clubId)?.name ?? topOptionShots[0]?.club ?? topProfile.clubId;
+    const topClubShot = `${topClubName} · ${getShotLabel(topProfile)}`;
+
+    return {
+      distanceKey: band.key,
+      distanceLabel: band.label,
+      courseShotCount: bandShots.length,
+      reliancePerRound: round(reliancePerRound),
+      sqi: sqi === null ? null : Math.round(sqi),
+      badMissPct: Math.round(badMissPct),
+      damagePerRound: round(roundCount ? totalDamage / roundCount : 0),
+      courseImpactScore: round(courseImpactScore, 3),
+      confidence: shotConfidence(bandShots.length),
+      topClubShot,
+      recommendation: `Practise ${topClubShot.toLowerCase()} for ${band.label} approaches, prioritising playable contact and distance control.`,
+      evidence: `${bandShots.length} shots · ${round(reliancePerRound)} uses/round · SQI ${sqi === null ? '-' : Math.round(sqi)} · ${Math.round(badMissPct)}% costly misses`,
     };
   }).sort((a, b) => b.courseImpactScore - a.courseImpactScore);
 }

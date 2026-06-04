@@ -38,6 +38,8 @@ interface GolfDataContextType {
   setPracticeBallFlightTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   practiceOtherTolerancePct: number;
   setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
+  todayRecentShotCount: number;
+  setTodayRecentShotCount: React.Dispatch<React.SetStateAction<number>>;
   roundReflections: RoundReflection[];
   roundReflectionsAvailable: boolean;
   upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
@@ -128,6 +130,11 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('golf-practice-other-tolerance-pct');
     return saved ? parseFloat(saved) : 10;
   });
+
+  const [todayRecentShotCount, setTodayRecentShotCount] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-today-recent-shot-count');
+    return saved ? parseFloat(saved) : 100;
+  });
   
   const [shots, setShots] = useState<Shot[]>([]);
   const [roundReflections, setRoundReflections] = useState<RoundReflection[]>([]);
@@ -166,6 +173,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('golf-practice-other-tolerance-pct', practiceOtherTolerancePct.toString());
   }, [practiceOtherTolerancePct]);
 
+  useEffect(() => {
+    localStorage.setItem('golf-today-recent-shot-count', todayRecentShotCount.toString());
+  }, [todayRecentShotCount]);
+
   const currentSettings: GolfUserSettings = {
     clubs,
     distanceToTargetTolerance,
@@ -175,6 +186,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceDistanceTolerancePct,
     practiceBallFlightTolerancePct,
     practiceOtherTolerancePct,
+    todayRecentShotCount,
   };
   const currentSettingsRef = useRef(currentSettings);
   currentSettingsRef.current = currentSettings;
@@ -200,6 +212,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           setPracticeDistanceTolerancePct(next.practiceDistanceTolerancePct);
           setPracticeBallFlightTolerancePct(next.practiceBallFlightTolerancePct);
           setPracticeOtherTolerancePct(next.practiceOtherTolerancePct);
+          setTodayRecentShotCount(next.todayRecentShotCount);
         } else {
           await saveGolfUserSettings(user.id, currentSettingsRef.current);
         }
@@ -238,6 +251,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceDistanceTolerancePct,
     practiceOtherTolerancePct,
     shotPickerDistanceTolerancePct,
+    todayRecentShotCount,
     user,
   ]);
 
@@ -512,6 +526,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setPracticeBallFlightTolerancePct,
       practiceOtherTolerancePct,
       setPracticeOtherTolerancePct,
+      todayRecentShotCount,
+      setTodayRecentShotCount,
       roundReflections,
       roundReflectionsAvailable,
       upsertRoundReflection,

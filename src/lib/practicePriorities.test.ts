@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPracticePriorities } from '@/lib/practicePriorities';
+import { buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
 import type { ShotProfile } from '@/lib/shotProfiles';
 import type { Shot } from '@/types/golf';
 
@@ -85,5 +85,51 @@ describe('practice priorities', () => {
       reliancePerRound: 8,
     });
     expect(priorities.find((priority) => priority.configKey === '5w_full_full')?.reliancePerRound).toBe(0.5);
+  });
+
+  it('ranks distance bands and names the club and shot option to practise', () => {
+    const shots = [
+      ...Array.from({ length: 6 }, (_, index) => shot({
+        id: `pw-${index}`,
+        club: 'PW',
+        type: 'Approach',
+        targetIntent: 'green',
+        target: 95,
+        total: 70,
+        startLie: 'Fairway',
+        endLie: 'Trees / recovery',
+        shotQuality: '25 Handicap',
+      })),
+      shot({
+        id: 'gw-good',
+        club: 'GW',
+        type: 'Approach',
+        targetIntent: 'green',
+        target: 75,
+        total: 75,
+        startLie: 'Fairway',
+        endLie: 'Green',
+        shotQuality: '5 Handicap',
+      }),
+    ];
+    const priorities = buildDistancePriorities({
+      shots,
+      profiles: {
+        pw_full_full: profile('pw_full_full', 'pw', ['green']),
+        gw_full_full: profile('gw_full_full', 'gw', ['green']),
+      },
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {},
+    });
+
+    expect(priorities[0]).toMatchObject({
+      distanceKey: '90-100',
+      distanceLabel: '90–100m',
+    });
+    expect(priorities[0].topClubShot).toContain('Pitching Wedge');
+    expect(priorities[0].recommendation).toContain('90–100m');
   });
 });

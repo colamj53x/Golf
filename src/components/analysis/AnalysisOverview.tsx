@@ -9,6 +9,7 @@ import {
   CircleDot,
   Gauge,
   Layers3,
+  Ruler,
 } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -26,7 +27,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { buildPracticePriorities } from '@/lib/practicePriorities';
+import { buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 
@@ -137,29 +138,44 @@ export function AnalysisOverview({
   onOpenLatestRound?: () => void;
   onOpenPractice?: () => void;
 } = {}) {
-  const { shots, clubs, roundReflections, gappingHcpTarget, isLoading: golfLoading } = useGolfData();
+  const { shots, clubs, roundReflections, gappingHcpTarget, todayRecentShotCount, isLoading: golfLoading } = useGolfData();
   const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
   const puttingSessions = useAnalysisPuttingSessions();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const recentShots = useMemo(
+    () => [...shots].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, todayRecentShotCount),
+    [shots, todayRecentShotCount],
+  );
   const analysis = useMemo(() => buildAnalysisModel({
-    shots,
+    shots: recentShots,
+    baselineShots: shots,
     clubs,
     roundReflections,
     practiceSessions,
     puttingSessions,
-  }), [clubs, practiceSessions, puttingSessions, roundReflections, shots]);
+  }), [clubs, practiceSessions, puttingSessions, recentShots, roundReflections, shots]);
   const priorities = useMemo(() => buildPracticePriorities({
-    shots,
+    shots: recentShots,
     profiles,
     practiceSessions,
     practiceConfigs,
     shotsBySession,
     gappingHcpTarget,
     shotClassificationRules,
-  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+    perConfigShotLimit: null,
+  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
+  const distancePriorities = useMemo(() => buildDistancePriorities({
+    shots: recentShots,
+    profiles,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    shotClassificationRules,
+  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
 
   if (golfLoading || practiceLoading) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;
@@ -180,6 +196,8 @@ export function AnalysisOverview({
               <span>{analysis.shots} course shots</span>
               <span>·</span>
               <span>{analysis.rounds} rounds</span>
+              <span>·</span>
+              <span>Latest {recentShots.length} of {todayRecentShotCount} configured shots</span>
             </div>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 px-6 py-4 text-center backdrop-blur-sm">
@@ -192,16 +210,16 @@ export function AnalysisOverview({
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Gauge} label="SQI" value={analysis.sqi === null ? '-' : `${analysis.sqi} / 100`} detail={`${analysis.handicapEquivalent}; ${analysis.change !== null && analysis.change >= 0 ? '+' : ''}${analysis.change ?? '-'} vs baseline`} tone="good" />
-        <MetricCard icon={AlertTriangle} label="Costly miss" value={`${analysis.badMissPct}%`} detail="Misses likely to cost position or a shot" tone="warn" />
-        <MetricCard icon={CircleDot} label="Damage" value={`${analysis.damagePerRound}`} detail={`${analysis.scoringDamage} estimated shots across captured rounds`} tone="warn" />
+        <MetricCard icon={AlertTriangle} label="Costly miss" value={`${analysis.badMissPct}%`} detail={`All-time baseline ${analysis.baselineBadMissPct}%`} tone="warn" />
+        <MetricCard icon={CircleDot} label="Damage / round" value={`${analysis.damagePerRound}`} detail={`All-time baseline ${analysis.baselineDamagePerRound}; ${analysis.scoringDamage} damage in recent sample`} tone="warn" />
         <MetricCard icon={Activity} label="Current form" value={trendLabel[analysis.trend]} detail="Recent 25% of rounds compared with early 25%" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Top 3 priorities</CardTitle>
-            <CardDescription>Focus the next practice block on the score-risk areas with the strongest evidence.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Top 3 club / shot priorities</CardTitle>
+            <CardDescription>Focus the next practice block on score-risk areas from the latest {recentShots.length} shots.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
             {priorities.length === 0 && <EmptyCard>Capture more course shots to establish ranked priorities.</EmptyCard>}
@@ -228,6 +246,25 @@ export function AnalysisOverview({
           </CardContent>
         </Card>
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Ruler className="h-5 w-5 text-primary" /> Top 3 distance priorities</CardTitle>
+          <CardDescription>Approach-distance risks within 150m, ranked from the latest {recentShots.length} shots and linked to the club / shot option to practise.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3">
+          {distancePriorities.length === 0 && <EmptyCard>Capture more shots within 150m to establish ranked distance priorities.</EmptyCard>}
+          {distancePriorities.map((priority, index) => (
+            <div key={priority.distanceKey} className="rounded-lg border p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priority {index + 1}</div>
+              <div className="mt-1 font-bold">{priority.distanceLabel}</div>
+              <div className="mt-1 text-xs font-medium text-primary">{priority.topClubShot}</div>
+              <p className="mt-2 text-sm">{priority.recommendation}</p>
+              <div className="mt-2 text-xs text-muted-foreground">{priority.evidence}</div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -137,4 +137,29 @@ describe('analysis synthesis', () => {
     expect(model.qualitySqi.map((segment) => segment.sqi)).toEqual([53, 70, 85]);
     expect(model.qualitySqi.map((segment) => segment.rounds)).toEqual([2, 4, 2]);
   });
+
+  it('keeps all-time costly miss and damage baselines beside a clean recent sample', () => {
+    const recent = shot({
+      id: 'recent',
+      date: new Date('2026-05-31T10:00:00'),
+      endLie: 'Fairway',
+    });
+    const oldPenalty = shot({
+      id: 'old-penalty',
+      date: new Date('2026-05-01T10:00:00'),
+      endLie: 'Penalty',
+    });
+    const model = buildAnalysisModel({
+      shots: [recent],
+      baselineShots: [recent, oldPenalty],
+      clubs: DEFAULT_CLUB_CONFIGS,
+      practiceSessions: [],
+      roundReflections: [],
+    });
+
+    expect(model.badMissPct).toBe(0);
+    expect(model.baselineBadMissPct).toBe(50);
+    expect(model.damagePerRound).toBe(0);
+    expect(model.baselineDamagePerRound).toBe(1);
+  });
 });

@@ -62,6 +62,8 @@ export function SettingsTab() {
     setPracticeBallFlightTolerancePct,
     practiceOtherTolerancePct,
     setPracticeOtherTolerancePct,
+    todayRecentShotCount,
+    setTodayRecentShotCount,
   } = useGolfData();
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
@@ -70,6 +72,7 @@ export function SettingsTab() {
   const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
   const [editingPracticeBallFlightTolerancePct, setEditingPracticeBallFlightTolerancePct] = useState(practiceBallFlightTolerancePct);
   const [editingPracticeOtherTolerancePct, setEditingPracticeOtherTolerancePct] = useState(practiceOtherTolerancePct);
+  const [editingTodayRecentShotCount, setEditingTodayRecentShotCount] = useState(todayRecentShotCount);
   const [isEditing, setIsEditing] = useState(false);
 
   const handleSave = () => {
@@ -80,6 +83,7 @@ export function SettingsTab() {
     setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
     setPracticeBallFlightTolerancePct(editingPracticeBallFlightTolerancePct);
     setPracticeOtherTolerancePct(editingPracticeOtherTolerancePct);
+    setTodayRecentShotCount(editingTodayRecentShotCount);
     setIsEditing(false);
     toast.success('Settings saved successfully');
   };
@@ -92,6 +96,7 @@ export function SettingsTab() {
     setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
     setEditingPracticeBallFlightTolerancePct(practiceBallFlightTolerancePct);
     setEditingPracticeOtherTolerancePct(practiceOtherTolerancePct);
+    setEditingTodayRecentShotCount(todayRecentShotCount);
     setIsEditing(false);
     toast.info('Changes reverted');
   };
@@ -157,6 +162,24 @@ export function SettingsTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Label htmlFor="todayRecentShotCount" className="whitespace-nowrap min-w-[200px]">
+              Today Recent Shots
+            </Label>
+            <Input
+              id="todayRecentShotCount"
+              type="number"
+              min={10}
+              step={10}
+              value={editingTodayRecentShotCount}
+              onChange={(e) => setEditingTodayRecentShotCount(Math.max(10, Math.round(parseFloat(e.target.value) || 10)))}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Sets the most-recent-shot sample used for Today metrics and priorities
+            </span>
+          </div>
           <div className="flex items-center gap-4">
             <Label htmlFor="gappingHcpTarget" className="whitespace-nowrap min-w-[200px]">
               Club Gapping HCP Target
