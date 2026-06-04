@@ -22,38 +22,35 @@ interface RoundReviewTabProps {
 const formatSqi = (value: number | null) => value === null ? '-' : `${Math.round(value)}`;
 type ClubSortKey = 'club' | 'shot-type' | 'power' | 'target' | 'shots' | 'quality' | 'bad-miss' | 'accuracy';
 
-function getRelativeValueClass(value: number | null, peers: Array<number | null>, higherIsBetter = true): string {
+const HCP_TARGET_SQI: Record<number, number> = {
+  5: 80,
+  10: 70,
+  15: 60,
+  20: 45,
+  25: 25,
+};
+
+function getTargetValueClass(value: number | null, target: number): string {
   if (value === null) return 'text-muted-foreground';
-  const available = peers.filter((peer): peer is number => peer !== null);
-  if (available.length < 2 || available.every(peer => peer === available[0])) return 'text-foreground';
-  const best = higherIsBetter ? Math.max(...available) : Math.min(...available);
-  const worst = higherIsBetter ? Math.min(...available) : Math.max(...available);
-  if (value === best) return 'text-green-600 dark:text-green-400';
-  if (value === worst) return 'text-red-600 dark:text-red-400';
+  const displayedValue = Math.round(value);
+  if (displayedValue > target) return 'text-green-600 dark:text-green-400';
+  if (displayedValue < target) return 'text-red-600 dark:text-red-400';
   return 'text-amber-600 dark:text-amber-400';
 }
 
-function getAbsoluteQualityClass(value: number | null): string {
-  if (value === null) return 'text-muted-foreground';
-  if (value >= 80) return 'text-green-600 dark:text-green-400';
-  if (value >= 60) return 'text-amber-600 dark:text-amber-400';
-  return 'text-red-600 dark:text-red-400';
+function QualityValue({ value, targetSqi }: { value: number | null; targetSqi: number }) {
+  return <span className={`font-semibold ${getTargetValueClass(value, targetSqi)}`}>{formatSqi(value)}</span>;
 }
 
-function QualityValue({ value, peers }: { value: number | null; peers?: Array<number | null> }) {
-  return <span className={`font-semibold ${peers ? getRelativeValueClass(value, peers) : getAbsoluteQualityClass(value)}`}>{formatSqi(value)}</span>;
-}
-
-function SummaryCard({ label, round, last5, recentThird, format, higherIsBetter = true }: {
+function SummaryCard({ label, round, last5, recentThird, format, target }: {
   label: string;
   round: number | null;
   last5: number | null;
   recentThird: number | null;
   format: (value: number | null) => string;
-  higherIsBetter?: boolean;
+  target?: number;
 }) {
-  const peers = [round, last5, recentThird];
-  const valueClass = (value: number | null) => getRelativeValueClass(value, peers, higherIsBetter);
+  const valueClass = (value: number | null) => target === undefined ? 'text-foreground' : getTargetValueClass(value, target);
   return (
     <Card>
       <CardContent className="space-y-3 pt-4">
@@ -81,10 +78,11 @@ function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
   return <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>{label}<Icon className="h-3.5 w-3.5" /></button>;
 }
 
-function ComparisonTable({ title, description, rows, simple = false, greenDistance = false, clubSort, clubSortDirection, onClubSort }: {
+function ComparisonTable({ title, description, rows, targetSqi, simple = false, greenDistance = false, clubSort, clubSortDirection, onClubSort }: {
   title: string;
   description: string;
   rows: RoundReviewRow[];
+  targetSqi: number;
   simple?: boolean;
   greenDistance?: boolean;
   clubSort?: ClubSortKey;
@@ -122,15 +120,14 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
               </tr>
             </thead>
             <tbody>
-              {rows.map(row => {
-                const qualityPeers = simple ? undefined : [row.round.shotQualityIndex, row.last5.shotQualityIndex, row.recentThird.shotQualityIndex];
-                return <tr key={row.key}>
+              {rows.map(row => (
+                <tr key={row.key}>
                   {clubTable ? <><td className="font-medium">{row.clubLabel}</td><td>{row.shotTypeLabel}</td><td>{row.powerLabel}</td><td>{row.targetLabel}</td></> : <td className="font-medium">{row.label}</td>}
                   <td>{row.round.shotCount}</td>
                   {lieTable && <td>{formatPercent(row.shareOfTotalPct ?? null)}</td>}
-                  <td><QualityValue value={row.round.shotQualityIndex} peers={qualityPeers} /></td>
-                  {!simple && <td><QualityValue value={row.last5.shotQualityIndex} peers={qualityPeers} /></td>}
-                  {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} peers={qualityPeers} /></td>}
+                  <td><QualityValue value={row.round.shotQualityIndex} targetSqi={targetSqi} /></td>
+                  {!simple && <td><QualityValue value={row.last5.shotQualityIndex} targetSqi={targetSqi} /></td>}
+                  {!simple && <td><QualityValue value={row.recentThird.shotQualityIndex} targetSqi={targetSqi} /></td>}
                   <td>{formatPercent(row.round.badMissPct)}</td>
                   <td>{formatPercent(row.round.onTargetPct)}</td>
                   {greenDistance && (
@@ -146,7 +143,7 @@ function ComparisonTable({ title, description, rows, simple = false, greenDistan
                   {greenDistance && <td>{formatPercent(row.round.greensHitRawPct)}</td>}
                   {greenDistance && <td>{row.avgShotsToGreen === null ? '-' : row.avgShotsToGreen.toFixed(1)}</td>}
                 </tr>
-              })}
+              ))}
             </tbody>
           </table>
         </div>
@@ -177,6 +174,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope),
     [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope]
   );
+  const targetSqi = HCP_TARGET_SQI[gappingHcpTarget] ?? 70;
 
   if (review.round.shotCount === 0) {
     return <Card><CardContent className="py-12 text-center text-muted-foreground">No non-putting shots recorded in this round.</CardContent></Card>;
@@ -205,12 +203,15 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label={scope === 'round' ? 'Shot Quality' : `${review.label} Shot Quality`} round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} />
-        <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.shotCount ? review.last5.badMissPct : null} recentThird={review.recentThird.shotCount ? review.recentThird.badMissPct : null} format={formatPercent} higherIsBetter={false} />
+        <SummaryCard label={scope === 'round' ? 'Shot Quality' : `${review.label} Shot Quality`} round={review.round.shotQualityIndex} last5={review.last5.shotQualityIndex} recentThird={review.recentThird.shotQualityIndex} format={formatSqi} target={targetSqi} />
+        <SummaryCard label="Bad Miss" round={review.round.badMissPct} last5={review.last5.shotCount ? review.last5.badMissPct : null} recentThird={review.recentThird.shotCount ? review.recentThird.badMissPct : null} format={formatPercent} />
         <SummaryCard label="Accuracy" round={review.round.onTargetPct} last5={review.last5.shotCount ? review.last5.onTargetPct : null} recentThird={review.recentThird.shotCount ? review.recentThird.onTargetPct : null} format={formatPercent} />
       </div>
+      <p className="-mt-3 text-xs text-muted-foreground">
+        Shot Quality colours use your {gappingHcpTarget} HCP target ({targetSqi} SQI): <span className="font-medium text-green-600 dark:text-green-400">green above</span>, <span className="font-medium text-amber-600 dark:text-amber-400">amber on target</span>, <span className="font-medium text-red-600 dark:text-red-400">red below</span>.
+      </p>
 
-      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, Power, and Target classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
+      <ComparisonTable title="By Club And Shot Type" description="Every non-putting shot in this round, assigned by the same Club, Shot Type, Power, and Target classifier used by Gapping. Click a column heading to sort." rows={sortedClubAndTypeRows} targetSqi={targetSqi} clubSort={clubSort} clubSortDirection={clubSortDirection} onClubSort={handleClubSort} />
 
       <Card>
         <CardHeader>
@@ -233,8 +234,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         </CardContent>
       </Card>
 
-      {!review.distanceWarning && <ComparisonTable title="Greens Targeted By Distance" description={`Only shots targeting the green. Each shot appears in one distance band. ${review.hasShotSequence ? 'Shots To Green uses the uploaded hole sequence.' : 'Re-upload this round to add hole sequence and calculate Shots To Green.'}`} rows={review.greenDistanceRows} greenDistance />}
-      <ComparisonTable title="By Lie" description="Starting lie for each non-putting shot in this round." rows={review.lieRows} simple />
+      {!review.distanceWarning && <ComparisonTable title="Greens Targeted By Distance" description={`Only shots targeting the green. Each shot appears in one distance band. ${review.hasShotSequence ? 'Shots To Green uses the uploaded hole sequence.' : 'Re-upload this round to add hole sequence and calculate Shots To Green.'}`} rows={review.greenDistanceRows} targetSqi={targetSqi} greenDistance />}
+      <ComparisonTable title="By Lie" description="Starting lie for each non-putting shot in this round." rows={review.lieRows} targetSqi={targetSqi} simple />
     </div>
   );
 }
