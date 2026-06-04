@@ -42,6 +42,17 @@ export interface DistancePriority {
   evidence: string;
 }
 
+export interface CapabilityIndex {
+  score: number | null;
+  optionCount: number;
+  shotCount: number;
+  weakestOption: {
+    configKey: string;
+    clubShot: string;
+    score: number;
+  } | null;
+}
+
 interface BuildPracticePrioritiesInput {
   shots: Shot[];
   profiles: ShotProfileMap;
@@ -94,7 +105,7 @@ function recommendationFor(priority: Pick<PracticePriority, 'clubName' | 'shotLa
   return `Monitor ${shot} and add focused reps when it enters the next practice block.`;
 }
 
-export function buildPracticePriorities({
+function mapShotsToConfigs({
   shots,
   profiles,
   practiceSessions,
@@ -103,8 +114,7 @@ export function buildPracticePriorities({
   gappingHcpTarget,
   shotCategoryOverrides = loadShotCategoryOverrides(),
   shotClassificationRules,
-  perConfigShotLimit = 20,
-}: BuildPracticePrioritiesInput): PracticePriority[] {
+}: BuildPracticePrioritiesInput): Map<string, string> {
   const shotToConfig = new Map<string, string>();
   const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
 
@@ -127,6 +137,23 @@ export function buildPracticePriorities({
       }
     }
   }
+  return shotToConfig;
+}
+
+export function buildPracticePriorities({
+  shots,
+  profiles,
+  practiceSessions,
+  practiceConfigs,
+  shotsBySession,
+  gappingHcpTarget,
+  shotCategoryOverrides = loadShotCategoryOverrides(),
+  shotClassificationRules,
+  perConfigShotLimit = 20,
+}: BuildPracticePrioritiesInput): PracticePriority[] {
+  const shotToConfig = mapShotsToConfigs({
+    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules,
+  });
 
   const grouped = new Map<string, Shot[]>();
   for (const shot of shots) {
@@ -174,6 +201,43 @@ export function buildPracticePriorities({
   }).sort((a, b) => b.courseImpactScore - a.courseImpactScore);
 }
 
+export function buildCapabilityIndex(input: BuildPracticePrioritiesInput): CapabilityIndex {
+  const { shots, profiles } = input;
+  const shotToConfig = mapShotsToConfigs(input);
+  const groupedScores = new Map<string, number[]>();
+
+  for (const shot of shots) {
+    const score = shotQualityScore(shot.shotQuality);
+    const configKey = shotToConfig.get(shot.id) ?? fallbackConfigKey(shot);
+    if (score === null || !configKey) continue;
+    groupedScores.set(configKey, [...(groupedScores.get(configKey) ?? []), score]);
+  }
+
+  const options = [...groupedScores.entries()].map(([configKey, scores]) => {
+    const topTwo = [...scores].sort((a, b) => b - a).slice(0, 2);
+    const profile = profileForKey(configKey, profiles);
+    const clubName = PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
+    return {
+      configKey,
+      clubShot: `${clubName} · ${getShotLabel(profile)}`,
+      score: Math.round(mean(topTwo) ?? 0),
+      shotCount: topTwo.length,
+    };
+  });
+  const weakestOption = [...options].sort((a, b) => a.score - b.score)[0] ?? null;
+
+  return {
+    score: options.length ? Math.round(mean(options.map((option) => option.score)) ?? 0) : null,
+    optionCount: options.length,
+    shotCount: options.reduce((sum, option) => sum + option.shotCount, 0),
+    weakestOption: weakestOption ? {
+      configKey: weakestOption.configKey,
+      clubShot: weakestOption.clubShot,
+      score: weakestOption.score,
+    } : null,
+  };
+}
+
 function distanceBand(target: number): { key: string; label: string } | null {
   if (!Number.isFinite(target) || target <= 0 || target > 150) return null;
   if (target > 100) return { key: '100-150', label: '100–150m' };
@@ -192,28 +256,9 @@ export function buildDistancePriorities({
   shotCategoryOverrides = loadShotCategoryOverrides(),
   shotClassificationRules,
 }: BuildPracticePrioritiesInput): DistancePriority[] {
-  const shotToConfig = new Map<string, string>();
-  const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
-
-  for (const shotContext of contexts) {
-    const rows = buildClubGappingRows({
-      profiles,
-      shots,
-      shotContext,
-      practiceSessions,
-      practiceConfigs,
-      shotsBySession,
-      gappingHcpTarget,
-      shotCategoryOverrides,
-      shotClassificationRules,
-    });
-    for (const row of rows) {
-      const configKey = visibleProfileId(row.profile.id);
-      for (const shot of row.sample) {
-        if (!shotToConfig.has(shot.id)) shotToConfig.set(shot.id, configKey);
-      }
-    }
-  }
+  const shotToConfig = mapShotsToConfigs({
+    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules,
+  });
 
   const grouped = new Map<string, { band: { key: string; label: string }; shots: Shot[] }>();
   for (const shot of shots) {

@@ -18,7 +18,6 @@ import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import {
   buildAnalysisModel,
   type AnalysisConfidence,
-  type AnalysisTrend,
   type SqiSegment,
 } from '@/lib/analysisSynthesis';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
+import { buildCapabilityIndex, buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 
@@ -36,14 +35,6 @@ const confidenceLabel: Record<AnalysisConfidence, string> = {
   medium: 'Emerging',
   low: 'Early signal',
   none: 'More data needed',
-};
-
-const trendLabel: Record<AnalysisTrend, string> = {
-  improving: 'Improving',
-  stable: 'Stable',
-  declining: 'Declining',
-  volatile: 'Volatile',
-  insufficient: 'More data needed',
 };
 
 const confidenceClasses: Record<AnalysisConfidence, string> = {
@@ -176,6 +167,15 @@ export function AnalysisOverview({
     gappingHcpTarget,
     shotClassificationRules,
   }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
+  const capability = useMemo(() => buildCapabilityIndex({
+    shots: recentShots,
+    profiles,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    shotClassificationRules,
+  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
 
   if (golfLoading || practiceLoading) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;
@@ -212,7 +212,14 @@ export function AnalysisOverview({
         <MetricCard icon={Gauge} label="SQI" value={analysis.sqi === null ? '-' : `${analysis.sqi} / 100`} detail={`${analysis.handicapEquivalent}; ${analysis.change !== null && analysis.change >= 0 ? '+' : ''}${analysis.change ?? '-'} vs baseline`} tone="good" />
         <MetricCard icon={AlertTriangle} label="Costly miss" value={`${analysis.badMissPct}%`} detail={`All-time baseline ${analysis.baselineBadMissPct}%`} tone="warn" />
         <MetricCard icon={CircleDot} label="Damage / round" value={`${analysis.damagePerRound}`} detail={`All-time baseline ${analysis.baselineDamagePerRound}; ${analysis.scoringDamage} damage in recent sample`} tone="warn" />
-        <MetricCard icon={Activity} label="Current form" value={trendLabel[analysis.trend]} detail="Recent 25% of rounds compared with early 25%" />
+        <MetricCard
+          icon={Activity}
+          label="Capability index"
+          value={capability.score === null ? '-' : `${capability.score} / 100`}
+          detail={capability.weakestOption
+            ? `Lowest capability: ${capability.weakestOption.clubShot} (${capability.weakestOption.score})`
+            : 'Add rated shots to establish capability'}
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
+import { buildCapabilityIndex, buildDistancePriorities, buildPracticePriorities } from '@/lib/practicePriorities';
 import type { ShotProfile } from '@/lib/shotProfiles';
 import type { Shot } from '@/types/golf';
 
@@ -131,5 +131,35 @@ describe('practice priorities', () => {
     });
     expect(priorities[0].topClubShot).toContain('Pitching Wedge');
     expect(priorities[0].recommendation).toContain('90–100m');
+  });
+
+  it('builds capability from the top two shots per club and shot option', () => {
+    const shots = [
+      shot({ id: 'driver-best', shotQuality: 'Pro' }),
+      shot({ id: 'driver-second', shotQuality: '0 Handicap' }),
+      shot({ id: 'driver-worst', shotQuality: '25 Handicap' }),
+      shot({ id: 'wedge-best', club: 'PW', type: 'Approach', targetIntent: 'green', startLie: 'Fairway', shotQuality: '15 Handicap' }),
+      shot({ id: 'wedge-second', club: 'PW', type: 'Approach', targetIntent: 'green', startLie: 'Fairway', shotQuality: '20 Handicap' }),
+    ];
+    const capability = buildCapabilityIndex({
+      shots,
+      profiles: {
+        dr_full_full: profile('dr_full_full', 'dr', ['fairway']),
+        pw_full_full: profile('pw_full_full', 'pw', ['green']),
+      },
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingHcpTarget: 10,
+      shotCategoryOverrides: {},
+    });
+
+    expect(capability.score).toBe(74);
+    expect(capability.optionCount).toBe(2);
+    expect(capability.shotCount).toBe(4);
+    expect(capability.weakestOption).toMatchObject({
+      clubShot: 'Pitching Wedge · Full',
+      score: 53,
+    });
   });
 });
