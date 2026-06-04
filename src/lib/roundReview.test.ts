@@ -35,6 +35,32 @@ describe('buildRoundReview', () => {
     expect(review.round.shotQualityIndex).toBe(100);
     expect(review.last5.shotQualityIndex).toBe(45);
     expect(review.recentThird.shotQualityIndex).toBe(45);
+    expect(review.previous5.shotQualityIndex).toBeNull();
+    expect(review.season.shotQualityIndex).toBeCloseTo(72.5);
+  });
+
+  it('calculates target success, safe shot rate, and scoring-zone success', () => {
+    const review = buildRoundReview([
+      shot('fairway-hit', '2026-05-31', 220, '10 Handicap', { club: 'Dr', type: 'Driving', targetIntent: 'fairway', startLie: 'Tee', endLie: 'Fairway' }),
+      shot('fairway-miss', '2026-05-31', 220, '10 Handicap', { club: 'Dr', type: 'Driving', targetIntent: 'fairway', startLie: 'Tee', endLie: 'Rough' }),
+      shot('green-hit', '2026-05-31', 80, '10 Handicap', { targetIntent: 'green', endLie: 'Green' }),
+      shot('green-miss', '2026-05-31', 80, '10 Handicap', { targetIntent: 'green', endLie: 'Penalty' }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(review.round.targetSuccessPct).toBe(50);
+    expect(review.round.scoringZoneSuccessPct).toBe(50);
+    expect(review.round.scoringZoneSuccessCount).toBe(1);
+    expect(review.round.safeShotRate).toBe(75);
+  });
+
+  it('uses last five and previous five round comparison periods', () => {
+    const dates = Array.from({ length: 11 }, (_, index) => `2026-05-${String(index + 1).padStart(2, '0')}`);
+    const review = buildRoundReview(dates.map((date, index) =>
+      shot(`${index}`, date, 35, index < 5 ? '20 Handicap' : index < 10 ? '10 Handicap' : 'Pro')
+    ), DEFAULT_CLUB_CONFIGS, 10, '2026-05-11');
+
+    expect(review.last5.shotQualityIndex).toBe(70);
+    expect(review.previous5.shotQualityIndex).toBe(45);
   });
 
   it('excludes putting and keeps distance rollups separate from exact bands', () => {

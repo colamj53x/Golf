@@ -505,6 +505,7 @@ export function DashboardTab({
               distanceToTargetTolerance={distanceToTargetTolerance}
               roundDate={activeRoundDateKey ?? ''}
               scope={roundReviewScope}
+              thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
             />
             {activeRoundDateKey && roundReviewScope === 'round' && (
               <RoundReflectionEditor

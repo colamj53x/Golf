@@ -15,17 +15,62 @@ export interface RoundReviewRow {
   dominantClubShotLabel?: string | null;
   dominantClubShotPct?: number | null;
   avgShotsToGreen?: number | null;
-  round: MetricsResult;
-  last5: MetricsResult;
-  recentThird: MetricsResult;
+  round: RoundReviewMetrics;
+  last5: RoundReviewMetrics;
+  previous5: RoundReviewMetrics;
+  season: RoundReviewMetrics;
+  recentThird: RoundReviewMetrics;
+}
+
+export interface RoundReviewMetrics extends MetricsResult {
+  targetSuccessPct: number | null;
+  targetSuccessCount: number;
+  targetAttemptCount: number;
+  safeShotRate: number;
+  scoringZoneSuccessPct: number | null;
+  scoringZoneSuccessCount: number;
+  scoringZoneAttemptCount: number;
+}
+
+export interface RoundReviewProgressPoint {
+  label: string;
+  rounds: number;
+  shotQuality: number | null;
+  targetSuccess: number | null;
+  safeShotRate: number;
+  scoringZoneSuccess: number | null;
+  teeShotQuality: number | null;
+  teeTargetSuccess: number | null;
+  teeSafeShotRate: number | null;
+  approachShotQuality: number | null;
+  approachTargetSuccess: number | null;
+  approachSafeShotRate: number | null;
+  shortGameShotQuality: number | null;
+  shortGameScoringZoneSuccess: number | null;
+  shortGameSafeShotRate: number | null;
+}
+
+export interface RoundReviewArea {
+  key: string;
+  label: string;
+  description: string;
+  primaryMetric: 'shotQualityIndex' | 'targetSuccessPct' | 'scoringZoneSuccessPct';
+  round: RoundReviewMetrics;
+  last5: RoundReviewMetrics;
+  previous5: RoundReviewMetrics;
 }
 
 export interface RoundReviewModel {
   scope: RoundReviewScope;
   label: string;
-  round: MetricsResult;
-  last5: MetricsResult;
-  recentThird: MetricsResult;
+  round: RoundReviewMetrics;
+  last5: RoundReviewMetrics;
+  previous5: RoundReviewMetrics;
+  season: RoundReviewMetrics;
+  recentThird: RoundReviewMetrics;
+  priorRoundCount: number;
+  progress: RoundReviewProgressPoint[];
+  areas: RoundReviewArea[];
   clubAndTypeRows: RoundReviewRow[];
   greenDistanceRollups: RoundReviewRow[];
   greenDistanceRows: RoundReviewRow[];
@@ -68,6 +113,38 @@ function metrics(shots: ProcessedShot[]): MetricsResult {
   return calculateMetrics(shots, undefined);
 }
 
+function isGreenResult(shot: ProcessedShot): boolean {
+  return /green|fringe|hole/i.test(shot.endLie);
+}
+
+function isFairwayResult(shot: ProcessedShot): boolean {
+  return /fairway/i.test(shot.endLie);
+}
+
+function reviewMetrics(
+  shots: ProcessedShot[],
+  getTarget: (shot: ProcessedShot) => string
+): RoundReviewMetrics {
+  const base = metrics(shots);
+  const targetAttempts = shots.filter(shot => ['fairway', 'green'].includes(getTarget(shot)));
+  const targetSuccesses = targetAttempts.filter(shot => {
+    const target = getTarget(shot);
+    return target === 'green' ? isGreenResult(shot) : isFairwayResult(shot);
+  });
+  const scoringZoneAttempts = shots.filter(shot => getTarget(shot) === 'green' && shot.target <= 100);
+  const scoringZoneSuccesses = scoringZoneAttempts.filter(isGreenResult);
+  return {
+    ...base,
+    targetSuccessPct: targetAttempts.length ? (targetSuccesses.length / targetAttempts.length) * 100 : null,
+    targetSuccessCount: targetSuccesses.length,
+    targetAttemptCount: targetAttempts.length,
+    safeShotRate: 100 - base.badMissPct,
+    scoringZoneSuccessPct: scoringZoneAttempts.length ? (scoringZoneSuccesses.length / scoringZoneAttempts.length) * 100 : null,
+    scoringZoneSuccessCount: scoringZoneSuccesses.length,
+    scoringZoneAttemptCount: scoringZoneAttempts.length,
+  };
+}
+
 function isUnspecifiedTarget(value: string | undefined): boolean {
   const normalized = (value ?? '').trim().toLowerCase();
   return !normalized || normalized === 'unspecified' || normalized === 'unknown' || normalized === '-';
@@ -82,8 +159,10 @@ function inferUnspecifiedTarget(clubId: string, shotTypeLabel: string): 'fairway
 function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
-  recentThird: ProcessedShot[],
+  previous5: ProcessedShot[],
+  season: ProcessedShot[],
   groups: Array<{ key: string; label: string; clubLabel?: string; clubSortIndex?: number; shotTypeLabel?: string; powerLabel?: string; targetLabel?: string; filter: (shot: ProcessedShot) => boolean }>,
+  getTarget: (shot: ProcessedShot) => string,
   avgShotsToGreen?: (shots: ProcessedShot[]) => number | null
 ): RoundReviewRow[] {
   return groups
@@ -99,9 +178,11 @@ function makeRows(
         powerLabel: group.powerLabel,
         targetLabel: group.targetLabel,
         avgShotsToGreen: avgShotsToGreen?.(roundShots) ?? null,
-        round: metrics(roundShots),
-        last5: metrics(last5.filter(group.filter)),
-        recentThird: metrics(recentThird.filter(group.filter)),
+        round: reviewMetrics(roundShots, getTarget),
+        last5: reviewMetrics(last5.filter(group.filter), getTarget),
+        previous5: reviewMetrics(previous5.filter(group.filter), getTarget),
+        season: reviewMetrics(season.filter(group.filter), getTarget),
+        recentThird: reviewMetrics(last5.filter(group.filter), getTarget),
       };
     })
     .filter((row): row is RoundReviewRow => row !== null);
@@ -171,6 +252,7 @@ export function buildRoundReview(
   const priorRoundDates = [...new Set(historicalShots.map(shot => getShotDateKey(shot.date)))]
     .sort((a, b) => b.localeCompare(a));
   const last5Dates = new Set(priorRoundDates.slice(0, 5));
+  const previous5Dates = new Set(priorRoundDates.slice(5, 10));
 
   const selected = processShots(
     courseShots.filter(shot => selectedDates.has(getShotDateKey(shot.date))),
@@ -180,8 +262,8 @@ export function buildRoundReview(
   const historical = processShots(historicalShots, clubs, distanceToTargetTolerance)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
   const last5 = historical.filter(shot => last5Dates.has(getShotDateKey(shot.date)));
-  const recentThirdSize = Math.ceil(historical.length / 3);
-  const recentThird = recentThirdSize > 0 ? historical.slice(-recentThirdSize) : [];
+  const previous5 = historical.filter(shot => previous5Dates.has(getShotDateKey(shot.date)));
+  const season = [...historical, ...selected];
 
   const getClubAndTypeGroup = (shot: ProcessedShot) => {
     const assignment = gappingAssignments.get(shot.id);
@@ -213,6 +295,15 @@ export function buildRoundReview(
       targetLabel: inferredTargetLabel,
     };
   };
+  const getTarget = (shot: ProcessedShot): string => {
+    const assignment = gappingAssignments.get(shot.id);
+    const group = getClubAndTypeGroup(shot);
+    const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
+    const clubId = assignment?.profile.clubId ?? getClubConfigId(shot.club);
+    return isUnspecifiedTarget(savedTarget)
+      ? inferUnspecifiedTarget(clubId, group.shotTypeLabel ?? '')
+      : savedTarget;
+  };
 
   const clubAndTypeGroups = [...new Map(selected.map(shot => {
     const group = getClubAndTypeGroup(shot);
@@ -243,16 +334,7 @@ export function buildRoundReview(
     });
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   };
-  const greenTargetShots = (candidates: ProcessedShot[]) => candidates.filter(shot => {
-    const assignment = gappingAssignments.get(shot.id);
-    const group = getClubAndTypeGroup(shot);
-    const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
-    const clubId = assignment?.profile.clubId ?? getClubConfigId(shot.club);
-    const target = isUnspecifiedTarget(savedTarget)
-      ? inferUnspecifiedTarget(clubId, group.shotTypeLabel ?? '')
-      : savedTarget;
-    return target === 'green';
-  });
+  const greenTargetShots = (candidates: ProcessedShot[]) => candidates.filter(shot => getTarget(shot) === 'green');
 
   const distanceGroups = DISTANCE_FILTER_OPTIONS
     .filter(option => option.value !== 'all')
@@ -284,25 +366,81 @@ export function buildRoundReview(
     ? 'The stored distance-to-target values for this round are incomplete: every reviewed shot is recorded inside 10m. Go to More > Upload, turn on Replace matching round dates, and re-upload the CSV for this round. Review will refresh with the repaired distance-to-target values.'
     : null;
 
-  const greenDistanceRollups = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen);
-  const greenDistanceRows = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(recentThird), distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key)), getAvgShotsToGreen)
+  const greenDistanceRollups = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(previous5), greenTargetShots(season), distanceGroups.filter(group => DISTANCE_ROLLUPS.has(group.key)), getTarget, getAvgShotsToGreen);
+  const greenDistanceRows = distanceWarning ? [] : makeRows(greenTargetShots(selected), greenTargetShots(last5), greenTargetShots(previous5), greenTargetShots(season), distanceGroups.filter(group => !DISTANCE_ROLLUPS.has(group.key)), getTarget, getAvgShotsToGreen)
     .map(row => ({
       ...row,
       ...getMostUsedClubShot(greenTargetShots(selected).filter(shot => filterShotsByTargetDistance([shot], row.key).length === 1), getClubAndTypeGroup),
     }));
-  const lieRows = makeRows(selected, last5, recentThird, lieGroups)
+  const lieRows = makeRows(selected, last5, previous5, season, lieGroups, getTarget)
     .map(row => ({
       ...row,
       shareOfTotalPct: selected.length ? (row.round.shotCount / selected.length) * 100 : null,
     }));
 
+  const areaGroups = [
+    { key: 'tee', label: 'Tee / Driving', description: 'Execution and target results from the tee.', primaryMetric: 'shotQualityIndex' as const, filter: (shot: ProcessedShot) => shot.startLie.trim().toLowerCase() === 'tee' },
+    { key: 'approach', label: 'Approach / Green Targets', description: 'Green-target shots from outside 100m.', primaryMetric: 'targetSuccessPct' as const, filter: (shot: ProcessedShot) => getTarget(shot) === 'green' && shot.target > 100 },
+    { key: 'short', label: 'Short Game / Scoring Zone', description: 'Green-target shots from inside 100m.', primaryMetric: 'scoringZoneSuccessPct' as const, filter: (shot: ProcessedShot) => getTarget(shot) === 'green' && shot.target <= 100 },
+    { key: 'recovery', label: 'Recovery / Trouble', description: 'Shots played from rough, bunker, or recovery lies.', primaryMetric: 'shotQualityIndex' as const, filter: (shot: ProcessedShot) => /rough|bunker|recovery/i.test(shot.startLie) },
+    { key: 'management', label: 'Course Management', description: 'How often the intended fairway or green target was achieved.', primaryMetric: 'targetSuccessPct' as const, filter: (shot: ProcessedShot) => ['fairway', 'green'].includes(getTarget(shot)) },
+  ];
+  const areas = areaGroups.map(area => ({
+    key: area.key,
+    label: area.label,
+    description: area.description,
+    primaryMetric: area.primaryMetric,
+    round: reviewMetrics(selected.filter(area.filter), getTarget),
+    last5: reviewMetrics(last5.filter(area.filter), getTarget),
+    previous5: reviewMetrics(previous5.filter(area.filter), getTarget),
+  }));
+
+  const progressDates = [...new Set(
+    courseShots
+      .filter(shot => !selectedBoundaryDate || getShotDateKey(shot.date) <= selectedBoundaryDate)
+      .map(shot => getShotDateKey(shot.date))
+  )].sort((a, b) => a.localeCompare(b));
+  const bucketCount = Math.min(10, progressDates.length);
+  const progress = Array.from({ length: bucketCount }, (_, index) => {
+    const start = Math.floor(index * progressDates.length / bucketCount);
+    const end = Math.floor((index + 1) * progressDates.length / bucketCount);
+    const dates = new Set(progressDates.slice(start, end));
+    const bucketShots = processShots(courseShots.filter(shot => dates.has(getShotDateKey(shot.date))), clubs, distanceToTargetTolerance);
+    const bucketMetrics = reviewMetrics(bucketShots, getTarget);
+    const teeMetrics = reviewMetrics(bucketShots.filter(areaGroups[0].filter), getTarget);
+    const approachMetrics = reviewMetrics(bucketShots.filter(areaGroups[1].filter), getTarget);
+    const shortMetrics = reviewMetrics(bucketShots.filter(areaGroups[2].filter), getTarget);
+    return {
+      label: bucketCount === 10 ? `D${index + 1}` : `Block ${index + 1}`,
+      rounds: dates.size,
+      shotQuality: bucketMetrics.shotQualityIndex,
+      targetSuccess: bucketMetrics.targetSuccessPct,
+      safeShotRate: bucketMetrics.safeShotRate,
+      scoringZoneSuccess: bucketMetrics.scoringZoneSuccessPct,
+      teeShotQuality: teeMetrics.shotQualityIndex,
+      teeTargetSuccess: teeMetrics.targetSuccessPct,
+      teeSafeShotRate: teeMetrics.shotCount ? teeMetrics.safeShotRate : null,
+      approachShotQuality: approachMetrics.shotQualityIndex,
+      approachTargetSuccess: approachMetrics.targetSuccessPct,
+      approachSafeShotRate: approachMetrics.shotCount ? approachMetrics.safeShotRate : null,
+      shortGameShotQuality: shortMetrics.shotQualityIndex,
+      shortGameScoringZoneSuccess: shortMetrics.scoringZoneSuccessPct,
+      shortGameSafeShotRate: shortMetrics.shotCount ? shortMetrics.safeShotRate : null,
+    };
+  });
+
   return {
     scope,
     label: scope === 'all' ? 'All Rounds' : scope === 'last20' ? `Last ${Math.min(20, roundDates.length)} Rounds` : selectedDate,
-    round: metrics(selected),
-    last5: metrics(last5),
-    recentThird: metrics(recentThird),
-    clubAndTypeRows: makeRows(selected, last5, recentThird, clubAndTypeGroups),
+    round: reviewMetrics(selected, getTarget),
+    last5: reviewMetrics(last5, getTarget),
+    previous5: reviewMetrics(previous5, getTarget),
+    season: reviewMetrics(season, getTarget),
+    recentThird: reviewMetrics(last5, getTarget),
+    priorRoundCount: priorRoundDates.length,
+    progress,
+    areas,
+    clubAndTypeRows: makeRows(selected, last5, previous5, season, clubAndTypeGroups, getTarget),
     greenDistanceRollups,
     greenDistanceRows,
     lieRows,
