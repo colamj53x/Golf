@@ -3,16 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useGolfData } from '@/context/GolfDataContext';
+import { usePracticeData } from '@/context/PracticeDataContext';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { 
-  processShot, 
-  calculateMetrics, 
-  getClubConfigId,
   formatPercent,
   formatDistance,
-  MetricsResult
 } from '@/lib/golfCalculations';
-import { calculateClubRatings, ClubRatings, getRatingColor } from '@/lib/clubRatings';
-import { ProcessedShot, ClubConfig } from '@/types/golf';
+import { getRatingColor } from '@/lib/clubRatings';
+import { buildReportGappingAnalysis } from '@/lib/reportGappingShots';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
+import { useShotProfiles } from '@/lib/shotProfiles';
 import { 
   RadarChart,
   PolarGrid,
@@ -21,8 +21,6 @@ import {
   Radar,
   Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -32,15 +30,9 @@ import {
   Scatter,
   ZAxis
 } from 'recharts';
-import { GitCompare, Target, Award, TrendingUp, Zap } from 'lucide-react';
+import { GitCompare, Award, Zap } from 'lucide-react';
 
-interface ClubCompareData {
-  clubName: string;
-  config: ClubConfig | undefined;
-  shots: ProcessedShot[];
-  ratings: ClubRatings;
-  metrics: MetricsResult;
-}
+type AnalysisMode = 'shot' | 'club';
 
 const CHART_COLORS = [
   'hsl(var(--primary))',
@@ -62,80 +54,81 @@ function RatingBadge({ score, label }: { score: number; label: string }) {
 }
 
 export function ReportsComparative() {
-  const { clubs, shots, availableClubs, distanceToTargetTolerance } = useGolfData();
-  const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
-  const [club1, setClub1] = useState<string>('');
-  const [club2, setClub2] = useState<string>('');
+  const { clubs, shots, distanceToTargetTolerance, gappingHcpTarget } = useGolfData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
+  const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('shot');
+  const [shot1, setShot1] = useState<string>('');
+  const [shot2, setShot2] = useState<string>('');
 
-  // Process data for all clubs
-  const allClubsData = useMemo(() => {
-    if (shots.length === 0) return [];
+  const analysis = useMemo(() => buildReportGappingAnalysis({
+    profiles,
+    shots,
+    clubs,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    distanceToTargetTolerance,
+    shotClassificationRules,
+  }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
 
-    return availableClubs.map(clubName => {
-      const clubShots = shots.filter(s => s.club === clubName);
-      if (clubShots.length < 3) return null;
+  const analysisData = analysisMode === 'shot' ? analysis.shots : analysis.clubRollups;
+  const selectOptions = analysisMode === 'shot'
+    ? analysis.catalogueOptions.filter((option) => analysis.shots.some((row) => row.key === option.key))
+    : analysis.clubRollups.map((club) => ({ key: club.key, label: club.label }));
 
-      const configId = getClubConfigId(clubName);
-      const config = clubs.find(c => c.id === configId);
-
-      const processed: ProcessedShot[] = clubShots.map(shot => 
-        processShot(shot, config, distanceToTargetTolerance)
-      );
-
-      const data: ClubCompareData = {
-        clubName,
-        config,
-        shots: processed,
-        ratings: calculateClubRatings(processed, config),
-        metrics: calculateMetrics(processed, config),
-      };
-
-      return data;
-    }).filter((d): d is ClubCompareData => d !== null);
-  }, [shots, availableClubs, clubs, distanceToTargetTolerance]);
-
-  // Get data for selected clubs for comparison
+  // Get data for selected shots for comparison
   const compareData = useMemo(() => {
-    if (!club1 || !club2) return null;
+    if (!shot1 || !shot2) return null;
     
-    const data1 = allClubsData.find(c => c.clubName === club1);
-    const data2 = allClubsData.find(c => c.clubName === club2);
+    const data1 = analysisData.find(c => c.key === shot1);
+    const data2 = analysisData.find(c => c.key === shot2);
     
     if (!data1 || !data2) return null;
     
-    return { club1: data1, club2: data2 };
-  }, [allClubsData, club1, club2]);
+    return { item1: data1, item2: data2 };
+  }, [analysisData, shot1, shot2]);
 
   // Prepare radar data for comparison
   const radarData = useMemo(() => {
     if (!compareData) return [];
     
-    const { club1: c1, club2: c2 } = compareData;
+    const { item1: c1, item2: c2 } = compareData;
     
     return [
-      { metric: 'Accuracy', [c1.clubName]: c1.metrics.onTargetPct, [c2.clubName]: c2.metrics.onTargetPct },
-      { metric: 'Control', [c1.clubName]: Math.max(0, 100 - c1.metrics.badMissPct * 5), [c2.clubName]: Math.max(0, 100 - c2.metrics.badMissPct * 5) },
-      { metric: 'Consistency', [c1.clubName]: Math.max(0, 100 - c1.metrics.sideVariation * 5), [c2.clubName]: Math.max(0, 100 - c2.metrics.sideVariation * 5) },
-      { metric: 'Strike', [c1.clubName]: c1.metrics.strikeCentrePct, [c2.clubName]: c2.metrics.strikeCentrePct },
-      { metric: 'Capability', [c1.clubName]: c1.ratings.capability, [c2.clubName]: c2.ratings.capability },
+      { metric: 'On-Target', [c1.label]: c1.metrics.onTargetPct, [c2.label]: c2.metrics.onTargetPct },
+      { metric: 'Control', [c1.label]: Math.max(0, 100 - c1.metrics.badMissPct * 5), [c2.label]: Math.max(0, 100 - c2.metrics.badMissPct * 5) },
+      { metric: 'Consistency', [c1.label]: Math.max(0, 100 - c1.metrics.sideVariation * 5), [c2.label]: Math.max(0, 100 - c2.metrics.sideVariation * 5) },
+      { metric: 'Strike', [c1.label]: c1.metrics.strikeCentrePct, [c2.label]: c2.metrics.strikeCentrePct },
+      { metric: 'Capability', [c1.label]: c1.ratings.capability, [c2.label]: c2.ratings.capability },
     ];
   }, [compareData]);
 
-  // Prepare scatter data for all clubs
+  // Prepare scatter data for all Gapping shots / club roll-ups
   const scatterData = useMemo(() => {
-    return allClubsData.map(club => ({
-      x: club.metrics.onTargetPct,
-      y: club.ratings.capability,
-      z: club.metrics.shotCount,
-      name: club.clubName,
-      badMiss: club.metrics.badMissPct,
+    return analysisData.map(item => ({
+      x: item.metrics.onTargetPct,
+      y: item.ratings.capability,
+      z: item.metrics.shotCount,
+      name: item.label,
+      club: item.clubLabel,
+      shot: item.shotLabel,
+      power: item.powerLabel,
+      badMiss: item.metrics.badMissPct,
+      avgDistance: item.metrics.avgDistanceHit,
+      sideVariation: item.metrics.sideVariation,
+      strike: item.metrics.strikeCentrePct,
     }));
-  }, [allClubsData]);
+  }, [analysisData]);
 
   // Rankings data
   const rankingsData = useMemo(() => {
-    return [...allClubsData].sort((a, b) => b.ratings.capability - a.ratings.capability);
-  }, [allClubsData]);
+    return [...analysisData].sort((a, b) => b.ratings.capability - a.ratings.capability);
+  }, [analysisData]);
 
   if (shots.length === 0) {
     return (
@@ -149,50 +142,70 @@ export function ReportsComparative() {
 
   return (
     <div className="space-y-6">
-      {/* Club Selector for Comparison */}
+      {/* Shot Selector for Comparison */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <GitCompare className="h-5 w-5 text-primary" />
             Head-to-Head Comparison
           </CardTitle>
-          <CardDescription>Select two clubs to compare side-by-side</CardDescription>
+          <CardDescription>Select two {analysisMode === 'shot' ? 'Gapping shots' : 'club roll-ups'} to compare side-by-side</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Club 1:</label>
-              <Select value={club1} onValueChange={setClub1}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Select club" />
+              <label className="text-sm font-medium">View:</label>
+              <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setShot1(''); setShot2(''); }}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Select view" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableClubs.map(club => (
-                    <SelectItem key={club} value={club} disabled={club === club2}>{club}</SelectItem>
+                  <SelectItem value="shot">Gapping Shots</SelectItem>
+                  <SelectItem value="club">Club Roll-up</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">{analysisMode === 'shot' ? 'Shot 1:' : 'Club 1:'}</label>
+              <Select value={shot1} onValueChange={setShot1}>
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder={analysisMode === 'shot' ? 'Select shot' : 'Select club'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectOptions.map(option => (
+                    <SelectItem key={option.key} value={option.key} disabled={option.key === shot2}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <span className="text-muted-foreground font-bold">vs</span>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Club 2:</label>
-              <Select value={club2} onValueChange={setClub2}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Select club" />
+              <label className="text-sm font-medium">{analysisMode === 'shot' ? 'Shot 2:' : 'Club 2:'}</label>
+              <Select value={shot2} onValueChange={setShot2}>
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder={analysisMode === 'shot' ? 'Select shot' : 'Select club'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableClubs.map(club => (
-                    <SelectItem key={club} value={club} disabled={club === club1}>{club}</SelectItem>
+                  {selectOptions.map(option => (
+                    <SelectItem key={option.key} value={option.key} disabled={option.key === shot1}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {(club1 || club2) && (
-              <Button variant="ghost" size="sm" onClick={() => { setClub1(''); setClub2(''); }}>
+            {(shot1 || shot2) && (
+              <Button variant="ghost" size="sm" onClick={() => { setShot1(''); setShot2(''); }}>
                 Clear
               </Button>
             )}
           </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Shot categories are taken from your Gapping setup, so performance review matches the shots you practise.
+            {analysis.unmatchedShots.length > 0 && (
+              <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">
+                Some historical shots are not linked to current Gapping shot definitions ({analysis.unmatchedShots.length}).
+              </span>
+            )}
+          </p>
         </CardContent>
       </Card>
 
@@ -212,15 +225,15 @@ export function ReportsComparative() {
                   <PolarAngleAxis dataKey="metric" className="text-xs" />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} className="text-xs" />
                   <Radar 
-                    name={compareData.club1.clubName}
-                    dataKey={compareData.club1.clubName}
+                    name={compareData.item1.label}
+                    dataKey={compareData.item1.label}
                     stroke={CHART_COLORS[0]}
                     fill={CHART_COLORS[0]}
                     fillOpacity={0.3}
                   />
                   <Radar 
-                    name={compareData.club2.clubName}
-                    dataKey={compareData.club2.clubName}
+                    name={compareData.item2.label}
+                    dataKey={compareData.item2.label}
                     stroke={CHART_COLORS[1]}
                     fill={CHART_COLORS[1]}
                     fillOpacity={0.3}
@@ -245,33 +258,33 @@ export function ReportsComparative() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-6">
-                {/* Club 1 */}
+                {/* Shot 1 */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-center" style={{ color: CHART_COLORS[0] }}>
-                    {compareData.club1.clubName}
+                    {compareData.item1.label}
                   </h4>
                   <div className="grid grid-cols-2 gap-4">
-                    <RatingBadge score={compareData.club1.ratings.capability} label="Capability" />
-                    <RatingBadge score={compareData.club1.ratings.consistency} label="Consistency" />
-                    <RatingBadge score={compareData.club1.ratings.currentForm} label="Form" />
+                    <RatingBadge score={compareData.item1.ratings.capability} label="Capability" />
+                    <RatingBadge score={compareData.item1.ratings.consistency} label="Consistency" />
+                    <RatingBadge score={compareData.item1.ratings.currentForm} label="Form" />
                     <div className="text-center">
-                      <div className="text-2xl font-bold">{compareData.club1.metrics.shotCount}</div>
+                      <div className="text-2xl font-bold">{compareData.item1.metrics.shotCount}</div>
                       <div className="text-xs text-muted-foreground">Shots</div>
                     </div>
                   </div>
                 </div>
 
-                {/* Club 2 */}
+                {/* Shot 2 */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-center" style={{ color: CHART_COLORS[1] }}>
-                    {compareData.club2.clubName}
+                    {compareData.item2.label}
                   </h4>
                   <div className="grid grid-cols-2 gap-4">
-                    <RatingBadge score={compareData.club2.ratings.capability} label="Capability" />
-                    <RatingBadge score={compareData.club2.ratings.consistency} label="Consistency" />
-                    <RatingBadge score={compareData.club2.ratings.currentForm} label="Form" />
+                    <RatingBadge score={compareData.item2.ratings.capability} label="Capability" />
+                    <RatingBadge score={compareData.item2.ratings.consistency} label="Consistency" />
+                    <RatingBadge score={compareData.item2.ratings.currentForm} label="Form" />
                     <div className="text-center">
-                      <div className="text-2xl font-bold">{compareData.club2.metrics.shotCount}</div>
+                      <div className="text-2xl font-bold">{compareData.item2.metrics.shotCount}</div>
                       <div className="text-xs text-muted-foreground">Shots</div>
                     </div>
                   </div>
@@ -284,18 +297,18 @@ export function ReportsComparative() {
                   <thead>
                     <tr>
                       <th>Metric</th>
-                      <th className="text-center" style={{ color: CHART_COLORS[0] }}>{compareData.club1.clubName}</th>
-                      <th className="text-center" style={{ color: CHART_COLORS[1] }}>{compareData.club2.clubName}</th>
+                      <th className="text-center" style={{ color: CHART_COLORS[0] }}>{compareData.item1.label}</th>
+                      <th className="text-center" style={{ color: CHART_COLORS[1] }}>{compareData.item2.label}</th>
                       <th>Better</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[
-                      { label: 'On-Target %', v1: compareData.club1.metrics.onTargetPct, v2: compareData.club2.metrics.onTargetPct, format: formatPercent, higherBetter: true },
-                      { label: 'Bad Miss %', v1: compareData.club1.metrics.badMissPct, v2: compareData.club2.metrics.badMissPct, format: formatPercent, higherBetter: false },
-                      { label: 'Strike Centre %', v1: compareData.club1.metrics.strikeCentrePct, v2: compareData.club2.metrics.strikeCentrePct, format: formatPercent, higherBetter: true },
-                      { label: 'Side Variation', v1: compareData.club1.metrics.sideVariation, v2: compareData.club2.metrics.sideVariation, format: formatDistance, higherBetter: false },
-                      { label: 'Avg Distance', v1: compareData.club1.metrics.avgDistanceHit, v2: compareData.club2.metrics.avgDistanceHit, format: formatDistance, higherBetter: true },
+                      { label: 'On-Target %', v1: compareData.item1.metrics.onTargetPct, v2: compareData.item2.metrics.onTargetPct, format: formatPercent, higherBetter: true },
+                      { label: 'Bad Miss %', v1: compareData.item1.metrics.badMissPct, v2: compareData.item2.metrics.badMissPct, format: formatPercent, higherBetter: false },
+                      { label: 'Strike Centre %', v1: compareData.item1.metrics.strikeCentrePct, v2: compareData.item2.metrics.strikeCentrePct, format: formatPercent, higherBetter: true },
+                      { label: 'Side Variation', v1: compareData.item1.metrics.sideVariation, v2: compareData.item2.metrics.sideVariation, format: formatDistance, higherBetter: false },
+                      { label: 'Avg Distance', v1: compareData.item1.metrics.avgDistanceHit, v2: compareData.item2.metrics.avgDistanceHit, format: formatDistance, higherBetter: true },
                     ].map(row => {
                       const winner = row.higherBetter 
                         ? (row.v1 > row.v2 ? 1 : row.v2 > row.v1 ? 2 : 0)
@@ -311,7 +324,7 @@ export function ReportsComparative() {
                             {row.format(row.v2)}
                           </td>
                           <td className="text-center">
-                            {winner === 1 ? compareData.club1.clubName : winner === 2 ? compareData.club2.clubName : 'Tie'}
+                            {winner === 1 ? compareData.item1.label : winner === 2 ? compareData.item2.label : 'Tie'}
                           </td>
                         </tr>
                       );
@@ -324,14 +337,14 @@ export function ReportsComparative() {
         </div>
       )}
 
-      {/* Club Performance Matrix */}
+      {/* Shot Performance Matrix */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
-            Club Performance Matrix
+            {analysisMode === 'shot' ? 'Gapping Shot Performance Matrix' : 'Club Performance Matrix'}
           </CardTitle>
-          <CardDescription>Accuracy vs Capability for all clubs (bubble size = shot count)</CardDescription>
+          <CardDescription>On-target percentage vs capability (bubble size = shot count)</CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={350}>
@@ -362,10 +375,15 @@ export function ReportsComparative() {
                   return (
                     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
                       <p className="font-semibold">{data.name}</p>
-                      <p className="text-sm text-muted-foreground">On-Target: {data.x.toFixed(1)}%</p>
-                      <p className="text-sm text-muted-foreground">Capability: {data.y}</p>
-                      <p className="text-sm text-muted-foreground">Shots: {data.z}</p>
-                      <p className="text-sm text-muted-foreground">Bad Miss: {data.badMiss.toFixed(1)}%</p>
+                      <p className="text-sm text-muted-foreground">Club: {data.club}</p>
+                      <p className="text-sm text-muted-foreground">Shot: {data.shot}</p>
+                      <p className="text-sm text-muted-foreground">Power: {data.power}</p>
+                      <p className="text-sm text-muted-foreground">Shot count: {data.z}</p>
+                      <p className="text-sm text-muted-foreground">On-target: {data.x.toFixed(1)}%</p>
+                      <p className="text-sm text-muted-foreground">Bad miss: {data.badMiss.toFixed(1)}%</p>
+                      <p className="text-sm text-muted-foreground">Average distance: {formatDistance(data.avgDistance)}</p>
+                      <p className="text-sm text-muted-foreground">Side variation: {formatDistance(data.sideVariation)}</p>
+                      <p className="text-sm text-muted-foreground">Strike: {data.strike.toFixed(1)}%</p>
                     </div>
                   );
                 }}
@@ -383,14 +401,14 @@ export function ReportsComparative() {
         </CardContent>
       </Card>
 
-      {/* Club Rankings */}
+      {/* Shot Rankings */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="h-5 w-5 text-amber-500" />
-            Club Rankings
+            {analysisMode === 'shot' ? 'Gapping Shot Rankings' : 'Club Rankings'}
           </CardTitle>
-          <CardDescription>All clubs ranked by capability score</CardDescription>
+          <CardDescription>{analysisMode === 'shot' ? 'Valid Gapping-defined shots ranked by capability score' : 'Club roll-ups ranked by capability score'}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -398,7 +416,7 @@ export function ReportsComparative() {
               <thead>
                 <tr>
                   <th>Rank</th>
-                  <th>Club</th>
+                  <th>{analysisMode === 'shot' ? 'Gapping Shot' : 'Club'}</th>
                   <th>Shots</th>
                   <th>Capability</th>
                   <th>Consistency</th>
@@ -410,9 +428,12 @@ export function ReportsComparative() {
               </thead>
               <tbody>
                 {rankingsData.map((club, idx) => (
-                  <tr key={club.clubName}>
+                  <tr key={club.key}>
                     <td className="font-bold text-lg">#{idx + 1}</td>
-                    <td className="font-medium">{club.clubName}</td>
+                    <td>
+                      <div className="font-medium">{club.label}</div>
+                      {analysisMode === 'shot' && <div className="text-xs text-muted-foreground">{club.clubLabel} · {club.shotLabel} · {club.powerLabel}</div>}
+                    </td>
                     <td>{club.metrics.shotCount}</td>
                     <td>
                       <span className={getRatingColor(club.ratings.capability)}>{club.ratings.capability}</span>

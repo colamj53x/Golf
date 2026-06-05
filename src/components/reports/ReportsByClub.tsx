@@ -2,18 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useGolfData } from '@/context/GolfDataContext';
+import { usePracticeData } from '@/context/PracticeDataContext';
+import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { 
-  processShot, 
-  calculateMetrics, 
-  splitIntoThirds, 
-  getClubConfigId,
   formatPercent,
   formatDistance,
-  getLastNRounds,
   MetricsResult
 } from '@/lib/golfCalculations';
-import { calculateClubRatings, ClubRatings, getRatingColor, getImprovementDisplay } from '@/lib/clubRatings';
-import { ProcessedShot, ClubConfig } from '@/types/golf';
+import { getRatingColor, getImprovementDisplay } from '@/lib/clubRatings';
+import { buildReportGappingAnalysis } from '@/lib/reportGappingShots';
+import { useShotClassificationRules } from '@/lib/shotClassificationRules';
+import { useShotProfiles } from '@/lib/shotProfiles';
 import { 
   LineChart, 
   Line, 
@@ -28,19 +27,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, Target, Activity, Award, Zap } from 'lucide-react';
 
-interface ClubTrendData {
-  clubName: string;
-  config: ClubConfig | undefined;
-  shots: ProcessedShot[];
-  ratings: ClubRatings;
-  periods: {
-    mostRecent: MetricsResult;
-    middle: MetricsResult;
-    oldest: MetricsResult;
-  };
-  last5Rounds: MetricsResult;
-  overall: MetricsResult;
-}
+type AnalysisMode = 'shot' | 'club';
 
 function RatingBadge({ score, label, size = 'normal' }: { score: number; label: string; size?: 'small' | 'normal' }) {
   const colorClass = getRatingColor(score);
@@ -59,64 +46,51 @@ function TrendIndicator({ direction }: { direction: 'up' | 'down' | 'stable' }) 
 }
 
 export function ReportsByClub() {
-  const { clubs, shots, availableClubs, distanceToTargetTolerance } = useGolfData();
-  const [selectedClub, setSelectedClub] = useState<string>('all');
+  const { clubs, shots, distanceToTargetTolerance, gappingHcpTarget } = useGolfData();
+  const { practiceConfigs, practiceSessions } = usePracticeData();
+  const profiles = useShotProfiles();
+  const shotClassificationRules = useShotClassificationRules();
+  const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
+  const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('shot');
+  const [selectedShot, setSelectedShot] = useState<string>('all');
 
-  const clubsData = useMemo(() => {
-    if (shots.length === 0) return [];
+  const analysis = useMemo(() => buildReportGappingAnalysis({
+    profiles,
+    shots,
+    clubs,
+    practiceSessions,
+    practiceConfigs,
+    shotsBySession,
+    gappingHcpTarget,
+    distanceToTargetTolerance,
+    shotClassificationRules,
+  }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
 
-    const clubsList = selectedClub === 'all' ? availableClubs : [selectedClub];
-    
-    return clubsList.map(clubName => {
-      const clubShots = shots.filter(s => s.club === clubName);
-      const sortedShots = [...clubShots].sort((a, b) => 
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
+  const sourceData = analysisMode === 'shot' ? analysis.shots : analysis.clubRollups;
+  const selectedData = useMemo(() => {
+    if (selectedShot === 'all') return sourceData;
+    return sourceData.filter((item) => item.key === selectedShot);
+  }, [selectedShot, sourceData]);
 
-      const configId = getClubConfigId(clubName);
-      const config = clubs.find(c => c.id === configId);
-
-      const processed: ProcessedShot[] = sortedShots.map(shot => 
-        processShot(shot, config, distanceToTargetTolerance)
-      );
-
-      if (processed.length < 3) return null;
-
-      const [mostRecent, middle, oldest] = splitIntoThirds(processed);
-      const last5RoundsShots = getLastNRounds(processed, 5);
-      
-      const data: ClubTrendData = {
-        clubName,
-        config,
-        shots: processed,
-        ratings: calculateClubRatings(processed, config),
-        periods: {
-          mostRecent: calculateMetrics(mostRecent, config),
-          middle: calculateMetrics(middle, config),
-          oldest: calculateMetrics(oldest, config),
-        },
-        last5Rounds: calculateMetrics(last5RoundsShots, config),
-        overall: calculateMetrics(processed, config),
-      };
-
-      return data;
-    }).filter((d): d is ClubTrendData => d !== null);
-  }, [shots, selectedClub, availableClubs, clubs, distanceToTargetTolerance]);
+  const selectOptions = analysisMode === 'shot'
+    ? analysis.catalogueOptions.filter((option) => analysis.shots.some((row) => row.key === option.key))
+    : analysis.clubRollups.map((club) => ({ key: club.key, label: club.label }));
 
   // Prepare chart data for selected club(s)
   const chartData = useMemo(() => {
-    if (clubsData.length === 0) return [];
+    if (selectedData.length === 0) return [];
 
     // For trend chart, show the 3 periods
-    return clubsData.map(club => ({
-      name: club.clubName,
+    return selectedData.map(item => ({
+      name: item.label,
       periods: [
-        { period: 'Oldest', ...club.periods.oldest },
-        { period: 'Middle', ...club.periods.middle },
-        { period: 'Recent', ...club.periods.mostRecent },
+        { period: 'Oldest', ...item.periods.oldest },
+        { period: 'Middle', ...item.periods.middle },
+        { period: 'Recent', ...item.periods.mostRecent },
       ]
     }));
-  }, [clubsData]);
+  }, [selectedData]);
 
   // Aggregate trend data for chart visualization
   const trendChartData = useMemo(() => {
@@ -158,26 +132,49 @@ export function ReportsByClub() {
 
   return (
     <div className="space-y-6">
-      {/* Club Selector */}
-      <div className="flex items-center gap-4">
+      {/* Shot Selector */}
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Club:</label>
-          <Select value={selectedClub} onValueChange={setSelectedClub}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select club" />
+          <label className="text-sm font-medium">View:</label>
+          <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setSelectedShot('all'); }}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Select view" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Clubs</SelectItem>
-              {availableClubs.map(club => (
-                <SelectItem key={club} value={club}>{club}</SelectItem>
+              <SelectItem value="shot">Gapping Shots</SelectItem>
+              <SelectItem value="club">Club Roll-up</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">{analysisMode === 'shot' ? 'Shot:' : 'Club:'}</label>
+          <Select value={selectedShot} onValueChange={setSelectedShot}>
+            <SelectTrigger className="w-[240px]">
+              <SelectValue placeholder={analysisMode === 'shot' ? 'Select shot' : 'Select club'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{analysisMode === 'shot' ? 'All Gapping Shots' : 'All Clubs'}</SelectItem>
+              {selectOptions.map(option => (
+                <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <span className="text-sm text-muted-foreground">
-          {clubsData.length} club{clubsData.length !== 1 ? 's' : ''} • {clubsData.reduce((acc, c) => acc + c.shots.length, 0)} shots
+          {selectedData.length} {analysisMode === 'shot' ? `shot ${selectedData.length === 1 ? 'category' : 'categories'}` : `club${selectedData.length === 1 ? '' : 's'}`} • {selectedData.reduce((acc, c) => acc + c.shots.length, 0)} shots
         </span>
       </div>
+
+      <Card className="border-dashed bg-muted/20">
+        <CardContent className="py-3 text-sm text-muted-foreground">
+          Shot categories are taken from your Gapping setup, so performance review matches the shots you practise.
+          {analysis.unmatchedShots.length > 0 && (
+            <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">
+              Some historical shots are not linked to current Gapping shot definitions ({analysis.unmatchedShots.length}).
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Trend Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -185,7 +182,7 @@ export function ReportsByClub() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Target className="h-5 w-5 text-primary" />
-              Accuracy Trend
+              On-Target Trend
             </CardTitle>
             <CardDescription>On-Target % across time periods</CardDescription>
           </CardHeader>
@@ -317,31 +314,34 @@ export function ReportsByClub() {
       {/* Club Summary Cards */}
       <Card>
         <CardHeader>
-          <CardTitle>Club Performance Summary</CardTitle>
-          <CardDescription>Ratings and key metrics for each club</CardDescription>
+          <CardTitle>{analysisMode === 'shot' ? 'Gapping Shot Performance Summary' : 'Club Performance Summary'}</CardTitle>
+          <CardDescription>{analysisMode === 'shot' ? 'Ratings and key metrics for each Gapping-defined shot' : 'Club roll-up view for broader patterns'}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {clubsData.map(club => {
-              const improvement = getImprovementDisplay(club.ratings.improvement);
-              const trendDir = club.periods.mostRecent.onTargetPct > club.periods.oldest.onTargetPct ? 'up' 
-                : club.periods.mostRecent.onTargetPct < club.periods.oldest.onTargetPct ? 'down' : 'stable';
+            {selectedData.map(item => {
+              const improvement = getImprovementDisplay(item.ratings.improvement);
+              const trendDir = item.periods.mostRecent.onTargetPct > item.periods.oldest.onTargetPct ? 'up'
+                : item.periods.mostRecent.onTargetPct < item.periods.oldest.onTargetPct ? 'down' : 'stable';
               
               return (
-                <Card key={club.clubName} className="bg-muted/30">
+                <Card key={item.key} className="bg-muted/30">
                   <CardContent className="pt-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold">{club.clubName}</h4>
+                      <div>
+                        <h4 className="font-semibold">{item.label}</h4>
+                        {analysisMode === 'shot' && <p className="text-xs text-muted-foreground">{item.clubLabel} · {item.shotLabel} · {item.powerLabel}</p>}
+                      </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">{club.shots.length} shots</span>
+                        <span className="text-xs text-muted-foreground">{item.shots.length} shots</span>
                         <TrendIndicator direction={trendDir} />
                       </div>
                     </div>
                     
                     <div className="grid grid-cols-4 gap-2 mb-3">
-                      <RatingBadge score={club.ratings.capability} label="Cap" size="small" />
-                      <RatingBadge score={club.ratings.consistency} label="Con" size="small" />
-                      <RatingBadge score={club.ratings.currentForm} label="Form" size="small" />
+                      <RatingBadge score={item.ratings.capability} label="Cap" size="small" />
+                      <RatingBadge score={item.ratings.consistency} label="Con" size="small" />
+                      <RatingBadge score={item.ratings.currentForm} label="Form" size="small" />
                       <div className="text-center">
                         <div className={`text-lg font-bold ${improvement.color}`}>{improvement.text}</div>
                         <div className="text-[10px] text-muted-foreground">Trend</div>
@@ -351,19 +351,19 @@ export function ReportsByClub() {
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">On-Target:</span>
-                        <span className="font-medium">{formatPercent(club.last5Rounds.onTargetPct)}</span>
+                        <span className="font-medium">{formatPercent(item.last5Rounds.onTargetPct)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Bad Miss:</span>
-                        <span className="font-medium">{formatPercent(club.last5Rounds.badMissPct)}</span>
+                        <span className="font-medium">{formatPercent(item.last5Rounds.badMissPct)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Avg Dist:</span>
-                        <span className="font-medium">{formatDistance(club.last5Rounds.avgDistanceHit)}</span>
+                        <span className="font-medium">{formatDistance(item.last5Rounds.avgDistanceHit)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Side Var:</span>
-                        <span className="font-medium">{formatDistance(club.last5Rounds.sideVariation)}</span>
+                        <span className="font-medium">{formatDistance(item.last5Rounds.sideVariation)}</span>
                       </div>
                     </div>
                   </CardContent>
