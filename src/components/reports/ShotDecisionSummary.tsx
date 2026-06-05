@@ -2,7 +2,14 @@ import { AlertTriangle, CheckCircle2, Hammer, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { ShotDecision, ShotDecisionBucket, ShotDecisionSummary as ShotDecisionSummaryData } from '@/lib/reportGappingShots';
+import {
+  benchmarkStatusClass,
+  type BenchmarkHcp,
+  type ShotBenchmarkResult,
+  type ShotDecision,
+  type ShotDecisionBucket,
+  type ShotDecisionSummary as ShotDecisionSummaryData,
+} from '@/lib/reportGappingShots';
 
 const BUCKETS: Array<{
   key: ShotDecisionBucket;
@@ -51,10 +58,12 @@ function hasReviewedShot(summary: ShotDecisionSummaryData): boolean {
 
 function DecisionChip({
   decision,
+  benchmark,
   selected,
   onSelect,
 }: {
   decision: ShotDecision;
+  benchmark?: ShotBenchmarkResult;
   selected: boolean;
   onSelect: (shotKey: string) => void;
 }) {
@@ -66,8 +75,16 @@ function DecisionChip({
       onClick={() => onSelect(decision.shot.key)}
     >
       <span className="grid gap-1">
-        <span className="font-semibold text-foreground">{decision.shot.label}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-foreground">{decision.shot.label}</span>
+          {benchmark && <Badge variant="outline" className={benchmarkStatusClass(benchmark.status)}>Vs {benchmark.hcp} HCP: {benchmark.statusLabel}</Badge>}
+        </span>
         <span className="text-xs leading-5 text-muted-foreground">{decision.reason}</span>
+        {benchmark && (
+          <span className="text-xs leading-5 text-muted-foreground">
+            {benchmark.status === 'ahead' ? `Strong: ${benchmark.mainStrength}` : `Main gap: ${benchmark.mainGap}`}
+          </span>
+        )}
       </span>
     </Button>
   );
@@ -76,11 +93,15 @@ function DecisionChip({
 export function ShotDecisionSummary({
   summary,
   unmatchedCount,
+  benchmarkHcp,
+  benchmarkByShot,
   selectedShotKey,
   onSelectShot,
 }: {
   summary: ShotDecisionSummaryData;
   unmatchedCount: number;
+  benchmarkHcp: BenchmarkHcp;
+  benchmarkByShot: Map<string, ShotBenchmarkResult>;
   selectedShotKey?: string;
   onSelectShot: (shotKey: string) => void;
 }) {
@@ -97,7 +118,10 @@ export function ShotDecisionSummary({
               Shot categories come from your Gapping setup, so this review matches the shots you actually practise.
             </CardDescription>
           </div>
-          <Badge variant="outline">{total} Gapping shots</Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{total} Gapping shots</Badge>
+            <Badge variant="outline">Benchmark: {benchmarkHcp} HCP</Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -131,6 +155,7 @@ export function ShotDecisionSummary({
                       <DecisionChip
                         key={decision.shot.key}
                         decision={decision}
+                        benchmark={benchmarkByShot.get(decision.shot.key)}
                         selected={selectedShotKey === decision.shot.key}
                         onSelect={onSelectShot}
                       />

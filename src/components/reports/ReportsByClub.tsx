@@ -11,7 +11,15 @@ import {
   MetricsResult
 } from '@/lib/golfCalculations';
 import { getRatingColor, getImprovementDisplay } from '@/lib/clubRatings';
-import { buildReportGappingAnalysis, buildShotDecisionSummary } from '@/lib/reportGappingShots';
+import {
+  benchmarkProfiles,
+  benchmarkStatusClass,
+  buildScopedReportData,
+  buildShotBenchmarkResult,
+  buildReportGappingAnalysis,
+  buildShotDecisionSummary,
+  type BenchmarkHcp,
+} from '@/lib/reportGappingShots';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { 
@@ -29,6 +37,10 @@ import {
 import { TrendingUp, TrendingDown, Minus, Target, Activity, Award, Zap } from 'lucide-react';
 
 type AnalysisMode = 'shot' | 'club';
+type PeriodFilter = 'all' | '5' | '6' | '10' | '15';
+
+const periodToRoundCount = (period: PeriodFilter): number | 'all' => period === 'all' ? 'all' : Number(period);
+const BENCHMARK_OPTIONS = Object.keys(benchmarkProfiles).map(Number).sort((a, b) => b - a) as BenchmarkHcp[];
 
 function RatingBadge({ score, label, size = 'normal' }: { score: number; label: string; size?: 'small' | 'normal' }) {
   const colorClass = getRatingColor(score);
@@ -55,6 +67,8 @@ export function ReportsByClub() {
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('shot');
   const [selectedShot, setSelectedShot] = useState<string>('all');
+  const [period, setPeriod] = useState<PeriodFilter>('all');
+  const [benchmarkHcp, setBenchmarkHcp] = useState<BenchmarkHcp>(30);
 
   const analysis = useMemo(() => buildReportGappingAnalysis({
     profiles,
@@ -67,17 +81,23 @@ export function ReportsByClub() {
     distanceToTargetTolerance,
     shotClassificationRules,
   }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
-  const decisionSummary = useMemo(() => buildShotDecisionSummary(analysis.shots), [analysis.shots]);
+  const scopedShots = useMemo(() => analysis.shots.map((row) => buildScopedReportData(row, periodToRoundCount(period))), [analysis.shots, period]);
+  const scopedClubRollups = useMemo(() => analysis.clubRollups.map((row) => buildScopedReportData(row, periodToRoundCount(period))), [analysis.clubRollups, period]);
+  const decisionSummary = useMemo(() => buildShotDecisionSummary(scopedShots), [scopedShots]);
+  const benchmarkByShot = useMemo(() => new Map(scopedShots.map((shot) => [shot.key, buildShotBenchmarkResult(shot, benchmarkHcp)])), [scopedShots, benchmarkHcp]);
 
-  const sourceData = analysisMode === 'shot' ? analysis.shots : analysis.clubRollups;
+  const sourceData = analysisMode === 'shot' ? scopedShots : scopedClubRollups;
   const selectedData = useMemo(() => {
     if (selectedShot === 'all') return sourceData;
     return sourceData.filter((item) => item.key === selectedShot);
   }, [selectedShot, sourceData]);
 
   const selectOptions = analysisMode === 'shot'
-    ? analysis.catalogueOptions.filter((option) => analysis.shots.some((row) => row.key === option.key))
-    : analysis.clubRollups.map((club) => ({ key: club.key, label: club.label }));
+    ? analysis.catalogueOptions.filter((option) => scopedShots.some((row) => row.key === option.key))
+    : scopedClubRollups.map((club) => ({ key: club.key, label: club.label }));
+  const selectedBenchmark = analysisMode === 'shot' && selectedShot !== 'all'
+    ? benchmarkByShot.get(selectedShot)
+    : null;
 
   // Prepare chart data for selected club(s)
   const chartData = useMemo(() => {
@@ -134,8 +154,22 @@ export function ReportsByClub() {
 
   return (
     <div className="space-y-6">
-      {/* Shot Selector */}
       <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Period:</label>
+          <Select value={period} onValueChange={(value) => setPeriod(value as PeriodFilter)}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All rounds</SelectItem>
+              <SelectItem value="5">Last 5 rounds</SelectItem>
+              <SelectItem value="6">Last 6 rounds</SelectItem>
+              <SelectItem value="10">Last 10 rounds</SelectItem>
+              <SelectItem value="15">Last 15 rounds</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium">View:</label>
           <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setSelectedShot('all'); }}>
@@ -162,6 +196,18 @@ export function ReportsByClub() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Benchmark against:</label>
+          <Select value={benchmarkHcp.toString()} onValueChange={(value) => setBenchmarkHcp(Number(value) as BenchmarkHcp)}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Benchmark" />
+            </SelectTrigger>
+            <SelectContent>
+              {BENCHMARK_OPTIONS.map((hcp) => <SelectItem key={hcp} value={hcp.toString()}>{hcp} HCP</SelectItem>)}
+              <SelectItem value="custom" disabled>Custom · coming soon</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <span className="text-sm text-muted-foreground">
           {selectedData.length} {analysisMode === 'shot' ? `shot ${selectedData.length === 1 ? 'category' : 'categories'}` : `club${selectedData.length === 1 ? '' : 's'}`} • {selectedData.reduce((acc, c) => acc + c.shots.length, 0)} shots
         </span>
@@ -170,6 +216,7 @@ export function ReportsByClub() {
       <Card className="border-dashed bg-muted/20">
         <CardContent className="py-3 text-sm text-muted-foreground">
           Shot categories are taken from your Gapping setup, so performance review matches the shots you practise.
+          <span className="ml-2">Benchmarking changes how results are interpreted. A shot can be good for 30 HCP but still short of a 20 HCP target.</span>
           {analysis.unmatchedShots.length > 0 && (
             <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">
               Some historical shots are not linked to current Gapping shot definitions ({analysis.unmatchedShots.length}).
@@ -181,12 +228,42 @@ export function ReportsByClub() {
       <ShotDecisionSummary
         summary={decisionSummary}
         unmatchedCount={analysis.unmatchedShots.length}
+        benchmarkHcp={benchmarkHcp}
+        benchmarkByShot={benchmarkByShot}
         selectedShotKey={analysisMode === 'shot' ? selectedShot : undefined}
         onSelectShot={(shotKey) => {
           setAnalysisMode('shot');
           setSelectedShot(shotKey);
         }}
       />
+
+      {selectedBenchmark && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Benchmark View</CardTitle>
+            <CardDescription>Benchmark: {benchmarkHcp} HCP · {selectedData[0]?.label}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`rounded-full border px-3 py-1 text-sm font-medium ${benchmarkStatusClass(selectedBenchmark.status)}`}>
+                {selectedBenchmark.statusLabel}
+              </span>
+              <span className="text-sm text-muted-foreground">Main gap: {selectedBenchmark.mainGap}</span>
+              <span className="text-sm text-muted-foreground">Strong: {selectedBenchmark.mainStrength}</span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-5">
+              {selectedBenchmark.metrics.map((metric) => (
+                <div key={metric.key} className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{metric.label}</div>
+                  <div className="mt-1 font-semibold">{metric.key.includes('Variation') ? formatDistance(metric.value) : formatPercent(metric.value)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">vs {metric.higherIsBetter ? '' : '≤'}{metric.key.includes('Variation') ? formatDistance(metric.benchmark) : formatPercent(metric.benchmark)}</div>
+                  <div className={`mt-2 rounded-full border px-2 py-0.5 text-xs ${benchmarkStatusClass(metric.status)}`}>{metric.status.replace('-', ' ')}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Trend Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -333,6 +410,7 @@ export function ReportsByClub() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {selectedData.map(item => {
               const improvement = getImprovementDisplay(item.ratings.improvement);
+              const benchmark = analysisMode === 'shot' ? benchmarkByShot.get(item.key) : null;
               const trendDir = item.periods.mostRecent.onTargetPct > item.periods.oldest.onTargetPct ? 'up'
                 : item.periods.mostRecent.onTargetPct < item.periods.oldest.onTargetPct ? 'down' : 'stable';
               
@@ -343,6 +421,7 @@ export function ReportsByClub() {
                       <div>
                         <h4 className="font-semibold">{item.label}</h4>
                         {analysisMode === 'shot' && <p className="text-xs text-muted-foreground">{item.clubLabel} · {item.shotLabel} · {item.powerLabel}</p>}
+                        {benchmark && <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-xs ${benchmarkStatusClass(benchmark.status)}`}>Vs {benchmarkHcp} HCP: {benchmark.statusLabel}</div>}
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground">{item.shots.length} shots</span>
@@ -377,6 +456,12 @@ export function ReportsByClub() {
                         <span className="text-muted-foreground">Side Var:</span>
                         <span className="font-medium">{formatDistance(item.last5Rounds.sideVariation)}</span>
                       </div>
+                      {benchmark && (
+                        <div className="col-span-2 flex justify-between">
+                          <span className="text-muted-foreground">Main Gap:</span>
+                          <span className="font-medium">{benchmark.mainGap}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

@@ -40,6 +40,29 @@ export interface ReportGappingShotData {
   lastShotDate: Date | null;
 }
 
+export type BenchmarkHcp = 30 | 25 | 20 | 15 | 10;
+export type BenchmarkFamily = 'driver' | 'longClub' | 'midIron' | 'wedge';
+export type BenchmarkStatus = 'ahead' | 'on-track' | 'watch' | 'priority-gap' | 'not-enough-data';
+
+export interface BenchmarkMetricResult {
+  key: 'onTargetPct' | 'badMissPct' | 'sideVariationM' | 'distanceVariationM' | 'strikePct';
+  label: string;
+  value: number;
+  benchmark: number;
+  status: BenchmarkStatus;
+  higherIsBetter: boolean;
+}
+
+export interface ShotBenchmarkResult {
+  status: BenchmarkStatus;
+  statusLabel: string;
+  family: BenchmarkFamily;
+  hcp: BenchmarkHcp;
+  mainGap: string;
+  mainStrength: string;
+  metrics: BenchmarkMetricResult[];
+}
+
 export type ShotDecisionBucket = 'trust' | 'build' | 'caution' | 'retest';
 
 export interface ShotDecision {
@@ -67,6 +90,65 @@ export const decisionThresholds = {
   cautionStrikePct: 35,
   trustStrikePct: 55,
   staleDays: 120,
+};
+
+export const benchmarkProfiles: Record<BenchmarkHcp, Record<BenchmarkFamily, {
+  onTargetPct: number;
+  badMissPct: number;
+  sideVariationM: number;
+  distanceVariationM: number;
+  strikePct: number;
+}>> = {
+  30: {
+    driver: { onTargetPct: 45, badMissPct: 20, sideVariationM: 35, distanceVariationM: 25, strikePct: 45 },
+    longClub: { onTargetPct: 38, badMissPct: 22, sideVariationM: 28, distanceVariationM: 22, strikePct: 42 },
+    midIron: { onTargetPct: 45, badMissPct: 18, sideVariationM: 22, distanceVariationM: 18, strikePct: 50 },
+    wedge: { onTargetPct: 55, badMissPct: 12, sideVariationM: 12, distanceVariationM: 10, strikePct: 55 },
+  },
+  25: {
+    driver: { onTargetPct: 48, badMissPct: 18, sideVariationM: 32, distanceVariationM: 23, strikePct: 48 },
+    longClub: { onTargetPct: 42, badMissPct: 20, sideVariationM: 25, distanceVariationM: 20, strikePct: 46 },
+    midIron: { onTargetPct: 49, badMissPct: 16, sideVariationM: 20, distanceVariationM: 16, strikePct: 55 },
+    wedge: { onTargetPct: 58, badMissPct: 11, sideVariationM: 11, distanceVariationM: 9, strikePct: 58 },
+  },
+  20: {
+    driver: { onTargetPct: 52, badMissPct: 16, sideVariationM: 30, distanceVariationM: 21, strikePct: 52 },
+    longClub: { onTargetPct: 46, badMissPct: 18, sideVariationM: 23, distanceVariationM: 18, strikePct: 50 },
+    midIron: { onTargetPct: 54, badMissPct: 14, sideVariationM: 17, distanceVariationM: 14, strikePct: 60 },
+    wedge: { onTargetPct: 63, badMissPct: 9, sideVariationM: 9, distanceVariationM: 8, strikePct: 63 },
+  },
+  15: {
+    driver: { onTargetPct: 56, badMissPct: 14, sideVariationM: 27, distanceVariationM: 19, strikePct: 56 },
+    longClub: { onTargetPct: 50, badMissPct: 16, sideVariationM: 21, distanceVariationM: 16, strikePct: 55 },
+    midIron: { onTargetPct: 59, badMissPct: 11, sideVariationM: 14, distanceVariationM: 12, strikePct: 65 },
+    wedge: { onTargetPct: 68, badMissPct: 7, sideVariationM: 8, distanceVariationM: 7, strikePct: 68 },
+  },
+  10: {
+    driver: { onTargetPct: 62, badMissPct: 11, sideVariationM: 24, distanceVariationM: 16, strikePct: 62 },
+    longClub: { onTargetPct: 56, badMissPct: 13, sideVariationM: 18, distanceVariationM: 14, strikePct: 60 },
+    midIron: { onTargetPct: 65, badMissPct: 8, sideVariationM: 11, distanceVariationM: 10, strikePct: 72 },
+    wedge: { onTargetPct: 74, badMissPct: 5, sideVariationM: 6, distanceVariationM: 5, strikePct: 75 },
+  },
+};
+
+export const benchmarkTolerance = {
+  aheadPctMargin: 5,
+  watchPctMargin: 10,
+  aheadDistanceMarginM: 2,
+  watchDistanceMarginM: 5,
+};
+
+export const benchmarkSampleThresholds = {
+  minShots: 10,
+  minRecentShots: 3,
+};
+
+export const benchmarkStatusLabels: Record<BenchmarkStatus, string> = {
+  ahead: 'Ahead',
+  'on-track': 'On Track',
+  watch: 'Watch',
+  'priority-gap': 'Priority Gap',
+  'not-enough-data': 'Not Enough Data',
 };
 
 export interface ReportGappingAnalysis {
@@ -169,6 +251,26 @@ function sortGappingData(a: ReportGappingShotData, b: ReportGappingShotData): nu
   const powerDelta = powerStrength(b.power) - powerStrength(a.power);
   if (powerDelta !== 0) return powerDelta;
   return a.shotLabel.localeCompare(b.shotLabel);
+}
+
+export function buildScopedReportData(row: ReportGappingShotData, roundCount: number | 'all'): ReportGappingShotData {
+  const scopedShots = roundCount === 'all' ? row.shots : getLastNRounds(row.shots, roundCount);
+  const [mostRecent, middle, oldest] = splitIntoThirds(scopedShots);
+  const last5Rounds = getLastNRounds(scopedShots, 5);
+  return {
+    ...row,
+    shots: scopedShots,
+    ratings: calculateClubRatings(scopedShots, row.config),
+    metrics: calculateMetrics(scopedShots, row.config),
+    overall: calculateMetrics(scopedShots, row.config),
+    last5Rounds: calculateMetrics(last5Rounds, row.config),
+    periods: {
+      mostRecent: calculateMetrics(mostRecent, row.config),
+      middle: calculateMetrics(middle, row.config),
+      oldest: calculateMetrics(oldest, row.config),
+    },
+    lastShotDate: scopedShots.at(-1)?.date ?? null,
+  };
 }
 
 export function buildReportGappingAnalysis({
@@ -419,4 +521,150 @@ export function buildShotDecisionSummary(shots: ReportGappingShotData[], now = n
   summary.retest.sort(sortDecisions);
 
   return summary;
+}
+
+export function getBenchmarkFamily(row: ReportGappingShotData): BenchmarkFamily {
+  if (row.clubId === 'dr') return 'driver';
+  if (row.shotType === 'pitch' || row.shotType === 'chip' || row.shotType === 'bump') return 'wedge';
+  if (['pw', 'gw', 'sw', 'lw'].includes(row.clubId)) return 'wedge';
+  if (['5w', '3w', '4h', '5h', '5i', '6i'].includes(row.clubId)) return 'longClub';
+  return 'midIron';
+}
+
+function compareMetric(value: number, benchmark: number, higherIsBetter: boolean, distanceMetric = false): BenchmarkStatus {
+  const aheadMargin = distanceMetric ? benchmarkTolerance.aheadDistanceMarginM : benchmarkTolerance.aheadPctMargin;
+  const watchMargin = distanceMetric ? benchmarkTolerance.watchDistanceMarginM : benchmarkTolerance.watchPctMargin;
+
+  if (higherIsBetter) {
+    if (value >= benchmark + aheadMargin) return 'ahead';
+    if (value >= benchmark - aheadMargin) return 'on-track';
+    if (value >= benchmark - watchMargin) return 'watch';
+    return 'priority-gap';
+  }
+
+  if (value <= benchmark - aheadMargin) return 'ahead';
+  if (value <= benchmark + aheadMargin) return 'on-track';
+  if (value <= benchmark + watchMargin) return 'watch';
+  return 'priority-gap';
+}
+
+function statusRank(status: BenchmarkStatus): number {
+  if (status === 'priority-gap') return 4;
+  if (status === 'watch') return 3;
+  if (status === 'on-track') return 2;
+  if (status === 'ahead') return 1;
+  return 5;
+}
+
+export function buildShotBenchmarkResult(row: ReportGappingShotData, hcp: BenchmarkHcp): ShotBenchmarkResult {
+  const family = getBenchmarkFamily(row);
+  const profile = benchmarkProfiles[hcp][family];
+  const recentShots = row.last5Rounds.shotCount;
+
+  if (row.metrics.shotCount < benchmarkSampleThresholds.minShots || recentShots < benchmarkSampleThresholds.minRecentShots) {
+    return {
+      status: 'not-enough-data',
+      statusLabel: benchmarkStatusLabels['not-enough-data'],
+      family,
+      hcp,
+      mainGap: 'More sample needed',
+      mainStrength: 'None yet',
+      metrics: [],
+    };
+  }
+
+  const metricResults: BenchmarkMetricResult[] = [
+    {
+      key: 'onTargetPct',
+      label: 'On Target',
+      value: row.metrics.onTargetPct,
+      benchmark: profile.onTargetPct,
+      higherIsBetter: true,
+      status: compareMetric(row.metrics.onTargetPct, profile.onTargetPct, true),
+    },
+    {
+      key: 'badMissPct',
+      label: 'Bad Miss',
+      value: row.metrics.badMissPct,
+      benchmark: profile.badMissPct,
+      higherIsBetter: false,
+      status: compareMetric(row.metrics.badMissPct, profile.badMissPct, false),
+    },
+    {
+      key: 'sideVariationM',
+      label: 'Side Variation',
+      value: row.metrics.sideVariation,
+      benchmark: profile.sideVariationM,
+      higherIsBetter: false,
+      status: compareMetric(row.metrics.sideVariation, profile.sideVariationM, false, true),
+    },
+    {
+      key: 'distanceVariationM',
+      label: 'Distance Variation',
+      value: row.metrics.distanceVariation,
+      benchmark: profile.distanceVariationM,
+      higherIsBetter: false,
+      status: compareMetric(row.metrics.distanceVariation, profile.distanceVariationM, false, true),
+    },
+    {
+      key: 'strikePct',
+      label: 'Strike',
+      value: row.metrics.strikeCentrePct,
+      benchmark: profile.strikePct,
+      higherIsBetter: true,
+      status: compareMetric(row.metrics.strikeCentrePct, profile.strikePct, true),
+    },
+  ].filter((metric) => Number.isFinite(metric.value));
+
+  if (metricResults.length === 0) {
+    return {
+      status: 'not-enough-data',
+      statusLabel: benchmarkStatusLabels['not-enough-data'],
+      family,
+      hcp,
+      mainGap: 'Missing metrics',
+      mainStrength: 'None yet',
+      metrics: [],
+    };
+  }
+
+  const priority = metricResults.filter((metric) => metric.status === 'priority-gap');
+  const watch = metricResults.filter((metric) => metric.status === 'watch');
+  const ahead = metricResults.filter((metric) => metric.status === 'ahead');
+  const status: BenchmarkStatus = priority.length
+    ? 'priority-gap'
+    : watch.length
+      ? 'watch'
+      : ahead.length
+        ? 'ahead'
+        : 'on-track';
+  const sortedGaps = [...metricResults].sort((a, b) => statusRank(b.status) - statusRank(a.status));
+  const mainGap = priority[0]?.label ?? watch[0]?.label ?? 'None';
+  const mainStrength = ahead[0]?.label ?? sortedGaps.find((metric) => metric.status === 'on-track')?.label ?? 'None yet';
+
+  return {
+    status,
+    statusLabel: benchmarkStatusLabels[status],
+    family,
+    hcp,
+    mainGap,
+    mainStrength,
+    metrics: metricResults,
+  };
+}
+
+export function benchmarkStatusClass(status: BenchmarkStatus): string {
+  if (status === 'ahead') return 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300';
+  if (status === 'on-track') return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300';
+  if (status === 'watch') return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  if (status === 'priority-gap') return 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300';
+  return 'border-border bg-muted text-muted-foreground';
+}
+
+export function benchmarkStatusColor(status: BenchmarkStatus): string {
+  if (status === 'ahead') return 'hsl(142, 55%, 42%)';
+  if (status === 'on-track') return 'hsl(217, 75%, 55%)';
+  if (status === 'watch') return 'hsl(38, 90%, 50%)';
+  if (status === 'priority-gap') return 'hsl(0, 72%, 55%)';
+  return 'hsl(var(--muted-foreground))';
 }
