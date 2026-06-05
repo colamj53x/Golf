@@ -75,9 +75,25 @@ const formatNumber = (value: number | null) => value === null ? 'Not enough data
 const formatMetric = (value: number | null, percent = false) => value === null ? 'Not enough data' : percent ? `${Math.round(value)}%` : `${Math.round(value)}`;
 const formatShotCount = (count: number) => `${count} ${count === 1 ? 'shot' : 'shots'}`;
 const trendValue = (current: number | null, comparison: number | null) => current === null || comparison === null ? null : current - comparison;
+const THOUGHT_FIELDS: Array<{ key: keyof RoundThoughts; label: string }> = [
+  { key: 'drivingNotes', label: 'Driving' },
+  { key: 'ironsNotes', label: 'Irons and Hybrids' },
+  { key: 'shortNotes', label: 'Short Game' },
+  { key: 'puttingNotes', label: 'Putting' },
+  { key: 'mentalNotes', label: 'Mental' },
+  { key: 'courseManagementNotes', label: 'Course Management' },
+];
 
 function StatusBadge({ status }: { status: BenchmarkStatus }) {
   return <Badge variant="outline" className={STATUS_CLASSES[status]}>{STATUS_LABELS[status]}</Badge>;
+}
+
+function statusTextClass(status: BenchmarkStatus): string {
+  if (status === 'above') return 'text-green-700 dark:text-green-300';
+  if (status === 'on-target') return 'text-blue-700 dark:text-blue-300';
+  if (status === 'watch') return 'text-amber-700 dark:text-amber-300';
+  if (status === 'priority') return 'text-red-700 dark:text-red-300';
+  return 'text-muted-foreground';
 }
 
 function Trend({ current, comparison, label }: { current: number | null; comparison: number | null; label: string }) {
@@ -187,6 +203,82 @@ function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
 }) {
   const Icon = activeSort === sortKey ? direction === 'asc' ? ArrowUp : ArrowDown : ArrowUpDown;
   return <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>{label}<Icon className="h-3.5 w-3.5" /></button>;
+}
+
+function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditThoughts }: {
+  thoughts?: RoundThoughts;
+  areas: RoundReviewArea[];
+  story: ReturnType<typeof buildRoundStory>;
+  benchmark: HcpBenchmark;
+  onEditThoughts?: () => void;
+}) {
+  const notes = thoughts ? THOUGHT_FIELDS
+    .map(field => ({ ...field, value: thoughts[field.key].trim() }))
+    .filter(field => field.value.length > 0) : [];
+  const tee = areas.find(area => area.key === 'tee');
+  const approach = areas.find(area => area.key === 'approach');
+  const short = areas.find(area => area.key === 'short');
+  const recovery = areas.find(area => area.key === 'recovery');
+  const management = areas.find(area => area.key === 'management');
+  const weakestArea = [...areas]
+    .filter(area => area.round.shotCount >= 3)
+    .sort((a, b) => (areaValue(a) ?? 100) - (areaValue(b) ?? 100))[0];
+  const strongestArea = [...areas]
+    .filter(area => area.round.shotCount >= 3)
+    .sort((a, b) => (areaValue(b) ?? 0) - (areaValue(a) ?? 0))[0];
+
+  const interpretation = [
+    `Big picture: ${strongestArea ? `${strongestArea.label.toLowerCase()} was the strongest support area` : 'the round needs more data before a clear strength is obvious'}${weakestArea ? `, while ${weakestArea.label.toLowerCase()} is the clearest next improvement lever.` : '.'}`,
+    tee && tee.round.shotCount ? `Tee / Driving: ${areaRead(tee, getMetricStatus(tee.round.shotQualityIndex, benchmark.teeShotQuality, 3))} ${tee.round.shotQualityIndex === null ? '' : `Quality was ${Math.round(tee.round.shotQualityIndex)}.`}` : '',
+    approach && approach.round.shotCount ? `Approach / Green Targets: ${areaRead(approach, getMetricStatus(approach.round.targetSuccessPct, benchmark.greenTargetQuality, 5))} Target success was ${formatPercent(approach.round.targetSuccessPct)}.` : '',
+    short && short.round.shotCount ? `Short Game / Scoring Zone: ${areaRead(short, getMetricStatus(short.round.scoringZoneSuccessPct, benchmark.scoringZoneSuccess, 5))} Scoring-zone success was ${formatPercent(short.round.scoringZoneSuccessPct)}.` : '',
+    recovery && recovery.round.shotCount ? `Recovery / Trouble: ${areaRead(recovery, getMetricStatus(recovery.round.shotQualityIndex, benchmark.shotQuality, 3))}` : '',
+    management && management.round.shotCount ? `Course Management: ${areaRead(management, getMetricStatus(management.round.targetSuccessPct, benchmark.targetSuccess, 5))}` : '',
+  ].filter(Boolean);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Round Notes & Interpretation</CardTitle>
+            <CardDescription>Your notes beside a rules-based read of the same round data.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={onEditThoughts}>Edit Round Thoughts</Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border bg-muted/20 p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My Round Notes</h4>
+          {notes.length ? (
+            <div className="mt-4 space-y-5">
+              {notes.map(note => (
+                <section key={note.key} className="space-y-1">
+                  <h5 className="font-semibold">{note.label}</h5>
+                  {note.value.split(/\n\s*\n/).map((paragraph, index) => <p key={index} className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{paragraph}</p>)}
+                </section>
+              ))}
+            </div>
+          ) : <p className="mt-4 text-sm text-muted-foreground">No round notes yet. Add notes about feel, decisions, clubs, pace, or confidence to make this interpretation more useful.</p>}
+        </div>
+        <div className="rounded-xl border bg-primary/5 p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Interpretation & Improvements</h4>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            This is a deterministic, rules-based interpretation using your notes and shot data. It is not using AI yet; hooking up an AI rewrite would let this read more like a coach’s narrative.
+          </p>
+          <div className="mt-4 space-y-3">
+            {interpretation.map(item => <p key={item} className="text-sm leading-7">{item}</p>)}
+          </div>
+          <div className="mt-5">
+            <h5 className="font-semibold">Suggested improvement focus</h5>
+            <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+              {story.practise.map(item => <li key={item}>{item}</li>)}
+            </ol>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, onEditThoughts }: RoundReviewTabProps) {
@@ -375,13 +467,13 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
             <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Biggest regression vs Last 5</div><div className="mt-1 font-semibold">{biggestRegression?.label ?? 'Not enough data'}</div><div className="text-sm">{biggestRegression ? `${Math.round((biggestRegression.round.shotQualityIndex ?? 0) - (biggestRegression.last5.shotQualityIndex ?? 0))} quality` : 'Build more rounds'}</div></CardContent></Card>
           </div>
           <Card><CardContent className="pt-5">
-            <div className="hidden grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr_1fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-              <SortableHeader label="Club / Shot Type" sortKey="club" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Shots" sortKey="shots" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Quality" sortKey="quality" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Target Success" sortKey="target-success" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Safe Shot Rate</div><SortableHeader label="Bad Miss Rate" sortKey="bad-miss" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Status</div>
+            <div className="hidden grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+              <SortableHeader label="Club / Shot Type" sortKey="club" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Shots" sortKey="shots" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Quality" sortKey="quality" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Target Success" sortKey="target-success" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Safe Shot Rate</div><SortableHeader label="Bad Miss Rate" sortKey="bad-miss" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} />
             </div>
             <div className="divide-y">
               {displayedClubRows.map(row => {
                 const status = getMetricStatus(row.round.shotQualityIndex, benchmark.shotQuality, 3);
-                return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr_1fr] md:items-center"><div><div className="font-semibold">{row.clubLabel} · {row.shotTypeLabel}</div><div className="text-xs text-muted-foreground">{row.powerLabel} · {row.targetLabel}{row.round.shotCount < 3 ? ' · small sample' : ''}</div></div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Bad Miss</span>{formatPercent(row.round.badMissPct)}</div><div><StatusBadge status={status} /></div></div>;
+                return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr] md:items-center"><div><div className="font-semibold">{row.clubLabel} · {row.shotTypeLabel}</div><div className="text-xs text-muted-foreground">{row.powerLabel} · {row.targetLabel}{row.round.shotCount < 3 ? ' · small sample' : ''}</div></div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className={`text-sm font-semibold ${statusTextClass(status)}`}><span className="mr-1 text-xs font-normal text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Bad Miss</span>{formatPercent(row.round.badMissPct)}</div></div>;
               })}
             </div>
           </CardContent></Card>
@@ -390,21 +482,17 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         <section className="space-y-4">
           <div><h3 className="text-xl font-semibold">Lie Review</h3><p className="text-sm text-muted-foreground">Separate club problems from lie and situation problems.</p></div>
           <Card><CardContent className="pt-5">
-            <div className="hidden grid-cols-[1.2fr_.7fr_.7fr_.8fr_.8fr_1fr_1.5fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-              <div>Lie</div><div>Shots</div><div>% Total</div><div>Quality</div><div>Target Success</div><div>Safe Shot Rate</div><div>Read</div>
+            <div className="hidden grid-cols-[1.2fr_.7fr_.7fr_.8fr_.8fr_1fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+              <div>Lie</div><div>Shots</div><div>% Total</div><div>Quality</div><div>Target Success</div><div>Safe Shot Rate</div>
             </div>
             <div className="divide-y">{review.lieRows.map(row => {
               const status = getMetricStatus(row.round.shotQualityIndex, benchmark.shotQuality, 3);
-              const read = row.round.shotCount < 3 ? 'Small sample — avoid over-reading this lie.' : areaRead({ round: row.round } as RoundReviewArea, status);
-              return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.2fr_.7fr_.7fr_.8fr_.8fr_1fr_1.5fr] md:items-center"><div><div className="font-semibold">{row.label}</div><div className="mt-1 md:hidden"><StatusBadge status={status} /></div></div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">% Total</span>{formatPercent(row.shareOfTotalPct ?? null)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div><div className="text-xs text-muted-foreground"><div className="mb-1 hidden md:block"><StatusBadge status={status} /></div>{read}</div></div>;
+              return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.2fr_.7fr_.7fr_.8fr_.8fr_1fr] md:items-center"><div><div className="font-semibold">{row.label}</div>{row.round.shotCount < 3 && <div className="text-xs text-muted-foreground">small sample</div>}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">% Total</span>{formatPercent(row.shareOfTotalPct ?? null)}</div><div className={`text-sm font-semibold ${statusTextClass(status)}`}><span className="mr-1 text-xs font-normal text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div></div>;
             })}</div>
           </CardContent></Card>
         </section>
 
-        {scope === 'round' && <Card>
-          <CardHeader><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Data matched your notes?</CardTitle><CardDescription>Round Thoughts are used in this interpretation.</CardDescription></div><Button variant="outline" onClick={onEditThoughts}>Edit Round Thoughts</Button></div></CardHeader>
-          <CardContent className="space-y-3">{story.noteMatches.length ? story.noteMatches.map(item => <div key={item} className="flex gap-2 text-sm"><Target className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{item}</div>) : <p className="text-sm text-muted-foreground">Add notes about clubs, confidence, pace, or decisions to connect your reflection with the data.</p>}<div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">Practice priorities generated from this round will appear in your existing practice planning workflow.</div></CardContent>
-        </Card>}
+        {scope === 'round' && <RoundNotesInterpretation thoughts={thoughts} areas={review.areas} story={story} benchmark={benchmark} onEditThoughts={onEditThoughts} />}
       </div>
     </TooltipProvider>
   );

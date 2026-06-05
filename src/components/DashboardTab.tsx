@@ -545,6 +545,7 @@ export function DashboardTab({
                 saveLabel="Save Round Thoughts"
                 collapsible
                 editRequestKey={roundThoughtsEditRequest}
+                hideReadOnlyWhenCollapsed
               />
               </div>
             )}

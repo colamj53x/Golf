@@ -26,6 +26,7 @@ interface RoundReflectionEditorProps {
   statusTone?: 'default' | 'destructive' | 'muted';
   collapsible?: boolean;
   editRequestKey?: number;
+  hideReadOnlyWhenCollapsed?: boolean;
 }
 
 type ReflectionField = {
@@ -94,6 +95,7 @@ export function RoundReflectionEditor({
   statusTone = 'muted',
   collapsible = false,
   editRequestKey = 0,
+  hideReadOnlyWhenCollapsed = false,
 }: RoundReflectionEditorProps) {
   const [isEditing, setIsEditing] = useState(!collapsible);
   const [valueBeforeEditing, setValueBeforeEditing] = useState(value);
@@ -140,6 +142,10 @@ export function RoundReflectionEditor({
       setIsEditing(false);
     }
   };
+
+  if (collapsible && hideReadOnlyWhenCollapsed && !isEditing) {
+    return null;
+  }
 
   return (
     <Card>
