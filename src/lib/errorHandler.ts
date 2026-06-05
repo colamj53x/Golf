@@ -59,6 +59,10 @@ export interface ShotValidation {
   endDistanceFromTarget?: number;
 }
 
+function localCalendarDayValue(date: Date): number {
+  return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+
 export function validateShot(shot: ShotValidation): string | null {
   if (!shot.club || shot.club.trim().length === 0) {
     return 'Club name is required';
@@ -79,12 +83,17 @@ export function validateShot(shot: ShotValidation): string | null {
     return 'End distance must be between 0 and 600 meters';
   }
   
-  const now = new Date();
-  const minDate = new Date('2020-01-01');
-  if (shot.date > now) {
+  if (Number.isNaN(shot.date.getTime())) {
+    return 'Invalid date';
+  }
+
+  const today = localCalendarDayValue(new Date());
+  const shotDay = localCalendarDayValue(shot.date);
+  const minDay = 20200101;
+  if (shotDay > today) {
     return 'Future dates are not allowed';
   }
-  if (shot.date < minDate) {
+  if (shotDay < minDay) {
     return 'Date must be after January 1, 2020';
   }
   
