@@ -63,6 +63,33 @@ export interface ShotBenchmarkResult {
   metrics: BenchmarkMetricResult[];
 }
 
+export type SnapshotCardKey = 'best' | 'reliable' | 'watch' | 'used' | 'improved' | 'data';
+
+export interface PerformanceSnapshotCard {
+  key: SnapshotCardKey;
+  title: string;
+  shot: ReportGappingShotData | null;
+  benchmark: ShotBenchmarkResult | null;
+  value: string;
+  detail: string;
+}
+
+export interface PerformanceMapPoint {
+  key: string;
+  label: string;
+  clubLabel: string;
+  shotLabel: string;
+  powerLabel: string;
+  onTargetPct: number;
+  badMissPct: number;
+  shotCount: number;
+  sideVariation: number;
+  distanceVariation: number;
+  strikePct: number;
+  benchmark: ShotBenchmarkResult;
+  decision: ShotDecisionBucket | null;
+}
+
 export type ShotDecisionBucket = 'trust' | 'build' | 'caution' | 'retest';
 
 export interface ShotDecision {
@@ -667,4 +694,151 @@ export function benchmarkStatusColor(status: BenchmarkStatus): string {
   if (status === 'watch') return 'hsl(38, 90%, 50%)';
   if (status === 'priority-gap') return 'hsl(0, 72%, 55%)';
   return 'hsl(var(--muted-foreground))';
+}
+
+function decisionByShot(summary: ShotDecisionSummary): Map<string, ShotDecision> {
+  const map = new Map<string, ShotDecision>();
+  for (const bucket of [summary.trust, summary.build, summary.caution, summary.retest]) {
+    for (const decision of bucket) map.set(decision.shot.key, decision);
+  }
+  return map;
+}
+
+function benchmarkFor(benchmarks: Map<string, ShotBenchmarkResult>, shot: ReportGappingShotData): ShotBenchmarkResult | null {
+  return benchmarks.get(shot.key) ?? null;
+}
+
+function emptySnapshot(key: SnapshotCardKey, title: string, detail = 'Not enough data yet.'): PerformanceSnapshotCard {
+  return { key, title, shot: null, benchmark: null, value: 'Not enough data yet', detail };
+}
+
+export function buildPerformanceSnapshot(
+  shots: ReportGappingShotData[],
+  benchmarks: Map<string, ShotBenchmarkResult>,
+  summary: ShotDecisionSummary,
+): PerformanceSnapshotCard[] {
+  const decisions = decisionByShot(summary);
+  const analysedShots = shots.filter((shot) => shot.metrics.shotCount > 0);
+  const enoughDataShots = analysedShots.filter((shot) => benchmarkFor(benchmarks, shot)?.status !== 'not-enough-data');
+
+  const best = [...enoughDataShots]
+    .filter((shot) => ['ahead', 'on-track'].includes(benchmarkFor(benchmarks, shot)?.status ?? ''))
+    .sort((a, b) => {
+      const statusA = benchmarkFor(benchmarks, a)?.status === 'ahead' ? 1 : 0;
+      const statusB = benchmarkFor(benchmarks, b)?.status === 'ahead' ? 1 : 0;
+      return statusB - statusA || b.ratings.capability - a.ratings.capability || b.metrics.onTargetPct - a.metrics.onTargetPct;
+    })[0] ?? null;
+
+  const reliable = [...enoughDataShots]
+    .sort((a, b) => (
+      a.metrics.badMissPct - b.metrics.badMissPct
+      || a.metrics.sideVariation - b.metrics.sideVariation
+      || a.metrics.distanceVariation - b.metrics.distanceVariation
+      || b.metrics.strikeCentrePct - a.metrics.strikeCentrePct
+    ))[0] ?? null;
+
+  const watch = [...enoughDataShots]
+    .filter((shot) => ['priority-gap', 'watch'].includes(benchmarkFor(benchmarks, shot)?.status ?? ''))
+    .sort((a, b) => {
+      const rank = (shot: ReportGappingShotData) => benchmarkFor(benchmarks, shot)?.status === 'priority-gap' ? 2 : 1;
+      return rank(b) - rank(a) || b.metrics.shotCount - a.metrics.shotCount;
+    })[0] ?? null;
+
+  const used = [...analysedShots].sort((a, b) => b.metrics.shotCount - a.metrics.shotCount)[0] ?? null;
+
+  const improved = [...enoughDataShots]
+    .map((shot) => ({
+      shot,
+      trend: shot.periods.mostRecent.shotCount > 0 && shot.periods.oldest.shotCount > 0
+        ? shot.periods.mostRecent.onTargetPct - shot.periods.oldest.onTargetPct
+        : null,
+    }))
+    .filter((item): item is { shot: ReportGappingShotData; trend: number } => item.trend !== null && item.trend > 0)
+    .sort((a, b) => b.trend - a.trend)[0] ?? null;
+
+  const needsData = [...analysedShots]
+    .filter((shot) => benchmarkFor(benchmarks, shot)?.status === 'not-enough-data' || decisions.get(shot.key)?.bucket === 'retest')
+    .sort((a, b) => a.metrics.shotCount - b.metrics.shotCount || b.last5Rounds.shotCount - a.last5Rounds.shotCount)[0] ?? null;
+
+  const cards: PerformanceSnapshotCard[] = [
+    best ? {
+      key: 'best',
+      title: 'Best Shot',
+      shot: best,
+      benchmark: benchmarkFor(benchmarks, best),
+      value: best.label,
+      detail: `${Math.round(best.metrics.onTargetPct)}% on target · ${Math.round(best.metrics.badMissPct)}% bad miss`,
+    } : emptySnapshot('best', 'Best Shot'),
+    reliable ? {
+      key: 'reliable',
+      title: 'Most Reliable',
+      shot: reliable,
+      benchmark: benchmarkFor(benchmarks, reliable),
+      value: reliable.label,
+      detail: `${Math.round(reliable.metrics.badMissPct)}% bad miss · ${Math.round(reliable.metrics.sideVariation)}m side variation`,
+    } : emptySnapshot('reliable', 'Most Reliable'),
+    watch ? {
+      key: 'watch',
+      title: 'Biggest Watch',
+      shot: watch,
+      benchmark: benchmarkFor(benchmarks, watch),
+      value: watch.label,
+      detail: `Main gap: ${benchmarkFor(benchmarks, watch)?.mainGap ?? 'Benchmark gap'}`,
+    } : emptySnapshot('watch', 'Biggest Watch'),
+    used ? {
+      key: 'used',
+      title: 'Most Used',
+      shot: used,
+      benchmark: benchmarkFor(benchmarks, used),
+      value: used.label,
+      detail: `${used.metrics.shotCount} reviewed shots`,
+    } : emptySnapshot('used', 'Most Used'),
+    improved ? {
+      key: 'improved',
+      title: 'Most Improved',
+      shot: improved.shot,
+      benchmark: benchmarkFor(benchmarks, improved.shot),
+      value: improved.shot.label,
+      detail: `On-target trend up ${Math.round(improved.trend)} points`,
+    } : emptySnapshot('improved', 'Most Improved', 'Trend data not available yet.'),
+    needsData ? {
+      key: 'data',
+      title: 'Needs More Data',
+      shot: needsData,
+      benchmark: benchmarkFor(benchmarks, needsData),
+      value: needsData.label,
+      detail: `${needsData.metrics.shotCount} reviewed shots · ${needsData.last5Rounds.shotCount} recent`,
+    } : emptySnapshot('data', 'Needs More Data'),
+  ];
+
+  return cards;
+}
+
+export function buildPerformanceMapData(
+  shots: ReportGappingShotData[],
+  benchmarks: Map<string, ShotBenchmarkResult>,
+  summary: ShotDecisionSummary,
+): PerformanceMapPoint[] {
+  const decisions = decisionByShot(summary);
+  return shots
+    .map((shot) => {
+      const benchmark = benchmarkFor(benchmarks, shot);
+      if (!benchmark || shot.metrics.shotCount <= 0) return null;
+      return {
+        key: shot.key,
+        label: shot.label,
+        clubLabel: shot.clubLabel,
+        shotLabel: shot.shotLabel,
+        powerLabel: shot.powerLabel,
+        onTargetPct: shot.metrics.onTargetPct,
+        badMissPct: shot.metrics.badMissPct,
+        shotCount: shot.metrics.shotCount,
+        sideVariation: shot.metrics.sideVariation,
+        distanceVariation: shot.metrics.distanceVariation,
+        strikePct: shot.metrics.strikeCentrePct,
+        benchmark,
+        decision: decisions.get(shot.key)?.bucket ?? null,
+      };
+    })
+    .filter((point): point is PerformanceMapPoint => point !== null);
 }

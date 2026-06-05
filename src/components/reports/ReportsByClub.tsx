@@ -14,11 +14,16 @@ import { getRatingColor, getImprovementDisplay } from '@/lib/clubRatings';
 import {
   benchmarkProfiles,
   benchmarkStatusClass,
+  benchmarkStatusColor,
+  buildPerformanceMapData,
+  buildPerformanceSnapshot,
   buildScopedReportData,
   buildShotBenchmarkResult,
   buildReportGappingAnalysis,
   buildShotDecisionSummary,
   type BenchmarkHcp,
+  type PerformanceMapPoint,
+  type PerformanceSnapshotCard,
 } from '@/lib/reportGappingShots';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
@@ -28,9 +33,13 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
+  Cell,
   Tooltip, 
   Legend, 
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  ZAxis,
   AreaChart,
   Area
 } from 'recharts';
@@ -56,6 +65,58 @@ function TrendIndicator({ direction }: { direction: 'up' | 'down' | 'stable' }) 
   if (direction === 'up') return <TrendingUp className="h-4 w-4 text-green-500" />;
   if (direction === 'down') return <TrendingDown className="h-4 w-4 text-red-500" />;
   return <Minus className="h-4 w-4 text-muted-foreground" />;
+}
+
+function SnapshotCard({
+  card,
+  selected,
+  onSelect,
+}: {
+  card: PerformanceSnapshotCard;
+  selected: boolean;
+  onSelect: (shotKey: string) => void;
+}) {
+  const clickable = Boolean(card.shot);
+  return (
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={() => card.shot && onSelect(card.shot.key)}
+      className={`rounded-xl border bg-card p-4 text-left shadow-sm transition hover:bg-muted/30 disabled:cursor-default disabled:opacity-70 ${selected ? 'border-primary ring-2 ring-primary/20' : ''}`}
+    >
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{card.title}</div>
+      <div className="mt-2 text-lg font-semibold">{card.value}</div>
+      {card.benchmark && (
+        <div className={`mt-3 inline-flex rounded-full border px-2 py-0.5 text-xs ${benchmarkStatusClass(card.benchmark.status)}`}>
+          {card.benchmark.statusLabel} vs {card.benchmark.hcp} HCP
+        </div>
+      )}
+      <p className="mt-3 text-sm leading-5 text-muted-foreground">{card.detail}</p>
+    </button>
+  );
+}
+
+function PerformanceMapTooltip({ payload }: { payload?: Array<{ payload: PerformanceMapPoint }> }) {
+  if (!payload || payload.length === 0) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
+      <p className="font-semibold">{data.label}</p>
+      <p className="text-sm text-muted-foreground">Club: {data.clubLabel}</p>
+      <p className="text-sm text-muted-foreground">Shot: {data.shotLabel}</p>
+      <p className="text-sm text-muted-foreground">Power: {data.powerLabel}</p>
+      <p className="text-sm text-muted-foreground">Benchmark: {data.benchmark.hcp} HCP</p>
+      <p className="text-sm text-muted-foreground">Status: {data.benchmark.statusLabel}</p>
+      {data.decision && <p className="text-sm text-muted-foreground">Decision: {data.decision}</p>}
+      <p className="text-sm text-muted-foreground">Shots: {data.shotCount}</p>
+      <p className="text-sm text-muted-foreground">On-target: {formatPercent(data.onTargetPct)}</p>
+      <p className="text-sm text-muted-foreground">Bad miss: {formatPercent(data.badMissPct)}</p>
+      <p className="text-sm text-muted-foreground">Side variation: {formatDistance(data.sideVariation)}</p>
+      <p className="text-sm text-muted-foreground">Distance variation: {formatDistance(data.distanceVariation)}</p>
+      <p className="text-sm text-muted-foreground">Strike: {formatPercent(data.strikePct)}</p>
+      <p className="text-sm text-muted-foreground">Main gap: {data.benchmark.mainGap}</p>
+    </div>
+  );
 }
 
 export function ReportsByClub() {
@@ -98,6 +159,15 @@ export function ReportsByClub() {
   const selectedBenchmark = analysisMode === 'shot' && selectedShot !== 'all'
     ? benchmarkByShot.get(selectedShot)
     : null;
+  const dashboardShots = analysisMode === 'shot' ? selectedData : scopedShots;
+  const snapshotCards = useMemo(
+    () => buildPerformanceSnapshot(dashboardShots, benchmarkByShot, decisionSummary),
+    [benchmarkByShot, dashboardShots, decisionSummary],
+  );
+  const performanceMapData = useMemo(
+    () => buildPerformanceMapData(dashboardShots, benchmarkByShot, decisionSummary),
+    [benchmarkByShot, dashboardShots, decisionSummary],
+  );
 
   // Prepare chart data for selected club(s)
   const chartData = useMemo(() => {
@@ -154,74 +224,83 @@ export function ReportsByClub() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Period:</label>
-          <Select value={period} onValueChange={(value) => setPeriod(value as PeriodFilter)}>
-            <SelectTrigger className="w-[170px]">
-              <SelectValue placeholder="Select period" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All rounds</SelectItem>
-              <SelectItem value="5">Last 5 rounds</SelectItem>
-              <SelectItem value="6">Last 6 rounds</SelectItem>
-              <SelectItem value="10">Last 10 rounds</SelectItem>
-              <SelectItem value="15">Last 15 rounds</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">View:</label>
-          <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setSelectedShot('all'); }}>
-            <SelectTrigger className="w-[170px]">
-              <SelectValue placeholder="Select view" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="shot">Gapping Shots</SelectItem>
-              <SelectItem value="club">Club Roll-up</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">{analysisMode === 'shot' ? 'Shot:' : 'Club:'}</label>
-          <Select value={selectedShot} onValueChange={setSelectedShot}>
-            <SelectTrigger className="w-[240px]">
-              <SelectValue placeholder={analysisMode === 'shot' ? 'Select shot' : 'Select club'} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{analysisMode === 'shot' ? 'All Gapping Shots' : 'All Clubs'}</SelectItem>
-              {selectOptions.map(option => (
-                <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Benchmark against:</label>
-          <Select value={benchmarkHcp.toString()} onValueChange={(value) => setBenchmarkHcp(Number(value) as BenchmarkHcp)}>
-            <SelectTrigger className="w-[170px]">
-              <SelectValue placeholder="Benchmark" />
-            </SelectTrigger>
-            <SelectContent>
-              {BENCHMARK_OPTIONS.map((hcp) => <SelectItem key={hcp} value={hcp.toString()}>{hcp} HCP</SelectItem>)}
-              <SelectItem value="custom" disabled>Custom · coming soon</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <span className="text-sm text-muted-foreground">
-          {selectedData.length} {analysisMode === 'shot' ? `shot ${selectedData.length === 1 ? 'category' : 'categories'}` : `club${selectedData.length === 1 ? '' : 's'}`} • {selectedData.reduce((acc, c) => acc + c.shots.length, 0)} shots
-        </span>
+      <div className="space-y-2">
+        <h2 className="text-3xl font-semibold tracking-tight">Advanced Shot Review</h2>
+        <p className="text-muted-foreground">Review each Gapping Shot by reliability, benchmark performance, and usage.</p>
       </div>
 
-      <Card className="border-dashed bg-muted/20">
-        <CardContent className="py-3 text-sm text-muted-foreground">
-          Shot categories are taken from your Gapping setup, so performance review matches the shots you practise.
-          <span className="ml-2">Benchmarking changes how results are interpreted. A shot can be good for 30 HCP but still short of a 20 HCP target.</span>
-          {analysis.unmatchedShots.length > 0 && (
-            <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">
-              Some historical shots are not linked to current Gapping shot definitions ({analysis.unmatchedShots.length}).
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Review Controls</CardTitle>
+          <CardDescription>Benchmarking changes how results are interpreted. A shot can be good for 30 HCP but still short of a 20 HCP target.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Period:</label>
+              <Select value={period} onValueChange={(value) => setPeriod(value as PeriodFilter)}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All rounds</SelectItem>
+                  <SelectItem value="5">Last 5 rounds</SelectItem>
+                  <SelectItem value="6">Last 6 rounds</SelectItem>
+                  <SelectItem value="10">Last 10 rounds</SelectItem>
+                  <SelectItem value="15">Last 15 rounds</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Shot:</label>
+              <Select value={selectedShot} onValueChange={setSelectedShot}>
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder={analysisMode === 'shot' ? 'Select shot' : 'Select club'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{analysisMode === 'shot' ? 'All Gapping Shots' : 'All Clubs'}</SelectItem>
+                  {selectOptions.map(option => (
+                    <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Benchmark against:</label>
+              <Select value={benchmarkHcp.toString()} onValueChange={(value) => setBenchmarkHcp(Number(value) as BenchmarkHcp)}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Benchmark" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BENCHMARK_OPTIONS.map((hcp) => <SelectItem key={hcp} value={hcp.toString()}>{hcp} HCP</SelectItem>)}
+                  <SelectItem value="custom" disabled>Custom · coming soon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">View:</label>
+              <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setSelectedShot('all'); }}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Select view" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="shot">Shot Detail</SelectItem>
+                  <SelectItem value="club">Club Roll-up</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {selectedData.length} {analysisMode === 'shot' ? `shot ${selectedData.length === 1 ? 'category' : 'categories'}` : `club${selectedData.length === 1 ? '' : 's'}`} · {selectedData.reduce((acc, c) => acc + c.shots.length, 0)} shots
             </span>
-          )}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Shot categories are taken from your Gapping setup, so performance review matches the shots you practise.
+            {analysis.unmatchedShots.length > 0 && (
+              <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">
+                Some historical shots are not linked to current Gapping shot definitions ({analysis.unmatchedShots.length}).
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -236,6 +315,65 @@ export function ReportsByClub() {
           setSelectedShot(shotKey);
         }}
       />
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-xl font-semibold">Key Performance Snapshot</h3>
+          <p className="text-sm text-muted-foreground">The quickest read on what is strongest, most used, and worth watching in the current view.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          {snapshotCards.map((card) => (
+            <SnapshotCard
+              key={card.key}
+              card={card}
+              selected={Boolean(card.shot && selectedShot === card.shot.key)}
+              onSelect={(shotKey) => {
+                setAnalysisMode('shot');
+                setSelectedShot(shotKey);
+              }}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Visual Performance Map</CardTitle>
+          <CardDescription>X-axis is on-target percentage. Y-axis is bad-miss percentage, with lower bad-miss shots shown higher.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {performanceMapData.length === 0 ? (
+            <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+              No reviewed shots yet. Add shots through Gapping and capture practice or round data to generate review insights.
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="pointer-events-none absolute left-14 top-4 z-10 rounded-full bg-background/80 px-2 py-1 text-xs text-muted-foreground">Reliable Zone</div>
+              <div className="pointer-events-none absolute bottom-8 right-6 z-10 rounded-full bg-background/80 px-2 py-1 text-xs text-muted-foreground">Watch / Priority Gap Zone</div>
+              <ResponsiveContainer width="100%" height={420}>
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 24, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis type="number" dataKey="onTargetPct" name="On-target %" domain={[0, 100]} label={{ value: 'On-target %', position: 'insideBottom', offset: -8 }} />
+                  <YAxis type="number" dataKey="badMissPct" name="Bad miss %" reversed domain={[0, 'dataMax + 5']} label={{ value: 'Bad miss %', angle: -90, position: 'insideLeft' }} />
+                  <ZAxis type="number" dataKey="shotCount" range={[60, 520]} />
+                  <Tooltip content={<PerformanceMapTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                  <Scatter data={performanceMapData}>
+                    {performanceMapData.map((point) => (
+                      <Cell key={point.key} fill={benchmarkStatusColor(point.benchmark.status)} />
+                    ))}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-xl font-semibold">Detailed Evidence</h3>
+          <p className="text-sm text-muted-foreground">The numbers behind the dashboard summary.</p>
+        </div>
 
       {selectedBenchmark && (
         <Card>
@@ -265,7 +403,6 @@ export function ReportsByClub() {
         </Card>
       )}
 
-      {/* Trend Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -470,6 +607,7 @@ export function ReportsByClub() {
           </div>
         </CardContent>
       </Card>
+      </section>
     </div>
   );
 }
