@@ -21,9 +21,13 @@ import {
   buildShotBenchmarkResult,
   buildReportGappingAnalysis,
   buildShotDecisionSummary,
+  buildTrendSummary,
+  trendMovementClass,
   type BenchmarkHcp,
   type PerformanceMapPoint,
   type PerformanceSnapshotCard,
+  type ShotTrendResult,
+  type TrendMetricComparison,
 } from '@/lib/reportGappingShots';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
@@ -115,7 +119,34 @@ function PerformanceMapTooltip({ payload }: { payload?: Array<{ payload: Perform
       <p className="text-sm text-muted-foreground">Distance variation: {formatDistance(data.distanceVariation)}</p>
       <p className="text-sm text-muted-foreground">Strike: {formatPercent(data.strikePct)}</p>
       <p className="text-sm text-muted-foreground">Main gap: {data.benchmark.mainGap}</p>
+      {data.trend && (
+        <>
+          <p className="text-sm text-muted-foreground">Trend: {data.trend.movementLabel}</p>
+          <p className="text-sm text-muted-foreground">Main change: {data.trend.mainChange}</p>
+        </>
+      )}
     </div>
+  );
+}
+
+function formatTrendMetricValue(metric: TrendMetricComparison, value: number): string {
+  return metric.unit === 'pct' ? formatPercent(value) : formatDistance(value);
+}
+
+function formatTrendMetricChange(metric: TrendMetricComparison): string {
+  if (metric.unit === 'pct') {
+    const rounded = Math.round(metric.change);
+    return rounded > 0 ? `+${rounded} pts` : `${rounded} pts`;
+  }
+  const rounded = Math.round(metric.change);
+  return rounded > 0 ? `+${rounded}m` : `${rounded}m`;
+}
+
+function TrendBadge({ trend }: { trend: ShotTrendResult }) {
+  return (
+    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${trendMovementClass(trend.movement)}`}>
+      {trend.movementLabel}
+    </span>
   );
 }
 
@@ -146,6 +177,7 @@ export function ReportsByClub() {
   const scopedClubRollups = useMemo(() => analysis.clubRollups.map((row) => buildScopedReportData(row, periodToRoundCount(period))), [analysis.clubRollups, period]);
   const decisionSummary = useMemo(() => buildShotDecisionSummary(scopedShots), [scopedShots]);
   const benchmarkByShot = useMemo(() => new Map(scopedShots.map((shot) => [shot.key, buildShotBenchmarkResult(shot, benchmarkHcp)])), [scopedShots, benchmarkHcp]);
+  const trendRoundCount = period === 'all' ? 10 : Number(period);
 
   const sourceData = analysisMode === 'shot' ? scopedShots : scopedClubRollups;
   const selectedData = useMemo(() => {
@@ -160,13 +192,29 @@ export function ReportsByClub() {
     ? benchmarkByShot.get(selectedShot)
     : null;
   const dashboardShots = analysisMode === 'shot' ? selectedData : scopedShots;
+  const trendSourceShots = useMemo(() => {
+    if (analysisMode === 'shot') {
+      if (selectedShot === 'all') return analysis.shots;
+      return analysis.shots.filter((shot) => shot.key === selectedShot);
+    }
+
+    if (selectedShot === 'all') return analysis.shots;
+    const clubId = selectedShot.replace('club:', '');
+    return analysis.shots.filter((shot) => shot.clubId === clubId);
+  }, [analysis.shots, analysisMode, selectedShot]);
+  const trendResults = useMemo(
+    () => buildTrendSummary(trendSourceShots, benchmarkHcp, trendRoundCount),
+    [benchmarkHcp, trendRoundCount, trendSourceShots],
+  );
+  const trendByShot = useMemo(() => new Map(trendResults.map((trend) => [trend.shot.key, trend])), [trendResults]);
+  const selectedTrend = analysisMode === 'shot' && selectedShot !== 'all' ? trendByShot.get(selectedShot) ?? null : null;
   const snapshotCards = useMemo(
-    () => buildPerformanceSnapshot(dashboardShots, benchmarkByShot, decisionSummary),
-    [benchmarkByShot, dashboardShots, decisionSummary],
+    () => buildPerformanceSnapshot(dashboardShots, benchmarkByShot, decisionSummary, trendByShot),
+    [benchmarkByShot, dashboardShots, decisionSummary, trendByShot],
   );
   const performanceMapData = useMemo(
-    () => buildPerformanceMapData(dashboardShots, benchmarkByShot, decisionSummary),
-    [benchmarkByShot, dashboardShots, decisionSummary],
+    () => buildPerformanceMapData(dashboardShots, benchmarkByShot, decisionSummary, trendByShot),
+    [benchmarkByShot, dashboardShots, decisionSummary, trendByShot],
   );
 
   // Prepare chart data for selected club(s)
@@ -365,6 +413,134 @@ export function ReportsByClub() {
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Progression &amp; Trends</CardTitle>
+              <CardDescription>
+                Compares the current period with the previous equivalent period to show whether each Gapping Shot is moving forward, slipping, or staying the same.
+              </CardDescription>
+            </div>
+            <div className="rounded-full border bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+              Recent vs Previous · {trendRoundCount} rounds each
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {trendResults.length === 0 ? (
+            <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+              No current-period shot data available for this view.
+            </div>
+          ) : (
+            <>
+              {trendResults.every((trend) => trend.previousShots < 1) && (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                  No previous-period data available yet. Trends will sharpen once more comparable rounds are captured.
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full min-w-[840px] text-sm">
+                  <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Shot</th>
+                      <th className="px-4 py-3 font-medium">Previous</th>
+                      <th className="px-4 py-3 font-medium">Current</th>
+                      <th className="px-4 py-3 font-medium">Movement</th>
+                      <th className="px-4 py-3 font-medium">Main Change</th>
+                      <th className="px-4 py-3 font-medium">Shots</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trendResults.map((trend) => (
+                      <tr
+                        key={trend.shot.key}
+                        className={`border-t transition hover:bg-muted/25 ${selectedShot === trend.shot.key ? 'bg-muted/30' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            className="text-left font-semibold hover:text-primary"
+                            onClick={() => {
+                              setAnalysisMode('shot');
+                              setSelectedShot(trend.shot.key);
+                            }}
+                          >
+                            {trend.shot.label}
+                          </button>
+                          <div className="text-xs text-muted-foreground">{trend.shot.clubLabel} · {trend.shot.shotLabel} · {trend.shot.powerLabel}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${benchmarkStatusClass(trend.previousBenchmark.status)}`}>
+                            {trend.previousBenchmark.statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${benchmarkStatusClass(trend.currentBenchmark.status)}`}>
+                            {trend.currentBenchmark.statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3"><TrendBadge trend={trend} /></td>
+                        <td className="px-4 py-3 text-muted-foreground">{trend.mainChange}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{trend.currentShots} vs {trend.previousShots}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {selectedTrend && (
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h4 className="font-semibold">{selectedTrend.shot.label} trend detail</h4>
+                      <p className="text-sm text-muted-foreground">Current period compared with the previous {trendRoundCount} rounds.</p>
+                    </div>
+                    <TrendBadge trend={selectedTrend} />
+                  </div>
+
+                  {selectedTrend.metricComparisons.length === 0 ? (
+                    <div className="mt-4 rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
+                      Not enough comparable metrics for this shot yet.
+                    </div>
+                  ) : (
+                    <div className="mt-4 overflow-x-auto rounded-lg border bg-background">
+                      <table className="w-full min-w-[620px] text-sm">
+                        <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">Metric</th>
+                            <th className="px-4 py-3 font-medium">Previous Period</th>
+                            <th className="px-4 py-3 font-medium">Current Period</th>
+                            <th className="px-4 py-3 font-medium">Change</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedTrend.metricComparisons.map((metric) => (
+                            <tr key={metric.key} className="border-t">
+                              <td className="px-4 py-3 font-medium">{metric.label}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{formatTrendMetricValue(metric, metric.previous)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{formatTrendMetricValue(metric, metric.current)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{formatTrendMetricChange(metric)}</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t">
+                            <td className="px-4 py-3 font-medium">Shot count</td>
+                            <td className="px-4 py-3 text-muted-foreground">{selectedTrend.previousShots}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{selectedTrend.currentShots}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{selectedTrend.currentShots - selectedTrend.previousShots >= 0 ? '+' : ''}{selectedTrend.currentShots - selectedTrend.previousShots}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,6 +1,6 @@
 import type { ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { calculateClubRatings, type ClubRatings } from '@/lib/clubRatings';
-import { calculateMetrics, getClubConfigId, getLastNRounds, processShot, splitIntoThirds, type MetricsResult } from '@/lib/golfCalculations';
+import { calculateMetrics, getClubConfigId, getLastNRounds, getShotDateKey, processShot, splitIntoThirds, type MetricsResult } from '@/lib/golfCalculations';
 import {
   buildCourseShotGappingAssignments,
   clubSortIndex,
@@ -88,6 +88,7 @@ export interface PerformanceMapPoint {
   strikePct: number;
   benchmark: ShotBenchmarkResult;
   decision: ShotDecisionBucket | null;
+  trend: ShotTrendResult | null;
 }
 
 export type ShotDecisionBucket = 'trust' | 'build' | 'caution' | 'retest';
@@ -103,6 +104,36 @@ export interface ShotDecisionSummary {
   build: ShotDecision[];
   caution: ShotDecision[];
   retest: ShotDecision[];
+}
+
+export type TrendMovement = 'improving' | 'stable' | 'declining' | 'newly-measured' | 'not-enough-data';
+
+export interface TrendMetricComparison {
+  key: 'onTargetPct' | 'badMissPct' | 'sideVariation' | 'distanceVariation' | 'strikePct';
+  label: string;
+  previous: number;
+  current: number;
+  change: number;
+  unit: 'pct' | 'm';
+  higherIsBetter: boolean;
+  changeLabel: string;
+  magnitude: number;
+}
+
+export interface ShotTrendResult {
+  shot: ReportGappingShotData;
+  current: ReportGappingShotData;
+  previous: ReportGappingShotData;
+  currentBenchmark: ShotBenchmarkResult;
+  previousBenchmark: ShotBenchmarkResult;
+  movement: TrendMovement;
+  movementLabel: string;
+  mainChange: string;
+  currentShots: number;
+  previousShots: number;
+  statusDelta: number;
+  meaningfulDelta: number;
+  metricComparisons: TrendMetricComparison[];
 }
 
 export const decisionThresholds = {
@@ -175,6 +206,25 @@ export const benchmarkStatusLabels: Record<BenchmarkStatus, string> = {
   'on-track': 'On Track',
   watch: 'Watch',
   'priority-gap': 'Priority Gap',
+  'not-enough-data': 'Not Enough Data',
+};
+
+export const trendThresholds = {
+  minCurrentShots: 8,
+  minPreviousShots: 8,
+  meaningfulOnTargetChangePct: 8,
+  meaningfulBadMissChangePct: 5,
+  meaningfulSideVariationChangeM: 4,
+  meaningfulDistanceVariationChangeM: 4,
+  meaningfulStrikeChangePct: 8,
+  meaningfulConsistencyChange: 0.1,
+};
+
+export const trendMovementLabels: Record<TrendMovement, string> = {
+  improving: 'Improving',
+  stable: 'Stable',
+  declining: 'Declining',
+  'newly-measured': 'Newly Measured',
   'not-enough-data': 'Not Enough Data',
 };
 
@@ -282,6 +332,10 @@ function sortGappingData(a: ReportGappingShotData, b: ReportGappingShotData): nu
 
 export function buildScopedReportData(row: ReportGappingShotData, roundCount: number | 'all'): ReportGappingShotData {
   const scopedShots = roundCount === 'all' ? row.shots : getLastNRounds(row.shots, roundCount);
+  return rebuildReportData(row, scopedShots);
+}
+
+function rebuildReportData(row: ReportGappingShotData, scopedShots: ProcessedShot[]): ReportGappingShotData {
   const [mostRecent, middle, oldest] = splitIntoThirds(scopedShots);
   const last5Rounds = getLastNRounds(scopedShots, 5);
   return {
@@ -696,6 +750,218 @@ export function benchmarkStatusColor(status: BenchmarkStatus): string {
   return 'hsl(var(--muted-foreground))';
 }
 
+export function trendMovementClass(movement: TrendMovement): string {
+  if (movement === 'improving') return 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300';
+  if (movement === 'declining') return 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300';
+  if (movement === 'newly-measured') return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300';
+  if (movement === 'stable') return 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300';
+  return 'border-border bg-muted text-muted-foreground';
+}
+
+function benchmarkStatusScore(status: BenchmarkStatus): number | null {
+  if (status === 'ahead') return 4;
+  if (status === 'on-track') return 3;
+  if (status === 'watch') return 2;
+  if (status === 'priority-gap') return 1;
+  return null;
+}
+
+function splitRecentAndPreviousShots(shots: ProcessedShot[], roundCount: number): {
+  current: ProcessedShot[];
+  previous: ProcessedShot[];
+} {
+  const validShots = shots.filter((shot) => !Number.isNaN(shot.date.getTime()));
+  const roundKeys = [...new Set(validShots.map((shot) => getShotDateKey(shot.date)))]
+    .sort((a, b) => b.localeCompare(a));
+  const currentKeys = new Set(roundKeys.slice(0, roundCount));
+  const previousKeys = new Set(roundKeys.slice(roundCount, roundCount * 2));
+
+  return {
+    current: validShots.filter((shot) => currentKeys.has(getShotDateKey(shot.date))),
+    previous: validShots.filter((shot) => previousKeys.has(getShotDateKey(shot.date))),
+  };
+}
+
+function trendMetricLabel(
+  label: string,
+  change: number,
+  unit: 'pct' | 'm',
+  higherIsBetter: boolean,
+): string {
+  const rounded = Math.round(Math.abs(change));
+  const suffix = unit === 'pct' ? 'pts' : 'm';
+  if (rounded === 0) return `${label} unchanged`;
+  const better = higherIsBetter ? change > 0 : change < 0;
+  if (better) {
+    return unit === 'pct'
+      ? `${label} up ${rounded} ${suffix}`
+      : `${label} better by ${rounded}${suffix}`;
+  }
+  return unit === 'pct'
+    ? `${label} down ${rounded} ${suffix}`
+    : `${label} worse by ${rounded}${suffix}`;
+}
+
+function buildTrendMetricComparisons(current: MetricsResult, previous: MetricsResult): TrendMetricComparison[] {
+  const metricDefs: Array<{
+    key: TrendMetricComparison['key'];
+    label: string;
+    current: number;
+    previous: number;
+    unit: TrendMetricComparison['unit'];
+    higherIsBetter: boolean;
+    threshold: number;
+  }> = [
+    {
+      key: 'onTargetPct',
+      label: 'On-target',
+      current: current.onTargetPct,
+      previous: previous.onTargetPct,
+      unit: 'pct',
+      higherIsBetter: true,
+      threshold: trendThresholds.meaningfulOnTargetChangePct,
+    },
+    {
+      key: 'badMissPct',
+      label: 'Bad miss',
+      current: current.badMissPct,
+      previous: previous.badMissPct,
+      unit: 'pct',
+      higherIsBetter: false,
+      threshold: trendThresholds.meaningfulBadMissChangePct,
+    },
+    {
+      key: 'sideVariation',
+      label: 'Side variation',
+      current: current.sideVariation,
+      previous: previous.sideVariation,
+      unit: 'm',
+      higherIsBetter: false,
+      threshold: trendThresholds.meaningfulSideVariationChangeM,
+    },
+    {
+      key: 'distanceVariation',
+      label: 'Distance variation',
+      current: current.distanceVariation,
+      previous: previous.distanceVariation,
+      unit: 'm',
+      higherIsBetter: false,
+      threshold: trendThresholds.meaningfulDistanceVariationChangeM,
+    },
+    {
+      key: 'strikePct',
+      label: 'Strike',
+      current: current.strikeCentrePct,
+      previous: previous.strikeCentrePct,
+      unit: 'pct',
+      higherIsBetter: true,
+      threshold: trendThresholds.meaningfulStrikeChangePct,
+    },
+  ];
+
+  return metricDefs
+    .filter((metric) => Number.isFinite(metric.current) && Number.isFinite(metric.previous))
+    .map((metric) => {
+      const change = metric.current - metric.previous;
+      const directionAdjusted = metric.higherIsBetter ? change : -change;
+      const magnitude = Math.abs(change) >= metric.threshold ? directionAdjusted : 0;
+      return {
+        key: metric.key,
+        label: metric.label,
+        previous: metric.previous,
+        current: metric.current,
+        change,
+        unit: metric.unit,
+        higherIsBetter: metric.higherIsBetter,
+        changeLabel: trendMetricLabel(metric.label, change, metric.unit, metric.higherIsBetter),
+        magnitude,
+      };
+    });
+}
+
+function mainTrendChange(comparisons: TrendMetricComparison[]): TrendMetricComparison | null {
+  return [...comparisons].sort((a, b) => Math.abs(b.magnitude) - Math.abs(a.magnitude))[0] ?? null;
+}
+
+export function buildShotTrendResult(
+  shot: ReportGappingShotData,
+  hcp: BenchmarkHcp,
+  roundCount: number,
+): ShotTrendResult {
+  const { current: currentShots, previous: previousShots } = splitRecentAndPreviousShots(shot.shots, roundCount);
+  const current = rebuildReportData(shot, currentShots);
+  const previous = rebuildReportData(shot, previousShots);
+  const currentBenchmark = buildShotBenchmarkResult(current, hcp);
+  const previousBenchmark = buildShotBenchmarkResult(previous, hcp);
+  const comparableSamples = current.metrics.shotCount >= trendThresholds.minCurrentShots
+    && previous.metrics.shotCount >= trendThresholds.minPreviousShots;
+  const metricComparisons = comparableSamples ? buildTrendMetricComparisons(current.metrics, previous.metrics) : [];
+  const bestMetricChange = mainTrendChange(metricComparisons);
+  const currentScore = benchmarkStatusScore(currentBenchmark.status);
+  const previousScore = benchmarkStatusScore(previousBenchmark.status);
+  const statusDelta = currentScore !== null && previousScore !== null ? currentScore - previousScore : 0;
+  const meaningfulDelta = bestMetricChange?.magnitude ?? 0;
+
+  let movement: TrendMovement = 'stable';
+  let mainChange = bestMetricChange?.changeLabel ?? 'Similar metrics';
+
+  if (current.metrics.shotCount < trendThresholds.minCurrentShots || currentBenchmark.status === 'not-enough-data') {
+    movement = 'not-enough-data';
+    mainChange = 'Not enough current-period data for a reliable trend';
+  } else if (previous.metrics.shotCount < trendThresholds.minPreviousShots || previousBenchmark.status === 'not-enough-data') {
+    movement = 'newly-measured';
+    mainChange = 'Fresh sample now available';
+  } else if (statusDelta > 0 || meaningfulDelta > 0) {
+    movement = 'improving';
+    mainChange = statusDelta > 0 ? `${previousBenchmark.statusLabel} to ${currentBenchmark.statusLabel}` : mainChange;
+  } else if (statusDelta < 0 || meaningfulDelta < 0) {
+    movement = 'declining';
+    mainChange = statusDelta < 0 ? `${previousBenchmark.statusLabel} to ${currentBenchmark.statusLabel}` : mainChange;
+  } else {
+    movement = 'stable';
+    mainChange = bestMetricChange ? `Similar ${bestMetricChange.label.toLowerCase()}` : 'Similar performance';
+  }
+
+  return {
+    shot,
+    current,
+    previous,
+    currentBenchmark,
+    previousBenchmark,
+    movement,
+    movementLabel: trendMovementLabels[movement],
+    mainChange,
+    currentShots: current.metrics.shotCount,
+    previousShots: previous.metrics.shotCount,
+    statusDelta,
+    meaningfulDelta,
+    metricComparisons,
+  };
+}
+
+export function buildTrendSummary(
+  shots: ReportGappingShotData[],
+  hcp: BenchmarkHcp,
+  roundCount: number,
+): ShotTrendResult[] {
+  return shots
+    .filter((shot) => shot.shots.length > 0)
+    .map((shot) => buildShotTrendResult(shot, hcp, roundCount))
+    .sort((a, b) => {
+      const movementRank: Record<TrendMovement, number> = {
+        improving: 1,
+        declining: 2,
+        'newly-measured': 3,
+        stable: 4,
+        'not-enough-data': 5,
+      };
+      return movementRank[a.movement] - movementRank[b.movement]
+        || Math.abs(b.statusDelta) - Math.abs(a.statusDelta)
+        || Math.abs(b.meaningfulDelta) - Math.abs(a.meaningfulDelta)
+        || b.currentShots - a.currentShots;
+    });
+}
+
 function decisionByShot(summary: ShotDecisionSummary): Map<string, ShotDecision> {
   const map = new Map<string, ShotDecision>();
   for (const bucket of [summary.trust, summary.build, summary.caution, summary.retest]) {
@@ -716,6 +982,7 @@ export function buildPerformanceSnapshot(
   shots: ReportGappingShotData[],
   benchmarks: Map<string, ShotBenchmarkResult>,
   summary: ShotDecisionSummary,
+  trends = new Map<string, ShotTrendResult>(),
 ): PerformanceSnapshotCard[] {
   const decisions = decisionByShot(summary);
   const analysedShots = shots.filter((shot) => shot.metrics.shotCount > 0);
@@ -747,14 +1014,13 @@ export function buildPerformanceSnapshot(
   const used = [...analysedShots].sort((a, b) => b.metrics.shotCount - a.metrics.shotCount)[0] ?? null;
 
   const improved = [...enoughDataShots]
-    .map((shot) => ({
-      shot,
-      trend: shot.periods.mostRecent.shotCount > 0 && shot.periods.oldest.shotCount > 0
-        ? shot.periods.mostRecent.onTargetPct - shot.periods.oldest.onTargetPct
-        : null,
-    }))
-    .filter((item): item is { shot: ReportGappingShotData; trend: number } => item.trend !== null && item.trend > 0)
-    .sort((a, b) => b.trend - a.trend)[0] ?? null;
+    .map((shot) => ({ shot, trend: trends.get(shot.key) ?? null }))
+    .filter((item): item is { shot: ReportGappingShotData; trend: ShotTrendResult } => item.trend?.movement === 'improving')
+    .sort((a, b) => (
+      b.trend.statusDelta - a.trend.statusDelta
+      || b.trend.meaningfulDelta - a.trend.meaningfulDelta
+      || b.trend.currentShots - a.trend.currentShots
+    ))[0] ?? null;
 
   const needsData = [...analysedShots]
     .filter((shot) => benchmarkFor(benchmarks, shot)?.status === 'not-enough-data' || decisions.get(shot.key)?.bucket === 'retest')
@@ -799,7 +1065,7 @@ export function buildPerformanceSnapshot(
       shot: improved.shot,
       benchmark: benchmarkFor(benchmarks, improved.shot),
       value: improved.shot.label,
-      detail: `On-target trend up ${Math.round(improved.trend)} points`,
+      detail: improved.trend.mainChange,
     } : emptySnapshot('improved', 'Most Improved', 'Trend data not available yet.'),
     needsData ? {
       key: 'data',
@@ -818,6 +1084,7 @@ export function buildPerformanceMapData(
   shots: ReportGappingShotData[],
   benchmarks: Map<string, ShotBenchmarkResult>,
   summary: ShotDecisionSummary,
+  trends = new Map<string, ShotTrendResult>(),
 ): PerformanceMapPoint[] {
   const decisions = decisionByShot(summary);
   return shots
@@ -838,6 +1105,7 @@ export function buildPerformanceMapData(
         strikePct: shot.metrics.strikeCentrePct,
         benchmark,
         decision: decisions.get(shot.key)?.bucket ?? null,
+        trend: trends.get(shot.key) ?? null,
       };
     })
     .filter((point): point is PerformanceMapPoint => point !== null);
