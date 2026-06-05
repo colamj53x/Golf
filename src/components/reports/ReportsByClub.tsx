@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ShotDecisionSummary } from '@/components/reports/ShotDecisionSummary';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
@@ -10,7 +11,7 @@ import {
   MetricsResult
 } from '@/lib/golfCalculations';
 import { getRatingColor, getImprovementDisplay } from '@/lib/clubRatings';
-import { buildReportGappingAnalysis } from '@/lib/reportGappingShots';
+import { buildReportGappingAnalysis, buildShotDecisionSummary } from '@/lib/reportGappingShots';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { 
@@ -66,6 +67,7 @@ export function ReportsByClub() {
     distanceToTargetTolerance,
     shotClassificationRules,
   }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
+  const decisionSummary = useMemo(() => buildShotDecisionSummary(analysis.shots), [analysis.shots]);
 
   const sourceData = analysisMode === 'shot' ? analysis.shots : analysis.clubRollups;
   const selectedData = useMemo(() => {
@@ -175,6 +177,16 @@ export function ReportsByClub() {
           )}
         </CardContent>
       </Card>
+
+      <ShotDecisionSummary
+        summary={decisionSummary}
+        unmatchedCount={analysis.unmatchedShots.length}
+        selectedShotKey={analysisMode === 'shot' ? selectedShot : undefined}
+        onSelectShot={(shotKey) => {
+          setAnalysisMode('shot');
+          setSelectedShot(shotKey);
+        }}
+      />
 
       {/* Trend Charts */}
       <div className="grid gap-6 lg:grid-cols-2">

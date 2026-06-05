@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { ShotDecisionSummary } from '@/components/reports/ShotDecisionSummary';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
@@ -10,7 +11,7 @@ import {
   formatDistance,
 } from '@/lib/golfCalculations';
 import { getRatingColor } from '@/lib/clubRatings';
-import { buildReportGappingAnalysis } from '@/lib/reportGappingShots';
+import { buildReportGappingAnalysis, buildShotDecisionSummary } from '@/lib/reportGappingShots';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { 
@@ -63,6 +64,7 @@ export function ReportsComparative() {
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('shot');
   const [shot1, setShot1] = useState<string>('');
   const [shot2, setShot2] = useState<string>('');
+  const [focusedShot, setFocusedShot] = useState<string>('');
 
   const analysis = useMemo(() => buildReportGappingAnalysis({
     profiles,
@@ -75,8 +77,12 @@ export function ReportsComparative() {
     distanceToTargetTolerance,
     shotClassificationRules,
   }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
+  const decisionSummary = useMemo(() => buildShotDecisionSummary(analysis.shots), [analysis.shots]);
 
   const analysisData = analysisMode === 'shot' ? analysis.shots : analysis.clubRollups;
+  const visibleAnalysisData = focusedShot && analysisMode === 'shot'
+    ? analysisData.filter((item) => item.key === focusedShot)
+    : analysisData;
   const selectOptions = analysisMode === 'shot'
     ? analysis.catalogueOptions.filter((option) => analysis.shots.some((row) => row.key === option.key))
     : analysis.clubRollups.map((club) => ({ key: club.key, label: club.label }));
@@ -110,7 +116,7 @@ export function ReportsComparative() {
 
   // Prepare scatter data for all Gapping shots / club roll-ups
   const scatterData = useMemo(() => {
-    return analysisData.map(item => ({
+    return visibleAnalysisData.map(item => ({
       x: item.metrics.onTargetPct,
       y: item.ratings.capability,
       z: item.metrics.shotCount,
@@ -123,12 +129,12 @@ export function ReportsComparative() {
       sideVariation: item.metrics.sideVariation,
       strike: item.metrics.strikeCentrePct,
     }));
-  }, [analysisData]);
+  }, [visibleAnalysisData]);
 
   // Rankings data
   const rankingsData = useMemo(() => {
-    return [...analysisData].sort((a, b) => b.ratings.capability - a.ratings.capability);
-  }, [analysisData]);
+    return [...visibleAnalysisData].sort((a, b) => b.ratings.capability - a.ratings.capability);
+  }, [visibleAnalysisData]);
 
   if (shots.length === 0) {
     return (
@@ -155,7 +161,7 @@ export function ReportsComparative() {
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium">View:</label>
-              <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setShot1(''); setShot2(''); }}>
+              <Select value={analysisMode} onValueChange={(value) => { setAnalysisMode(value as AnalysisMode); setShot1(''); setShot2(''); setFocusedShot(''); }}>
                 <SelectTrigger className="w-[170px]">
                   <SelectValue placeholder="Select view" />
                 </SelectTrigger>
@@ -206,8 +212,25 @@ export function ReportsComparative() {
               </span>
             )}
           </p>
+          {focusedShot && analysisMode === 'shot' && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Focused on {analysisData.find((item) => item.key === focusedShot)?.label ?? 'selected shot'}.</span>
+              <Button variant="ghost" size="sm" onClick={() => setFocusedShot('')}>Show all shots</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <ShotDecisionSummary
+        summary={decisionSummary}
+        unmatchedCount={analysis.unmatchedShots.length}
+        selectedShotKey={focusedShot}
+        onSelectShot={(shotKey) => {
+          setAnalysisMode('shot');
+          setFocusedShot(shotKey);
+          if (!shot1) setShot1(shotKey);
+        }}
+      />
 
       {/* Head-to-Head Comparison */}
       {compareData && (
