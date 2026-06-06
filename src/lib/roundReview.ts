@@ -81,7 +81,7 @@ export interface RoundReviewModel {
 
 const DISTANCE_ROLLUPS = new Set(['0-150', '0-100']);
 const LIE_ORDER = ['tee', 'fairway', 'first cut', 'rough', 'bunker', 'recovery'];
-export type RoundReviewScope = 'round' | 'last20' | 'all';
+export type RoundReviewScope = 'round' | 'last5' | 'last10' | 'last20' | 'all';
 
 export function isPuttingShot(shot: Shot): boolean {
   return shot.club.trim().toLowerCase() === 'pu' || shot.type.trim().toLowerCase() === 'putting';
@@ -236,13 +236,14 @@ export function buildRoundReview(
     .sort((a, b) => b.localeCompare(a));
   const latestRoundDate = roundDates[0] ?? selectedRoundDate;
   const selectedDate = roundDates.includes(selectedRoundDate) ? selectedRoundDate : latestRoundDate;
+  const aggregateRoundCount = scope === 'last5' ? 5 : scope === 'last10' ? 10 : scope === 'last20' ? 20 : null;
   const selectedDates = scope === 'all'
     ? new Set(roundDates)
-    : scope === 'last20'
-      ? new Set(roundDates.slice(0, 20))
+    : aggregateRoundCount
+      ? new Set(roundDates.slice(0, aggregateRoundCount))
       : new Set(selectedDate ? [selectedDate] : []);
-  const selectedBoundaryDate = scope === 'last20'
-    ? roundDates.slice(0, 20).at(-1) ?? selectedDate
+  const selectedBoundaryDate = aggregateRoundCount
+    ? roundDates.slice(0, aggregateRoundCount).at(-1) ?? selectedDate
     : scope === 'all'
       ? null
       : selectedDate;
@@ -431,7 +432,11 @@ export function buildRoundReview(
 
   return {
     scope,
-    label: scope === 'all' ? 'All Rounds' : scope === 'last20' ? `Last ${Math.min(20, roundDates.length)} Rounds` : selectedDate,
+    label: scope === 'all'
+      ? 'All Rounds'
+      : aggregateRoundCount
+        ? `Last ${Math.min(aggregateRoundCount, roundDates.length)} Rounds`
+        : selectedDate,
     round: reviewMetrics(selected, getTarget),
     last5: reviewMetrics(last5, getTarget),
     previous5: reviewMetrics(previous5, getTarget),

@@ -40,6 +40,8 @@ interface DashboardTabProps {
 }
 
 const ROUND_REVIEW_LAST20 = 'aggregate:last20';
+const ROUND_REVIEW_LAST10 = 'aggregate:last10';
+const ROUND_REVIEW_LAST5 = 'aggregate:last5';
 const ROUND_REVIEW_ALL = 'aggregate:all';
 
 export function DashboardTab({
@@ -82,7 +84,11 @@ export function DashboardTab({
     ? 'all'
     : selectedRoundDate === ROUND_REVIEW_LAST20
       ? 'last20'
-      : 'round';
+      : selectedRoundDate === ROUND_REVIEW_LAST10
+        ? 'last10'
+        : selectedRoundDate === ROUND_REVIEW_LAST5
+          ? 'last5'
+          : 'round';
   const roundReviewSelectedDateKey = roundReviewDateKeys.includes(selectedRoundDate)
     ? selectedRoundDate
     : roundReviewDateKeys[0] ?? null;
@@ -315,7 +321,11 @@ export function DashboardTab({
     ? new Set(roundReviewDateKeys)
     : roundReviewScope === 'last20'
       ? new Set(roundReviewDateKeys.slice(0, 20))
-      : new Set(activeRoundDateKey ? [activeRoundDateKey] : []);
+      : roundReviewScope === 'last10'
+        ? new Set(roundReviewDateKeys.slice(0, 10))
+        : roundReviewScope === 'last5'
+          ? new Set(roundReviewDateKeys.slice(0, 5))
+          : new Set(activeRoundDateKey ? [activeRoundDateKey] : []);
   const activeRoundShotCount = showOverview
     ? activeRoundDateKey
       ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
@@ -425,6 +435,8 @@ export function DashboardTab({
                 <SelectValue placeholder="Select round" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={ROUND_REVIEW_LAST5}>Last 5 rounds</SelectItem>
+                <SelectItem value={ROUND_REVIEW_LAST10}>Last 10 rounds</SelectItem>
                 <SelectItem value={ROUND_REVIEW_LAST20}>Last 20 rounds</SelectItem>
                 <SelectItem value={ROUND_REVIEW_ALL}>All rounds</SelectItem>
                 {roundReviewDateKeys.map((roundDate, index) => (

@@ -157,6 +157,22 @@ describe('buildRoundReview', () => {
     expect(review.last5.shotCount).toBe(2);
   });
 
+  it('aggregates the last 5 and last 10 round review scopes', () => {
+    const rounds = Array.from({ length: 12 }, (_, index) =>
+      shot(`round-${index}`, `2026-05-${String(20 + index).padStart(2, '0')}`, 35, 'Pro')
+    );
+
+    const last5 = buildRoundReview(rounds, DEFAULT_CLUB_CONFIGS, 10, '2026-05-31', undefined, 'last5');
+    const last10 = buildRoundReview(rounds, DEFAULT_CLUB_CONFIGS, 10, '2026-05-31', undefined, 'last10');
+
+    expect(last5.scope).toBe('last5');
+    expect(last5.label).toBe('Last 5 Rounds');
+    expect(last5.round.shotCount).toBe(5);
+    expect(last10.scope).toBe('last10');
+    expect(last10.label).toBe('Last 10 Rounds');
+    expect(last10.round.shotCount).toBe(10);
+  });
+
   it('can aggregate every round without inventing prior comparisons', () => {
     const review = buildRoundReview([
       shot('one', '2026-05-30', 35, '20 Handicap'),

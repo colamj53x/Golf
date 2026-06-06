@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Target, TrendingDown, TrendingUp } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Download, Target, TrendingDown, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -292,6 +294,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
   const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
   const [progressMode, setProgressMode] = useState<ProgressMode>('overall');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setBenchmarkHcp(gappingHcpTarget), [gappingHcpTarget]);
 
@@ -379,9 +383,78 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         ? benchmark.scoringZoneSuccess
         : benchmark.shotQuality;
 
+  const exportToPDF = async () => {
+    if (!reportRef.current) return;
+
+    setIsExportingPdf(true);
+
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        ignoreElements: (element) => element.hasAttribute('data-pdf-ignore'),
+      });
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const usableWidth = pdfWidth - margin * 2;
+      const usableHeight = pdfHeight - margin * 2;
+      const ratio = usableWidth / canvas.width;
+      const scaledWidth = canvas.width * ratio;
+      const pageSourceHeight = usableHeight / ratio;
+
+      let yPosition = 0;
+      while (yPosition < canvas.height) {
+        const sourceHeight = Math.min(pageSourceHeight, canvas.height - yPosition);
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sourceHeight;
+        const context = pageCanvas.getContext('2d');
+
+        if (context) {
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          context.drawImage(
+            canvas,
+            0,
+            yPosition,
+            canvas.width,
+            sourceHeight,
+            0,
+            0,
+            canvas.width,
+            sourceHeight,
+          );
+        }
+
+        if (yPosition > 0) pdf.addPage();
+        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, scaledWidth, sourceHeight * ratio);
+        yPosition += sourceHeight;
+      }
+
+      const safeRound = (scope === 'round' ? roundDate : review.label).replace(/[^a-z0-9-]+/gi, '-').replace(/^-|-$/g, '');
+      const exportDate = new Date().toISOString().slice(0, 10);
+      pdf.save(`round-review-${safeRound || 'report'}-${exportDate}.pdf`);
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('Failed to export round review PDF:', error);
+      }
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <TooltipProvider>
-      <div className="space-y-10">
+      <div ref={reportRef} className="space-y-10 bg-background text-foreground">
         <section className="rounded-2xl border bg-gradient-to-br from-card via-card to-primary/5 p-5 shadow-sm sm:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -390,13 +463,17 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
               <p className="text-sm text-muted-foreground">{review.round.shotCount} shots analysed · {scope === 'round' ? 'Selected round' : review.label} · Benchmarking against {benchmarkHcp} HCP target</p>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{story.reflectionSummary}</p>
             </div>
-            <div className="min-w-[220px] space-y-2">
+            <div className="min-w-[220px] space-y-3" data-pdf-ignore>
               <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Benchmark against</label>
               <Select value={benchmarkHcp.toString()} onValueChange={value => setBenchmarkHcp(Number(value))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{benchmarkOptions.map(hcp => <SelectItem key={hcp} value={hcp.toString()}>{hcp === gappingHcpTarget ? `Settings target · ${hcp} HCP` : `Target ${hcp} HCP`}</SelectItem>)}</SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Status colours are relative to your selected handicap benchmark.</p>
+              <Button className="w-full gap-2" onClick={() => void exportToPDF()} disabled={isExportingPdf}>
+                <Download className="h-4 w-4" />
+                {isExportingPdf ? 'Creating PDF...' : 'Create PDF'}
+              </Button>
             </div>
           </div>
           <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
