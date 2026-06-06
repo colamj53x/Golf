@@ -7,6 +7,10 @@ import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
 import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
 import { getUploadShotFingerprint } from '@/lib/uploadReview';
 import { encodeRoundShotSequence } from '@/lib/roundShotSequence';
+import {
+  clearRoundReflectionLocalDraft,
+  saveRoundReflectionLocalDraft,
+} from '@/lib/roundReflectionDrafts';
 import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -458,6 +462,14 @@ export function UploadTab() {
   };
 
   const updateRoundReflection = (roundDate: string, next: RoundReflectionDraft) => {
+    if (user) {
+      if (hasRoundReflectionContent(next)) {
+        saveRoundReflectionLocalDraft(user.id, roundDate, next);
+      } else {
+        clearRoundReflectionLocalDraft(user.id, roundDate);
+      }
+    }
+
     setPendingUpload((current) => {
       if (!current) return current;
       return {
@@ -606,6 +618,7 @@ export function UploadTab() {
       let skippedReflectionSave = false;
       for (const [roundDate, reflection] of Object.entries(pendingUpload.reflectionsByDate)) {
         if (!hasRoundReflectionContent(reflection)) continue;
+        saveRoundReflectionLocalDraft(user.id, roundDate, reflection);
         try {
           await upsertRoundReflection(roundDate, reflection);
         } catch (error) {

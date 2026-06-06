@@ -25,6 +25,12 @@ import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
 import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
 import { isPuttingShot, RoundReviewScope } from '@/lib/roundReview';
+import {
+  clearRoundReflectionLocalDraft,
+  loadRoundReflectionLocalDraft,
+  roundReflectionDraftsEqual,
+  saveRoundReflectionLocalDraft,
+} from '@/lib/roundReflectionDrafts';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
@@ -33,24 +39,8 @@ interface DashboardTabProps {
   showOverview?: boolean;
 }
 
-const ROUND_REFLECTION_DRAFT_STORAGE_KEY = 'golf-dashboard-round-reflection-draft';
 const ROUND_REVIEW_LAST20 = 'aggregate:last20';
 const ROUND_REVIEW_ALL = 'aggregate:all';
-const getRoundReflectionDraftStorageKey = (userId: string, roundDate: string) =>
-  `${ROUND_REFLECTION_DRAFT_STORAGE_KEY}:${userId}:${roundDate}`;
-
-type StoredReflectionDraft = {
-  userId: string;
-  roundDate: string;
-  value: {
-    drivingNotes: string;
-    ironsNotes: string;
-    shortNotes: string;
-    puttingNotes: string;
-    mentalNotes: string;
-    courseManagementNotes: string;
-  };
-};
 
 export function DashboardTab({
   onOpenUpload,
@@ -257,41 +247,24 @@ export function DashboardTab({
       courseManagementNotes: existing.courseManagementNotes,
     } : createEmptyRoundReflectionDraft();
 
-    let localDraft = createEmptyRoundReflectionDraft();
-    if (typeof window !== 'undefined' && userId) {
-      const storageKey = getRoundReflectionDraftStorageKey(userId, selectedRoundDateKey);
-      const rawDraft = localStorage.getItem(storageKey);
-      if (rawDraft) {
-        try {
-          localDraft = JSON.parse(rawDraft) as StoredReflectionDraft['value'];
-        } catch {
-          localStorage.removeItem(storageKey);
-        }
-      } else {
-        const legacyRawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
-        if (legacyRawDraft) {
-          try {
-            const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
-            if (legacyDraft.userId === userId && legacyDraft.roundDate === selectedRoundDateKey) {
-              localDraft = legacyDraft.value;
-              localStorage.setItem(storageKey, JSON.stringify(localDraft));
-            }
-          } catch {
-            localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
-          }
-        }
-      }
+    const localDraft = userId ? loadRoundReflectionLocalDraft(userId, selectedRoundDateKey) : null;
+    const hasLocalDraft = localDraft ? hasRoundReflectionContent(localDraft) : false;
+    const hasRemoteDraft = hasRoundReflectionContent(remoteDraft);
+    const localMatchesRemote = Boolean(localDraft && hasRemoteDraft && roundReflectionDraftsEqual(localDraft, remoteDraft));
+
+    if (localMatchesRemote && userId) {
+      clearRoundReflectionLocalDraft(userId, selectedRoundDateKey);
     }
 
-    const nextDraft = hasRoundReflectionContent(localDraft) ? localDraft : remoteDraft;
+    const nextDraft = hasLocalDraft && !localMatchesRemote ? localDraft : remoteDraft;
     setRoundReflectionDraft(nextDraft);
-    if (hasRoundReflectionContent(localDraft)) {
+    if (hasLocalDraft && !localMatchesRemote) {
       setRoundReflectionStatus('Local draft restored. Save when you are ready.');
       setRoundReflectionStatusTone('default');
     } else if (!roundReflectionsAvailable) {
       setRoundReflectionStatus(`Round thoughts for ${selectedRoundDateKey} can only be kept locally on this device right now.`);
       setRoundReflectionStatusTone('muted');
-    } else if (hasRoundReflectionContent(remoteDraft)) {
+    } else if (hasRemoteDraft) {
       setRoundReflectionStatus('Saved to dashboard.');
       setRoundReflectionStatusTone('muted');
     } else {
@@ -359,20 +332,7 @@ export function DashboardTab({
     setRoundReflectionStatusTone('muted');
     try {
       await upsertRoundReflection(activeRoundDateKey, roundReflectionDraft);
-      if (typeof window !== 'undefined' && userId) {
-        localStorage.removeItem(getRoundReflectionDraftStorageKey(userId, activeRoundDateKey));
-        const legacyRawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
-        if (legacyRawDraft) {
-          try {
-            const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
-            if (legacyDraft.userId === userId && legacyDraft.roundDate === activeRoundDateKey) {
-              localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
-            }
-          } catch {
-            localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
-          }
-        }
-      }
+      if (userId) clearRoundReflectionLocalDraft(userId, activeRoundDateKey);
       setRoundReflectionStatus('Round thoughts saved.');
       setRoundReflectionStatusTone('default');
       return true;
@@ -520,17 +480,11 @@ export function DashboardTab({
                 value={roundReflectionDraft}
                 onChange={(next) => {
                   setRoundReflectionDraft(next);
-                  if (typeof window !== 'undefined' && userId) {
-                    const storageKey = getRoundReflectionDraftStorageKey(userId, activeRoundDateKey);
+                  if (userId) {
                     if (hasRoundReflectionContent(next)) {
-                      localStorage.setItem(storageKey, JSON.stringify(next));
-                      localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify({
-                        userId,
-                        roundDate: activeRoundDateKey,
-                        value: next,
-                      } satisfies StoredReflectionDraft));
+                      saveRoundReflectionLocalDraft(userId, activeRoundDateKey, next);
                     } else {
-                      localStorage.removeItem(storageKey);
+                      clearRoundReflectionLocalDraft(userId, activeRoundDateKey);
                     }
                   }
                   setRoundReflectionStatus(roundReflectionsAvailable
