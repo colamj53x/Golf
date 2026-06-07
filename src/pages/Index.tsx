@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, BriefcaseBusiness, Crosshair, Goal, Home, LogOut, MoreHorizontal, Target } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, Crosshair, Goal, Home, LogOut, MoreHorizontal, Target, Users } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,8 +18,9 @@ const ClubGappingTab = lazy(async () => ({ default: (await import('@/components/
 const ReportsTab = lazy(async () => ({ default: (await import('@/components/reports/ReportsTab')).ReportsTab }));
 const LibraryTab = lazy(async () => ({ default: (await import('@/components/LibraryTab')).LibraryTab }));
 const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/MoreToolsTab')).MoreToolsTab }));
+const PlayingPartnersTab = lazy(async () => ({ default: (await import('@/components/PlayingPartnersTab')).PlayingPartnersTab }));
 
-const mainTabs = ['today', 'play', 'review', 'practice', 'bag', 'more'] as const;
+const mainTabs = ['today', 'play', 'review', 'practice', 'bag', 'partners', 'more'] as const;
 const reviewTabs = ['rounds', 'advanced'] as const;
 const bagTabs = ['gapping', 'clubs', 'profiles', 'short-game'] as const;
 const moreTabs = ['upload', 'library', 'tools', 'settings'] as const;
@@ -93,6 +94,7 @@ const Index = () => {
                 <TabsTrigger value="review" className="shrink-0 gap-2"><BarChart3 className="h-4 w-4" />Review</TabsTrigger>
                 <TabsTrigger value="practice" className="shrink-0 gap-2"><Target className="h-4 w-4" />Practice</TabsTrigger>
                 <TabsTrigger value="bag" className="shrink-0 gap-2"><BriefcaseBusiness className="h-4 w-4" />Bag</TabsTrigger>
+                <TabsTrigger value="partners" className="shrink-0 gap-2"><Users className="h-4 w-4" />Partners</TabsTrigger>
                 <TabsTrigger value="more" className="shrink-0 gap-2"><MoreHorizontal className="h-4 w-4" />More</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -116,6 +118,7 @@ const Index = () => {
             {bagTab === 'profiles' && <ShotProfilesCard />}
             {bagTab === 'short-game' && <ClubSelectorTab defaultView="wedge-matrix" />}
           </>}
+          {activeTab === 'partners' && <PlayingPartnersTab />}
           {activeTab === 'more' && <>
             <SectionTabs value={moreTab} values={moreTabs} labels={{ upload: 'Upload', library: 'Drill Library', tools: 'Tools & Definitions', settings: 'Settings' }} onChange={value => navigate(path('more', value))} />
             {moreTab === 'upload' && <UploadTab />}
