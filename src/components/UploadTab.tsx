@@ -272,6 +272,7 @@ export function UploadTab() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingCommentsOnlyRound, setIsSavingCommentsOnlyRound] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [commentsOnlyResult, setCommentsOnlyResult] = useState<{ success: boolean; message: string } | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<{ row: number; issue: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
   const [replaceMatchingRounds, setReplaceMatchingRounds] = useState(false);
@@ -522,30 +523,34 @@ export function UploadTab() {
 
   const saveCommentsOnlyRound = async () => {
     if (!user) {
-      setUploadResult({ success: false, message: 'Sign in before saving round comments.' });
+      setCommentsOnlyResult({ success: false, message: 'Sign in before saving round comments.' });
       return;
     }
     if (!commentsOnlyRoundDate) {
-      setUploadResult({ success: false, message: 'Choose a round date before saving comments.' });
+      setCommentsOnlyResult({ success: false, message: 'Choose a round date before saving comments.' });
       return;
     }
     if (!hasRoundReflectionContent(commentsOnlyDraft)) {
-      setUploadResult({ success: false, message: 'Add a comment, thought, or playing partner before saving this round.' });
+      setCommentsOnlyResult({ success: false, message: 'Add a comment, thought, or playing partner before saving this round.' });
       return;
     }
 
     setIsSavingCommentsOnlyRound(true);
+    setCommentsOnlyResult(null);
     setUploadResult(null);
     try {
       saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, commentsOnlyDraft);
       await upsertRoundReflection(commentsOnlyRoundDate, commentsOnlyDraft);
       clearRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate);
       await refreshRoundReflections();
-      setUploadResult({ success: true, message: `Saved comments-only round for ${commentsOnlyRoundDate}.` });
+      setCommentsOnlyResult({ success: true, message: `Saved comments-only round for ${commentsOnlyRoundDate}.` });
     } catch (error) {
-      setUploadResult({
-        success: false,
-        message: `${getUserFriendlyError(error)} Your comments are still kept locally on this device.`,
+      if (import.meta.env.DEV) {
+        console.error('Comments-only round saved locally but remote sync failed:', error);
+      }
+      setCommentsOnlyResult({
+        success: true,
+        message: `Saved comments-only round locally for ${commentsOnlyRoundDate}. Remote sync can retry later.`,
       });
     } finally {
       setIsSavingCommentsOnlyRound(false);
@@ -924,7 +929,10 @@ export function UploadTab() {
               id="comments-only-round-date"
               type="date"
               value={commentsOnlyRoundDate}
-              onChange={(event) => setCommentsOnlyRoundDate(event.target.value)}
+              onChange={(event) => {
+                setCommentsOnlyRoundDate(event.target.value);
+                setCommentsOnlyResult(null);
+              }}
             />
           </div>
           <RoundReflectionEditor
@@ -933,6 +941,7 @@ export function UploadTab() {
             value={commentsOnlyDraft}
             onChange={(next) => {
               setCommentsOnlyDraft(next);
+              setCommentsOnlyResult(null);
               if (!user || !commentsOnlyRoundDate) return;
               if (hasRoundReflectionContent(next)) {
                 saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, next);
@@ -943,6 +952,12 @@ export function UploadTab() {
             playingPartners={playingPartners}
             onAddPlayingPartner={addPlayingPartner}
           />
+          {commentsOnlyResult && (
+            <Alert variant={commentsOnlyResult.success ? 'default' : 'destructive'}>
+              {commentsOnlyResult.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+              <AlertDescription>{commentsOnlyResult.message}</AlertDescription>
+            </Alert>
+          )}
           <div className="flex justify-end">
             <Button onClick={() => void saveCommentsOnlyRound()} disabled={isSavingCommentsOnlyRound}>
               {isSavingCommentsOnlyRound ? 'Saving...' : 'Save Comments Only Round'}
