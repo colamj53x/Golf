@@ -474,9 +474,11 @@ export type Database = {
           course_management_notes: string | null
           created_at: string
           driving_notes: string | null
+          general_comments: string | null
           id: string
           irons_notes: string | null
           mental_notes: string | null
+          playing_partner_ids: string[]
           putting_notes: string | null
           round_date: string
           short_notes: string | null
@@ -487,9 +489,11 @@ export type Database = {
           course_management_notes?: string | null
           created_at?: string
           driving_notes?: string | null
+          general_comments?: string | null
           id?: string
           irons_notes?: string | null
           mental_notes?: string | null
+          playing_partner_ids?: string[]
           putting_notes?: string | null
           round_date: string
           short_notes?: string | null
@@ -500,9 +504,11 @@ export type Database = {
           course_management_notes?: string | null
           created_at?: string
           driving_notes?: string | null
+          general_comments?: string | null
           id?: string
           irons_notes?: string | null
           mental_notes?: string | null
+          playing_partner_ids?: string[]
           putting_notes?: string | null
           round_date?: string
           short_notes?: string | null

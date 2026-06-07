@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
-import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, normalizeClubCode, RoundReflection } from '@/types/golf';
+import { ClubConfig, Shot, DEFAULT_CLUB_CONFIGS, normalizeClubCode, RoundReflection, PlayingPartner } from '@/types/golf';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/context/AuthContext';
@@ -40,6 +40,8 @@ interface GolfDataContextType {
   setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   todayRecentShotCount: number;
   setTodayRecentShotCount: React.Dispatch<React.SetStateAction<number>>;
+  playingPartners: PlayingPartner[];
+  setPlayingPartners: React.Dispatch<React.SetStateAction<PlayingPartner[]>>;
   roundReflections: RoundReflection[];
   roundReflectionsAvailable: boolean;
   upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
@@ -63,12 +65,14 @@ type RoundReflectionInput = {
   puttingNotes: string;
   mentalNotes: string;
   courseManagementNotes: string;
+  generalComments: string;
+  playingPartnerIds: string[];
 };
 
 const ROUND_REFLECTION_CONFIG_PREFIX = 'round_reflection:';
 
 function isMissingRoundReflectionsTableError(error: { code?: string } | null): boolean {
-  return error?.code === 'PGRST205' || error?.code === '42P01';
+  return error?.code === 'PGRST205' || error?.code === 'PGRST204' || error?.code === '42P01' || error?.code === '42703';
 }
 
 function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
@@ -76,12 +80,16 @@ function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
     ? value as Record<string, unknown>
     : {};
   return {
+    generalComments: typeof draft.generalComments === 'string' ? draft.generalComments : '',
     drivingNotes: typeof draft.drivingNotes === 'string' ? draft.drivingNotes : '',
     ironsNotes: typeof draft.ironsNotes === 'string' ? draft.ironsNotes : '',
     shortNotes: typeof draft.shortNotes === 'string' ? draft.shortNotes : '',
     puttingNotes: typeof draft.puttingNotes === 'string' ? draft.puttingNotes : '',
     mentalNotes: typeof draft.mentalNotes === 'string' ? draft.mentalNotes : '',
     courseManagementNotes: typeof draft.courseManagementNotes === 'string' ? draft.courseManagementNotes : '',
+    playingPartnerIds: Array.isArray(draft.playingPartnerIds)
+      ? draft.playingPartnerIds.filter((id): id is string => typeof id === 'string')
+      : [],
   };
 }
 
@@ -135,6 +143,17 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('golf-today-recent-shot-count');
     return saved ? parseFloat(saved) : 100;
   });
+
+  const [playingPartners, setPlayingPartners] = useState<PlayingPartner[]>(() => {
+    const saved = localStorage.getItem('golf-playing-partners');
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved) as PlayingPartner[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   
   const [shots, setShots] = useState<Shot[]>([]);
   const [roundReflections, setRoundReflections] = useState<RoundReflection[]>([]);
@@ -177,6 +196,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('golf-today-recent-shot-count', todayRecentShotCount.toString());
   }, [todayRecentShotCount]);
 
+  useEffect(() => {
+    localStorage.setItem('golf-playing-partners', JSON.stringify(playingPartners));
+  }, [playingPartners]);
+
   const currentSettings: GolfUserSettings = {
     clubs,
     distanceToTargetTolerance,
@@ -187,6 +210,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceBallFlightTolerancePct,
     practiceOtherTolerancePct,
     todayRecentShotCount,
+    playingPartners,
   };
   const currentSettingsRef = useRef(currentSettings);
   currentSettingsRef.current = currentSettings;
@@ -213,6 +237,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           setPracticeBallFlightTolerancePct(next.practiceBallFlightTolerancePct);
           setPracticeOtherTolerancePct(next.practiceOtherTolerancePct);
           setTodayRecentShotCount(next.todayRecentShotCount);
+          setPlayingPartners(next.playingPartners);
         } else {
           await saveGolfUserSettings(user.id, currentSettingsRef.current);
         }
@@ -252,6 +277,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceOtherTolerancePct,
     shotPickerDistanceTolerancePct,
     todayRecentShotCount,
+    playingPartners,
     user,
   ]);
 
@@ -383,12 +409,14 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setRoundReflections((data || []).map((row) => ({
         id: row.id,
         roundDate: row.round_date,
+        generalComments: row.general_comments || '',
         drivingNotes: row.driving_notes || '',
         ironsNotes: row.irons_notes || '',
         shortNotes: row.short_notes || '',
         puttingNotes: row.putting_notes || '',
         mentalNotes: row.mental_notes || '',
         courseManagementNotes: row.course_management_notes || '',
+        playingPartnerIds: row.playing_partner_ids || [],
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
       })));
@@ -446,12 +474,14 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     const payload = {
       user_id: user.id,
       round_date: roundDate,
+      general_comments: updates.generalComments,
       driving_notes: updates.drivingNotes,
       irons_notes: updates.ironsNotes,
       short_notes: updates.shortNotes,
       putting_notes: updates.puttingNotes,
       mental_notes: updates.mentalNotes,
       course_management_notes: updates.courseManagementNotes,
+      playing_partner_ids: updates.playingPartnerIds,
     };
 
     const { error } = await supabase
@@ -528,6 +558,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setPracticeOtherTolerancePct,
       todayRecentShotCount,
       setTodayRecentShotCount,
+      playingPartners,
+      setPlayingPartners,
       roundReflections,
       roundReflectionsAvailable,
       upsertRoundReflection,

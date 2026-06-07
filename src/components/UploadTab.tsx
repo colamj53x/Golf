@@ -15,6 +15,7 @@ import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -259,8 +260,17 @@ function buildReviewRow(shot: Shot): UploadReviewRow {
 
 export function UploadTab() {
   const { user } = useAuth();
-  const { refreshShots, refreshRoundReflections, roundReflections, upsertRoundReflection, shots } = useGolfData();
+  const {
+    refreshShots,
+    refreshRoundReflections,
+    roundReflections,
+    upsertRoundReflection,
+    shots,
+    playingPartners,
+    setPlayingPartners,
+  } = useGolfData();
   const [isUploading, setIsUploading] = useState(false);
+  const [isSavingCommentsOnlyRound, setIsSavingCommentsOnlyRound] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<{ row: number; issue: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
@@ -268,8 +278,24 @@ export function UploadTab() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<PendingUploadDraft | null>(null);
+  const [commentsOnlyRoundDate, setCommentsOnlyRoundDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [commentsOnlyDraft, setCommentsOnlyDraft] = useState<RoundReflectionDraft>(createEmptyRoundReflectionDraft());
   const [hasRestoredPendingUpload, setHasRestoredPendingUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const existing = roundReflections.find((reflection) => reflection.roundDate === commentsOnlyRoundDate);
+    setCommentsOnlyDraft(existing ? {
+      generalComments: existing.generalComments,
+      drivingNotes: existing.drivingNotes,
+      ironsNotes: existing.ironsNotes,
+      shortNotes: existing.shortNotes,
+      puttingNotes: existing.puttingNotes,
+      mentalNotes: existing.mentalNotes,
+      courseManagementNotes: existing.courseManagementNotes,
+      playingPartnerIds: existing.playingPartnerIds,
+    } : createEmptyRoundReflectionDraft());
+  }, [commentsOnlyRoundDate, roundReflections]);
 
   useEffect(() => {
     if (!user || pendingUpload) {
@@ -397,12 +423,14 @@ export function UploadTab() {
       const reflectionsByDate = Object.fromEntries(roundDates.map((roundDate) => {
         const existing = roundReflections.find((reflection) => reflection.roundDate === roundDate);
         return [roundDate, existing ? {
+          generalComments: existing.generalComments,
           drivingNotes: existing.drivingNotes,
           ironsNotes: existing.ironsNotes,
           shortNotes: existing.shortNotes,
           puttingNotes: existing.puttingNotes,
           mentalNotes: existing.mentalNotes,
           courseManagementNotes: existing.courseManagementNotes,
+          playingPartnerIds: existing.playingPartnerIds,
         } : createEmptyRoundReflectionDraft()];
       }));
 
@@ -480,6 +508,48 @@ export function UploadTab() {
         },
       };
     });
+  };
+
+  const addPlayingPartner = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = playingPartners.find((partner) => partner.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing.id;
+    const id = crypto.randomUUID();
+    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '' }]);
+    return id;
+  };
+
+  const saveCommentsOnlyRound = async () => {
+    if (!user) {
+      setUploadResult({ success: false, message: 'Sign in before saving round comments.' });
+      return;
+    }
+    if (!commentsOnlyRoundDate) {
+      setUploadResult({ success: false, message: 'Choose a round date before saving comments.' });
+      return;
+    }
+    if (!hasRoundReflectionContent(commentsOnlyDraft)) {
+      setUploadResult({ success: false, message: 'Add a comment, thought, or playing partner before saving this round.' });
+      return;
+    }
+
+    setIsSavingCommentsOnlyRound(true);
+    setUploadResult(null);
+    try {
+      saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, commentsOnlyDraft);
+      await upsertRoundReflection(commentsOnlyRoundDate, commentsOnlyDraft);
+      clearRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate);
+      await refreshRoundReflections();
+      setUploadResult({ success: true, message: `Saved comments-only round for ${commentsOnlyRoundDate}.` });
+    } catch (error) {
+      setUploadResult({
+        success: false,
+        message: `${getUserFriendlyError(error)} Your comments are still kept locally on this device.`,
+      });
+    } finally {
+      setIsSavingCommentsOnlyRound(false);
+    }
   };
 
   const commitUpload = async () => {
@@ -840,6 +910,47 @@ export function UploadTab() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Round Comments Only</CardTitle>
+          <CardDescription>
+            Save a round when you played but did not track shots.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="max-w-xs space-y-2">
+            <Label htmlFor="comments-only-round-date">Round Date</Label>
+            <Input
+              id="comments-only-round-date"
+              type="date"
+              value={commentsOnlyRoundDate}
+              onChange={(event) => setCommentsOnlyRoundDate(event.target.value)}
+            />
+          </div>
+          <RoundReflectionEditor
+            title={`Round Thoughts · ${commentsOnlyRoundDate || 'Select a date'}`}
+            description="Capture who you played with and anything worth remembering from the round."
+            value={commentsOnlyDraft}
+            onChange={(next) => {
+              setCommentsOnlyDraft(next);
+              if (!user || !commentsOnlyRoundDate) return;
+              if (hasRoundReflectionContent(next)) {
+                saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, next);
+              } else {
+                clearRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate);
+              }
+            }}
+            playingPartners={playingPartners}
+            onAddPlayingPartner={addPlayingPartner}
+          />
+          <div className="flex justify-end">
+            <Button onClick={() => void saveCommentsOnlyRound()} disabled={isSavingCommentsOnlyRound}>
+              {isSavingCommentsOnlyRound ? 'Saving...' : 'Save Comments Only Round'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {pendingUpload && (
         <Card>
           <CardHeader>
@@ -986,6 +1097,8 @@ export function UploadTab() {
                 description="Add your round reflection now or leave it blank and fill it in later from the dashboard."
                 value={reflection}
                 onChange={(next) => updateRoundReflection(roundDate, next)}
+                playingPartners={playingPartners}
+                onAddPlayingPartner={addPlayingPartner}
               />
             ))}
 

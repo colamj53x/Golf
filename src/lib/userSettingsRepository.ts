@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
-import type { ClubConfig } from '@/types/golf';
+import type { ClubConfig, PlayingPartner } from '@/types/golf';
 
 export const USER_SETTINGS_CONFIG_KEY = '__user_settings__:golf_data';
 export const USER_SETTINGS_CONFIG_PREFIX = '__user_settings__:';
@@ -15,6 +15,7 @@ export interface GolfUserSettings {
   practiceBallFlightTolerancePct: number;
   practiceOtherTolerancePct: number;
   todayRecentShotCount: number;
+  playingPartners: PlayingPartner[];
 }
 
 export async function loadGolfUserSettings(userId: string): Promise<GolfUserSettings | null> {
@@ -53,6 +54,20 @@ export function parseGolfUserSettings(
 
   const numberOr = (candidate: unknown, defaultValue: number) =>
     typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : defaultValue;
+  const playingPartners = Array.isArray(value.playingPartners)
+    ? value.playingPartners
+        .filter((partner): partner is PlayingPartner => (
+          partner &&
+          typeof partner === 'object' &&
+          typeof (partner as PlayingPartner).id === 'string' &&
+          typeof (partner as PlayingPartner).name === 'string'
+        ))
+        .map((partner) => ({
+          id: partner.id,
+          name: partner.name,
+          notes: typeof partner.notes === 'string' ? partner.notes : '',
+        }))
+    : fallback.playingPartners;
 
   return {
     clubs: Array.isArray(value.clubs) && value.clubs.length > 0 ? value.clubs : fallback.clubs,
@@ -64,5 +79,6 @@ export function parseGolfUserSettings(
     practiceBallFlightTolerancePct: numberOr(value.practiceBallFlightTolerancePct, fallback.practiceBallFlightTolerancePct),
     practiceOtherTolerancePct: numberOr(value.practiceOtherTolerancePct, fallback.practiceOtherTolerancePct),
     todayRecentShotCount: numberOr(value.todayRecentShotCount, fallback.todayRecentShotCount),
+    playingPartners,
   };
 }

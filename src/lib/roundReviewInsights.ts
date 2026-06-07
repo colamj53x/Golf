@@ -13,12 +13,14 @@ export interface HcpBenchmark {
 }
 
 export interface RoundThoughts {
+  generalComments: string;
   drivingNotes: string;
   ironsNotes: string;
   shortNotes: string;
   puttingNotes: string;
   mentalNotes: string;
   courseManagementNotes: string;
+  playingPartnerIds?: string[];
 }
 
 export const HCP_BENCHMARKS: Record<number, HcpBenchmark> = {
@@ -106,7 +108,17 @@ export function buildRoundStory(
   if (weakDistance) practise.push(`Prioritise ${weakDistance.label} green-target shots.`);
   if (round.safeShotRate < benchmark.safeShotRate) practise.push('Use decision and start-line drills to reduce damaging misses.');
 
-  const noteText = thoughts ? Object.values(thoughts).join(' ').toLowerCase() : '';
+  const noteText = thoughts
+    ? [
+        thoughts.generalComments,
+        thoughts.drivingNotes,
+        thoughts.ironsNotes,
+        thoughts.shortNotes,
+        thoughts.puttingNotes,
+        thoughts.mentalNotes,
+        thoughts.courseManagementNotes,
+      ].join(' ').toLowerCase()
+    : '';
   if (noteText.includes('driver')) noteMatches.push('You mentioned driver; tee-shot data is included in the main watch areas.');
   if (noteText.includes('hybrid')) noteMatches.push('You mentioned hybrids; their club rows are reflected in the strongest and weakest combinations.');
   if (/(pitch|chip|short)/.test(noteText)) noteMatches.push('You mentioned short-game shots; scoring-zone results support reviewing that area.');

@@ -20,7 +20,12 @@ export const getRoundReflectionDraftStorageKey = (userId: string, roundDate: str
 export function roundReflectionDraftsEqual(a: RoundReflectionDraft, b: RoundReflectionDraft): boolean {
   return Object.keys(a).every((key) => {
     const field = key as keyof RoundReflectionDraft;
-    return a[field].trim() === b[field].trim();
+    const aValue = a[field];
+    const bValue = b[field];
+    if (Array.isArray(aValue) || Array.isArray(bValue)) {
+      return JSON.stringify(aValue ?? []) === JSON.stringify(bValue ?? []);
+    }
+    return String(aValue ?? '').trim() === String(bValue ?? '').trim();
   });
 }
 

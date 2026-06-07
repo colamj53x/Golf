@@ -330,6 +330,7 @@ function extractReflectionThemes(
 ): ReflectionTheme[] {
   const documents = [
     ...reflections.flatMap((reflection) => [
+      reflection.generalComments,
       reflection.drivingNotes,
       reflection.ironsNotes,
       reflection.shortNotes,

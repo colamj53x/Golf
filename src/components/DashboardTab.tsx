@@ -62,6 +62,8 @@ export function DashboardTab({
     roundReflectionsAvailable,
     upsertRoundReflection,
     updateRoundShotClassifications,
+    playingPartners,
+    setPlayingPartners,
   } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
@@ -77,9 +79,24 @@ export function DashboardTab({
   const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
   const [roundThoughtsEditRequest, setRoundThoughtsEditRequest] = useState(0);
   const userId = user?.id ?? null;
-  const roundReviewDateKeys = useMemo(() => [...new Set(
+  const shotRoundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
   )].sort((a, b) => b.localeCompare(a)), [shots]);
+  const roundReviewDateKeys = useMemo(() => [...new Set([
+    ...shotRoundReviewDateKeys,
+    ...roundReflections
+      .filter((reflection) => hasRoundReflectionContent({
+        generalComments: reflection.generalComments,
+        drivingNotes: reflection.drivingNotes,
+        ironsNotes: reflection.ironsNotes,
+        shortNotes: reflection.shortNotes,
+        puttingNotes: reflection.puttingNotes,
+        mentalNotes: reflection.mentalNotes,
+        courseManagementNotes: reflection.courseManagementNotes,
+        playingPartnerIds: reflection.playingPartnerIds,
+      }))
+      .map((reflection) => reflection.roundDate),
+  ])].sort((a, b) => b.localeCompare(a)), [roundReflections, shotRoundReviewDateKeys]);
   const roundReviewScope: RoundReviewScope = selectedRoundDate === ROUND_REVIEW_ALL
     ? 'all'
     : selectedRoundDate === ROUND_REVIEW_LAST20
@@ -245,12 +262,14 @@ export function DashboardTab({
 
     const existing = roundReflections.find((reflection) => reflection.roundDate === selectedRoundDateKey);
     const remoteDraft = existing ? {
+      generalComments: existing.generalComments,
       drivingNotes: existing.drivingNotes,
       ironsNotes: existing.ironsNotes,
       shortNotes: existing.shortNotes,
       puttingNotes: existing.puttingNotes,
       mentalNotes: existing.mentalNotes,
       courseManagementNotes: existing.courseManagementNotes,
+      playingPartnerIds: existing.playingPartnerIds,
     } : createEmptyRoundReflectionDraft();
 
     const localDraft = userId ? loadRoundReflectionLocalDraft(userId, selectedRoundDateKey) : null;
@@ -318,13 +337,13 @@ export function DashboardTab({
   const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, roundDateKeys, selectedRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
   const activeRoundDateKey = showOverview ? selectedRoundDateKey : roundReviewSelectedDateKey;
   const activeRoundReviewDates = roundReviewScope === 'all'
-    ? new Set(roundReviewDateKeys)
+    ? new Set(shotRoundReviewDateKeys)
     : roundReviewScope === 'last20'
-      ? new Set(roundReviewDateKeys.slice(0, 20))
+      ? new Set(shotRoundReviewDateKeys.slice(0, 20))
       : roundReviewScope === 'last10'
-        ? new Set(roundReviewDateKeys.slice(0, 10))
+        ? new Set(shotRoundReviewDateKeys.slice(0, 10))
         : roundReviewScope === 'last5'
-          ? new Set(roundReviewDateKeys.slice(0, 5))
+          ? new Set(shotRoundReviewDateKeys.slice(0, 5))
           : new Set(activeRoundDateKey ? [activeRoundDateKey] : []);
   const activeRoundShotCount = showOverview
     ? activeRoundDateKey
@@ -334,6 +353,7 @@ export function DashboardTab({
   const activeRoundShots = activeRoundDateKey && roundReviewScope === 'round'
     ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
     : [];
+  const activeRoundHasTrackedShots = activeRoundShotCount > 0;
 
   const handleSaveRoundReflection = async () => {
     if (!activeRoundDateKey) return false;
@@ -353,6 +373,16 @@ export function DashboardTab({
     } finally {
       setIsSavingRoundReflection(false);
     }
+  };
+
+  const addPlayingPartner = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = playingPartners.find((partner) => partner.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing.id;
+    const id = crypto.randomUUID();
+    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '' }]);
+    return id;
   };
 
   return (
@@ -472,18 +502,29 @@ export function DashboardTab({
         {/* Latest Round Tab */}
         {showLatestRound && <TabsContent value="latest-round" className="mt-6">
           <div className="space-y-6">
-            <RoundReviewTab
-              shots={shots}
-              clubs={clubs}
-              distanceToTargetTolerance={distanceToTargetTolerance}
-              roundDate={activeRoundDateKey ?? ''}
-              scope={roundReviewScope}
-              thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
-              onEditThoughts={() => {
-                setRoundThoughtsEditRequest(request => request + 1);
-                requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-              }}
-            />
+            {roundReviewScope === 'round' && !activeRoundHasTrackedShots ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Comments-only round</CardTitle>
+                  <CardDescription>
+                    No non-putting shots were tracked for this date, so the review is built from your saved round thoughts.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              <RoundReviewTab
+                shots={shots}
+                clubs={clubs}
+                distanceToTargetTolerance={distanceToTargetTolerance}
+                roundDate={activeRoundDateKey ?? ''}
+                scope={roundReviewScope}
+                thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
+                onEditThoughts={() => {
+                  setRoundThoughtsEditRequest(request => request + 1);
+                  requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+              />
+            )}
             {activeRoundDateKey && roundReviewScope === 'round' && (
               <div id="round-thoughts-editor" className="scroll-mt-6">
               <RoundReflectionEditor
@@ -512,6 +553,8 @@ export function DashboardTab({
                 collapsible
                 editRequestKey={roundThoughtsEditRequest}
                 hideReadOnlyWhenCollapsed
+                playingPartners={playingPartners}
+                onAddPlayingPartner={addPlayingPartner}
               />
               </div>
             )}

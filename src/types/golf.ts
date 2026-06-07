@@ -34,14 +34,22 @@ export interface Shot {
 export interface RoundReflection {
   id: string;
   roundDate: string;
+  generalComments: string;
   drivingNotes: string;
   ironsNotes: string;
   shortNotes: string;
   puttingNotes: string;
   mentalNotes: string;
   courseManagementNotes: string;
+  playingPartnerIds: string[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface PlayingPartner {
+  id: string;
+  name: string;
+  notes?: string;
 }
 
 export interface ProcessedShot extends Shot {

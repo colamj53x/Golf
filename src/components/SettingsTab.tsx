@@ -4,7 +4,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Goal, Settings as SettingsIcon, Save, Pencil, SlidersHorizontal } from 'lucide-react';
+import { Goal, Settings as SettingsIcon, Save, Pencil, SlidersHorizontal, Plus, Trash2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -39,6 +39,12 @@ const SETTINGS_SECTIONS = [
     icon: Goal,
   },
   {
+    href: '#settings-playing-partners',
+    title: 'Playing Partners',
+    description: 'Names to attach to rounds.',
+    icon: Users,
+  },
+  {
     href: '#settings-shot-classification',
     title: 'Shot Classification Rules',
     description: 'Distance-to-target cutoffs for Full and Half shots.',
@@ -64,6 +70,8 @@ export function SettingsTab() {
     setPracticeOtherTolerancePct,
     todayRecentShotCount,
     setTodayRecentShotCount,
+    playingPartners,
+    setPlayingPartners,
   } = useGolfData();
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
@@ -74,6 +82,7 @@ export function SettingsTab() {
   const [editingPracticeOtherTolerancePct, setEditingPracticeOtherTolerancePct] = useState(practiceOtherTolerancePct);
   const [editingTodayRecentShotCount, setEditingTodayRecentShotCount] = useState(todayRecentShotCount);
   const [isEditing, setIsEditing] = useState(false);
+  const [newPartnerName, setNewPartnerName] = useState('');
 
   const handleSave = () => {
     setDistanceToTargetTolerance(editingTolerance);
@@ -304,6 +313,85 @@ export function SettingsTab() {
       <section id="settings-shot-profiles" className="scroll-mt-6">
         <ShotProfilesCard />
       </section>
+
+      <Card id="settings-playing-partners" className="scroll-mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Playing Partners
+          </CardTitle>
+          <CardDescription>
+            Keep a reusable name directory for the people you play rounds with.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = newPartnerName.trim();
+              if (!name) return;
+              const exists = playingPartners.some((partner) => partner.name.trim().toLowerCase() === name.toLowerCase());
+              if (exists) {
+                toast.info('That playing partner is already in your directory');
+                return;
+              }
+              setPlayingPartners((current) => [...current, { id: crypto.randomUUID(), name, notes: '' }]);
+              setNewPartnerName('');
+              toast.success('Playing partner added');
+            }}
+          >
+            <Input
+              value={newPartnerName}
+              onChange={(event) => setNewPartnerName(event.target.value)}
+              placeholder="Add a name"
+              className="sm:max-w-sm"
+            />
+            <Button type="submit" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add
+            </Button>
+          </form>
+          {playingPartners.length > 0 ? (
+            <div className="divide-y rounded-md border">
+              {playingPartners
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((partner) => (
+                  <div key={partner.id} className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <Input
+                      value={partner.name}
+                      onChange={(event) => {
+                        const name = event.target.value;
+                        setPlayingPartners((current) => current.map((item) => (
+                          item.id === partner.id ? { ...item, name } : item
+                        )));
+                      }}
+                      className="h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setPlayingPartners((current) => current.filter((item) => item.id !== partner.id));
+                        toast.info('Playing partner removed');
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+              No playing partners saved yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <section id="settings-shot-classification" className="scroll-mt-6">
         <ShotClassificationRulesCard />

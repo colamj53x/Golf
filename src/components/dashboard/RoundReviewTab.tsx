@@ -77,7 +77,8 @@ const formatNumber = (value: number | null) => value === null ? 'Not enough data
 const formatMetric = (value: number | null, percent = false) => value === null ? 'Not enough data' : percent ? `${Math.round(value)}%` : `${Math.round(value)}`;
 const formatShotCount = (count: number) => `${count} ${count === 1 ? 'shot' : 'shots'}`;
 const trendValue = (current: number | null, comparison: number | null) => current === null || comparison === null ? null : current - comparison;
-const THOUGHT_FIELDS: Array<{ key: keyof RoundThoughts; label: string }> = [
+const THOUGHT_FIELDS: Array<{ key: Exclude<keyof RoundThoughts, 'playingPartnerIds'>; label: string }> = [
+  { key: 'generalComments', label: 'Comments' },
   { key: 'drivingNotes', label: 'Driving' },
   { key: 'ironsNotes', label: 'Irons and Hybrids' },
   { key: 'shortNotes', label: 'Short Game' },

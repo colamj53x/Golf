@@ -1,17 +1,23 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useRef, useState } from 'react';
+import { Plus, Search, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import type { PlayingPartner } from '@/types/golf';
 
 export interface RoundReflectionDraft {
+  generalComments: string;
   drivingNotes: string;
   ironsNotes: string;
   shortNotes: string;
   puttingNotes: string;
   mentalNotes: string;
   courseManagementNotes: string;
+  playingPartnerIds: string[];
 }
 
 interface RoundReflectionEditorProps {
@@ -27,6 +33,8 @@ interface RoundReflectionEditorProps {
   collapsible?: boolean;
   editRequestKey?: number;
   hideReadOnlyWhenCollapsed?: boolean;
+  playingPartners?: PlayingPartner[];
+  onAddPlayingPartner?: (name: string) => string | null;
 }
 
 type ReflectionField = {
@@ -36,6 +44,11 @@ type ReflectionField = {
 };
 
 const FIELDS: ReflectionField[] = [
+  {
+    key: 'generalComments',
+    label: 'Comments',
+    placeholder: 'Anything worth remembering from the day, even if you did not track shots.',
+  },
   {
     key: 'drivingNotes',
     label: 'Driving',
@@ -70,17 +83,19 @@ const FIELDS: ReflectionField[] = [
 
 export function createEmptyRoundReflectionDraft(): RoundReflectionDraft {
   return {
+    generalComments: '',
     drivingNotes: '',
     ironsNotes: '',
     shortNotes: '',
     puttingNotes: '',
     mentalNotes: '',
     courseManagementNotes: '',
+    playingPartnerIds: [],
   };
 }
 
 export function hasRoundReflectionContent(value: RoundReflectionDraft): boolean {
-  return Object.values(value).some((entry) => entry.trim().length > 0);
+  return Object.entries(value).some(([, entry]) => Array.isArray(entry) ? entry.length > 0 : String(entry ?? '').trim().length > 0);
 }
 
 export function RoundReflectionEditor({
@@ -96,16 +111,27 @@ export function RoundReflectionEditor({
   collapsible = false,
   editRequestKey = 0,
   hideReadOnlyWhenCollapsed = false,
+  playingPartners = [],
+  onAddPlayingPartner,
 }: RoundReflectionEditorProps) {
   const [isEditing, setIsEditing] = useState(!collapsible);
   const [valueBeforeEditing, setValueBeforeEditing] = useState(value);
+  const [partnerSearch, setPartnerSearch] = useState('');
   const latestValue = useRef(value);
   const statusClassName = statusTone === 'destructive'
     ? 'text-destructive'
     : statusTone === 'default'
       ? 'text-foreground'
       : 'text-muted-foreground';
-  const fieldsWithContent = FIELDS.filter((field) => value[field.key].trim().length > 0);
+  const fieldsWithContent = FIELDS.filter((field) => (value[field.key] ?? '').trim().length > 0);
+  const selectedPartnerIds = value.playingPartnerIds ?? [];
+  const selectedPartners = selectedPartnerIds
+    .map((id) => playingPartners.find((partner) => partner.id === id))
+    .filter((partner): partner is PlayingPartner => Boolean(partner));
+  const filteredPartners = playingPartners
+    .filter((partner) => partner.name.toLowerCase().includes(partnerSearch.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const exactPartnerExists = playingPartners.some((partner) => partner.name.trim().toLowerCase() === partnerSearch.trim().toLowerCase());
 
   useEffect(() => {
     setIsEditing(!collapsible);
@@ -143,6 +169,22 @@ export function RoundReflectionEditor({
     }
   };
 
+  const togglePlayingPartner = (partnerId: string) => {
+    const nextIds = selectedPartnerIds.includes(partnerId)
+      ? selectedPartnerIds.filter((id) => id !== partnerId)
+      : [...selectedPartnerIds, partnerId];
+    onChange({ ...value, playingPartnerIds: nextIds });
+  };
+
+  const addPlayingPartnerFromSearch = () => {
+    const trimmed = partnerSearch.trim();
+    if (!onAddPlayingPartner || !trimmed || exactPartnerExists) return;
+    const partnerId = onAddPlayingPartner(trimmed);
+    if (!partnerId) return;
+    onChange({ ...value, playingPartnerIds: [...selectedPartnerIds, partnerId] });
+    setPartnerSearch('');
+  };
+
   if (collapsible && hideReadOnlyWhenCollapsed && !isEditing) {
     return null;
   }
@@ -156,19 +198,78 @@ export function RoundReflectionEditor({
         </div>
         {collapsible && !isEditing && (
           <Button variant="outline" className="shrink-0" onClick={startEditing}>
-            {fieldsWithContent.length > 0 ? 'Edit thoughts' : 'Add thoughts'}
+            {fieldsWithContent.length > 0 || selectedPartners.length > 0 ? 'Edit thoughts' : 'Add thoughts'}
           </Button>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         {isEditing ? (
           <div className="mx-auto grid max-w-3xl gap-5">
+            {(playingPartners.length > 0 || onAddPlayingPartner) && (
+              <div className="space-y-3">
+                <Label>Who did I play with?</Label>
+                {selectedPartners.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPartners.map((partner) => (
+                      <Badge key={partner.id} variant="secondary" className="gap-1">
+                        {partner.name}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${partner.name}`}
+                          onClick={() => togglePlayingPartner(partner.id)}
+                          className="rounded-sm hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={partnerSearch}
+                    onChange={(event) => setPartnerSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addPlayingPartnerFromSearch();
+                      }
+                    }}
+                    placeholder="Search or add a playing partner"
+                    className="pl-9"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {filteredPartners.map((partner) => {
+                    const selected = selectedPartnerIds.includes(partner.id);
+                    return (
+                      <Button
+                        key={partner.id}
+                        type="button"
+                        variant={selected ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => togglePlayingPartner(partner.id)}
+                      >
+                        {partner.name}
+                      </Button>
+                    );
+                  })}
+                  {onAddPlayingPartner && partnerSearch.trim() && !exactPartnerExists && (
+                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={addPlayingPartnerFromSearch}>
+                      <Plus className="h-4 w-4" />
+                      Add {partnerSearch.trim()}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             {FIELDS.map((field) => (
               <div key={field.key} className="space-y-2">
                 <Label htmlFor={field.key}>{field.label}</Label>
                 <Textarea
                   id={field.key}
-                  value={value[field.key]}
+                  value={value[field.key] ?? ''}
                   onChange={(event) => onChange({
                     ...value,
                     [field.key]: event.target.value,
@@ -179,12 +280,20 @@ export function RoundReflectionEditor({
               </div>
             ))}
           </div>
-        ) : fieldsWithContent.length > 0 ? (
+        ) : fieldsWithContent.length > 0 || selectedPartners.length > 0 ? (
           <div className="mx-auto max-w-3xl space-y-6">
+            {selectedPartners.length > 0 && (
+              <section className="space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">Played With</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPartners.map((partner) => <Badge key={partner.id} variant="secondary">{partner.name}</Badge>)}
+                </div>
+              </section>
+            )}
             {fieldsWithContent.map((field) => (
               <section key={field.key} className="space-y-2">
                 <h4 className="text-sm font-semibold text-foreground">{field.label}</h4>
-                {value[field.key].trim().split(/\n\s*\n/).map((paragraph, index) => (
+                {(value[field.key] ?? '').trim().split(/\n\s*\n/).map((paragraph, index) => (
                   <p key={index} className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
                     {paragraph}
                   </p>
