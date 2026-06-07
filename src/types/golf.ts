@@ -51,6 +51,7 @@ export interface PlayingPartner {
   name: string;
   notes?: string;
   hasMobileNumber?: boolean;
+  playedDates?: string[];
 }
 
 export interface ProcessedShot extends Shot {

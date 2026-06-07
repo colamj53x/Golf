@@ -67,6 +67,9 @@ export function parseGolfUserSettings(
           name: partner.name,
           notes: typeof partner.notes === 'string' ? partner.notes : '',
           hasMobileNumber: partner.hasMobileNumber === true,
+          playedDates: Array.isArray(partner.playedDates)
+            ? partner.playedDates.filter((date): date is string => typeof date === 'string')
+            : [],
         }))
     : fallback.playingPartners;
 
