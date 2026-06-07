@@ -50,6 +50,7 @@ export interface PlayingPartner {
   id: string;
   name: string;
   notes?: string;
+  hasMobileNumber?: boolean;
 }
 
 export interface ProcessedShot extends Shot {

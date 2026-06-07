@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Goal, Settings as SettingsIcon, Save, Pencil, SlidersHorizontal, Plus, Trash2, Users } from 'lucide-react';
@@ -336,7 +337,7 @@ export function SettingsTab() {
                 toast.info('That playing partner is already in your directory');
                 return;
               }
-              setPlayingPartners((current) => [...current, { id: crypto.randomUUID(), name, notes: '' }]);
+              setPlayingPartners((current) => [...current, { id: crypto.randomUUID(), name, notes: '', hasMobileNumber: false }]);
               setNewPartnerName('');
               toast.success('Playing partner added');
             }}
@@ -358,22 +359,52 @@ export function SettingsTab() {
                 .slice()
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((partner) => (
-                  <div key={partner.id} className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <Input
-                      value={partner.name}
-                      onChange={(event) => {
-                        const name = event.target.value;
-                        setPlayingPartners((current) => current.map((item) => (
-                          item.id === partner.id ? { ...item, name } : item
-                        )));
-                      }}
-                      className="h-9"
-                    />
+                  <div key={partner.id} className="grid gap-3 p-3 lg:grid-cols-[minmax(180px,260px)_minmax(220px,1fr)_auto] lg:items-start">
+                    <div className="space-y-2">
+                      <Label htmlFor={`partner-name-${partner.id}`}>Name</Label>
+                      <Input
+                        id={`partner-name-${partner.id}`}
+                        value={partner.name}
+                        onChange={(event) => {
+                          const name = event.target.value;
+                          setPlayingPartners((current) => current.map((item) => (
+                            item.id === partner.id ? { ...item, name } : item
+                          )));
+                        }}
+                        className="h-9"
+                      />
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={partner.hasMobileNumber === true}
+                          onCheckedChange={(checked) => {
+                            setPlayingPartners((current) => current.map((item) => (
+                              item.id === partner.id ? { ...item, hasMobileNumber: checked === true } : item
+                            )));
+                          }}
+                        />
+                        I have their mobile number
+                      </label>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`partner-notes-${partner.id}`}>Notes</Label>
+                      <Textarea
+                        id={`partner-notes-${partner.id}`}
+                        value={partner.notes ?? ''}
+                        onChange={(event) => {
+                          const notes = event.target.value;
+                          setPlayingPartners((current) => current.map((item) => (
+                            item.id === partner.id ? { ...item, notes } : item
+                          )));
+                        }}
+                        placeholder="Anything useful to remember"
+                        className="min-h-[80px]"
+                      />
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-2 text-destructive hover:text-destructive"
+                      className="gap-2 text-destructive hover:text-destructive lg:mt-7"
                       onClick={() => {
                         setPlayingPartners((current) => current.filter((item) => item.id !== partner.id));
                         toast.info('Playing partner removed');

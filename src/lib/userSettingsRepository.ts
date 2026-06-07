@@ -66,6 +66,7 @@ export function parseGolfUserSettings(
           id: partner.id,
           name: partner.name,
           notes: typeof partner.notes === 'string' ? partner.notes : '',
+          hasMobileNumber: partner.hasMobileNumber === true,
         }))
     : fallback.playingPartners;
 

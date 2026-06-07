@@ -381,7 +381,7 @@ export function DashboardTab({
     const existing = playingPartners.find((partner) => partner.name.trim().toLowerCase() === trimmed.toLowerCase());
     if (existing) return existing.id;
     const id = crypto.randomUUID();
-    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '' }]);
+    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '', hasMobileNumber: false }]);
     return id;
   };
 

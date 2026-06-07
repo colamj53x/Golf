@@ -216,7 +216,7 @@ function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditTho
   onEditThoughts?: () => void;
 }) {
   const notes = thoughts ? THOUGHT_FIELDS
-    .map(field => ({ ...field, value: thoughts[field.key].trim() }))
+    .map(field => ({ ...field, value: String(thoughts[field.key] ?? '').trim() }))
     .filter(field => field.value.length > 0) : [];
   const tee = areas.find(area => area.key === 'tee');
   const approach = areas.find(area => area.key === 'approach');

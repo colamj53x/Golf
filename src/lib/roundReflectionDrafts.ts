@@ -17,11 +17,28 @@ type StoredPendingUploadDraft = {
 export const getRoundReflectionDraftStorageKey = (userId: string, roundDate: string) =>
   `${ROUND_REFLECTION_DRAFT_STORAGE_KEY}:${userId}:${roundDate}`;
 
+export function normalizeRoundReflectionDraft(value: Partial<RoundReflectionDraft> | null | undefined): RoundReflectionDraft {
+  return {
+    generalComments: typeof value?.generalComments === 'string' ? value.generalComments : '',
+    drivingNotes: typeof value?.drivingNotes === 'string' ? value.drivingNotes : '',
+    ironsNotes: typeof value?.ironsNotes === 'string' ? value.ironsNotes : '',
+    shortNotes: typeof value?.shortNotes === 'string' ? value.shortNotes : '',
+    puttingNotes: typeof value?.puttingNotes === 'string' ? value.puttingNotes : '',
+    mentalNotes: typeof value?.mentalNotes === 'string' ? value.mentalNotes : '',
+    courseManagementNotes: typeof value?.courseManagementNotes === 'string' ? value.courseManagementNotes : '',
+    playingPartnerIds: Array.isArray(value?.playingPartnerIds)
+      ? value.playingPartnerIds.filter((id): id is string => typeof id === 'string')
+      : [],
+  };
+}
+
 export function roundReflectionDraftsEqual(a: RoundReflectionDraft, b: RoundReflectionDraft): boolean {
-  return Object.keys(a).every((key) => {
+  const normalizedA = normalizeRoundReflectionDraft(a);
+  const normalizedB = normalizeRoundReflectionDraft(b);
+  return Object.keys(normalizedA).every((key) => {
     const field = key as keyof RoundReflectionDraft;
-    const aValue = a[field];
-    const bValue = b[field];
+    const aValue = normalizedA[field];
+    const bValue = normalizedB[field];
     if (Array.isArray(aValue) || Array.isArray(bValue)) {
       return JSON.stringify(aValue ?? []) === JSON.stringify(bValue ?? []);
     }
@@ -36,7 +53,7 @@ export function loadRoundReflectionLocalDraft(userId: string, roundDate: string)
   const rawDraft = localStorage.getItem(storageKey);
   if (rawDraft) {
     try {
-      return JSON.parse(rawDraft) as RoundReflectionDraft;
+      return normalizeRoundReflectionDraft(JSON.parse(rawDraft) as Partial<RoundReflectionDraft>);
     } catch {
       localStorage.removeItem(storageKey);
     }
@@ -50,8 +67,9 @@ export function loadRoundReflectionLocalDraft(userId: string, roundDate: string)
   try {
     const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
     if (legacyDraft.userId === userId && legacyDraft.roundDate === roundDate) {
-      localStorage.setItem(storageKey, JSON.stringify(legacyDraft.value));
-      return legacyDraft.value;
+      const normalized = normalizeRoundReflectionDraft(legacyDraft.value);
+      localStorage.setItem(storageKey, JSON.stringify(normalized));
+      return normalized;
     }
   } catch {
     localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
@@ -68,8 +86,9 @@ function loadUploadReflectionDraft(userId: string, roundDate: string): RoundRefl
     const uploadDraft = JSON.parse(rawDraft) as StoredPendingUploadDraft;
     const value = uploadDraft.userId === userId ? uploadDraft.reflectionsByDate?.[roundDate] ?? null : null;
     if (value) {
-      localStorage.setItem(getRoundReflectionDraftStorageKey(userId, roundDate), JSON.stringify(value));
-      return value;
+      const normalized = normalizeRoundReflectionDraft(value);
+      localStorage.setItem(getRoundReflectionDraftStorageKey(userId, roundDate), JSON.stringify(normalized));
+      return normalized;
     }
   } catch {
     localStorage.removeItem(PENDING_UPLOAD_STORAGE_KEY);
@@ -82,11 +101,12 @@ export function saveRoundReflectionLocalDraft(userId: string, roundDate: string,
   if (typeof window === 'undefined') return;
 
   const storageKey = getRoundReflectionDraftStorageKey(userId, roundDate);
-  localStorage.setItem(storageKey, JSON.stringify(value));
+  const normalized = normalizeRoundReflectionDraft(value);
+  localStorage.setItem(storageKey, JSON.stringify(normalized));
   localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify({
     userId,
     roundDate,
-    value,
+    value: normalized,
   } satisfies StoredReflectionDraft));
 }
 
