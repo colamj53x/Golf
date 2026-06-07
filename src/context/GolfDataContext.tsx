@@ -75,6 +75,10 @@ function isMissingRoundReflectionsTableError(error: { code?: string } | null): b
   return error?.code === 'PGRST205' || error?.code === 'PGRST204' || error?.code === '42P01' || error?.code === '42703';
 }
 
+function shouldUseRoundReflectionFallback(error: { code?: string } | null): boolean {
+  return isMissingRoundReflectionsTableError(error) || error?.code === '23514';
+}
+
 function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
   const draft = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -488,14 +492,14 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       .from('round_reflections')
       .upsert(payload, { onConflict: 'user_id,round_date' });
 
-    if (isMissingRoundReflectionsTableError(error)) {
+    if (shouldUseRoundReflectionFallback(error)) {
       const { error: fallbackError } = await supabase
         .from('practice_configs')
         .upsert({
           config_key: `${ROUND_REFLECTION_CONFIG_PREFIX}${roundDate}`,
-          club: '__round_reflection__',
-          shot_type: 'round_reflection',
-          power: roundDate,
+          club: 'note',
+          shot_type: 'round',
+          power: 'memo',
           metrics: updates as unknown as Json,
           user_id: user.id,
         }, { onConflict: 'user_id,config_key' });
