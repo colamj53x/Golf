@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   createEmptyRoundReflectionDraft,
   hasRoundReflectionContent,
@@ -31,12 +33,59 @@ const NOTE_FIELDS = [
   ['courseManagementNotes', 'Course Management'],
 ] as const;
 
+const SUMMARY_CATEGORIES = NOTE_FIELDS.filter(([key]) => key !== 'generalComments');
+
+type NoteFieldKey = typeof NOTE_FIELDS[number][0];
+
 function noteText(reflection: { [key: string]: string | string[] }): string {
   return NOTE_FIELDS
     .map(([key]) => reflection[key])
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .join(' ')
     .trim();
+}
+
+function valuesForField(
+  reflections: Array<{ roundDate: string } & Record<NoteFieldKey, string>>,
+  field: NoteFieldKey,
+): string[] {
+  return reflections
+    .map((reflection) => {
+      const value = reflection[field].trim();
+      return value ? `${reflection.roundDate}: ${value}` : '';
+    })
+    .filter(Boolean);
+}
+
+function categorySummary(values: string[]): string {
+  if (values.length === 0) return 'No clear pattern logged yet.';
+  if (values.length === 1) return values[0];
+  return values.slice(0, 3).join(' ');
+}
+
+function buildOverallTheme(reflections: Array<{ roundDate: string } & Record<NoteFieldKey, string>>): string {
+  if (reflections.length === 0) return 'No round reflections saved yet.';
+
+  const general = valuesForField(reflections, 'generalComments');
+  const mental = valuesForField(reflections, 'mentalNotes');
+  const source = [...general, ...mental];
+  if (source.length > 0) return source.slice(0, 2).join(' ');
+
+  return `${reflections.length} recent round reflection${reflections.length === 1 ? '' : 's'} saved. The category notes below are the current story.`;
+}
+
+function buildNextFocus(reflections: Array<{ roundDate: string } & Record<NoteFieldKey, string>>): string[] {
+  const scored = SUMMARY_CATEGORIES
+    .map(([key, label]) => ({
+      label,
+      count: reflections.filter((reflection) => reflection[key].trim().length > 0).length,
+    }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+    .map((entry) => `Review ${entry.label.toLowerCase()} decisions and write one commitment before the next round.`);
+
+  return scored.length > 0 ? scored : ['Add at least one reflection after the next round so patterns can start to emerge.'];
 }
 
 export function JournalTab() {
@@ -47,13 +96,15 @@ export function JournalTab() {
   const [roundNoteDraft, setRoundNoteDraft] = useState<RoundReflectionDraft>(createEmptyRoundReflectionDraft());
   const [roundNoteStatus, setRoundNoteStatus] = useState<string | null>(null);
   const [isSavingRoundNote, setIsSavingRoundNote] = useState(false);
+  const [summaryReflection, setSummaryReflection] = useState('');
 
   const shotDates = useMemo(() => new Set(shots.map((shot) => getShotDateKey(shot.date))), [shots]);
   const notesWithContent = useMemo(() => roundReflections
     .filter((reflection) => noteText(reflection).length > 0 || reflection.playingPartnerIds.length > 0)
     .sort((a, b) => b.roundDate.localeCompare(a.roundDate)), [roundReflections]);
   const lastFiveNotes = notesWithContent.slice(0, 5);
-  const latestNote = notesWithContent[0] ?? null;
+  const overallTheme = buildOverallTheme(lastFiveNotes);
+  const nextFocus = buildNextFocus(lastFiveNotes);
 
   useEffect(() => {
     void refreshRoundReflections();
@@ -130,13 +181,34 @@ export function JournalTab() {
     ].filter(Boolean).join('\n');
   }).join('\n\n---\n\n');
 
+  const structuredSummaryText = [
+    `Overall Theme: ${overallTheme}`,
+    ...SUMMARY_CATEGORIES.map(([key, label]) => `${label}: ${categorySummary(valuesForField(lastFiveNotes, key))}`),
+    `Next Round Focus:\n${nextFocus.map((focus) => `- ${focus}`).join('\n')}`,
+  ].join('\n\n');
+
   const copySummary = async () => {
+    await navigator.clipboard.writeText(structuredSummaryText || 'No round notes saved yet.');
+    toast.success('Last 5 summary copied');
+  };
+
+  const copyRawNotes = async () => {
     await navigator.clipboard.writeText(summaryText || 'No round notes saved yet.');
-    toast.success('Last 5 round notes copied');
+    toast.success('Raw round notes copied');
+  };
+
+  const copySummaryReflection = async () => {
+    await navigator.clipboard.writeText(summaryReflection.trim());
+    toast.success('Reflection copied');
   };
 
   const openRound = (roundDate: string) => {
     navigate(`/review/rounds?round=${encodeURIComponent(roundDate)}`);
+  };
+
+  const editInJournal = (roundDate: string) => {
+    setRoundNoteDate(roundDate);
+    requestAnimationFrame(() => document.getElementById('journal-round-reflection-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
   return (
@@ -162,48 +234,62 @@ export function JournalTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Latest Round Note</CardTitle>
-          <CardDescription>The newest round note appears here first.</CardDescription>
+          <CardTitle>Last 5 Round Reflection Summary</CardTitle>
+          <CardDescription>Structured from the latest five saved round reflections.</CardDescription>
         </CardHeader>
-        <CardContent>
-          {latestNote ? (() => {
-            const partners = partnerNames(latestNote.playingPartnerIds);
-            const preview = noteText(latestNote);
-            return (
-              <div className="grid gap-4 md:grid-cols-[160px_1fr_auto] md:items-start">
-                <div>
-                  <div className="flex items-center gap-2 font-semibold">
-                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    {latestNote.roundDate}
-                  </div>
-                  <Badge variant="outline" className="mt-2">
-                    {shotDates.has(latestNote.roundDate) ? 'Tracked round' : 'Notes only'}
-                  </Badge>
-                </div>
-                <div className="min-w-0 space-y-2">
-                  {partners.length > 0 && <p className="text-xs text-muted-foreground">Played with {partners.join(', ')}</p>}
-                  <p className="text-sm leading-6 text-muted-foreground">{preview || 'No written notes.'}</p>
-                </div>
-                <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => openRound(latestNote.roundDate)}>
-                  <ExternalLink className="h-4 w-4" />
-                  Open Review
-                </Button>
+        <CardContent className="space-y-5">
+          <div className="rounded-md border bg-muted/20 p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Overall Theme</p>
+            <p className="mt-2 text-sm leading-6">{overallTheme}</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {SUMMARY_CATEGORIES.map(([key, label]) => (
+              <div key={key} className="rounded-md border p-4">
+                <p className="text-sm font-semibold">{label}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{categorySummary(valuesForField(lastFiveNotes, key))}</p>
               </div>
-            );
-          })() : (
-            <div className="rounded-md border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">No saved round notes yet.</div>
-          )}
+            ))}
+          </div>
+          <div className="rounded-md border p-4">
+            <p className="text-sm font-semibold">Next Round Focus</p>
+            <ul className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
+              {nextFocus.map((focus) => <li key={focus}>{focus}</li>)}
+            </ul>
+          </div>
+          <Button className="gap-2" onClick={() => void copySummary()} disabled={lastFiveNotes.length === 0}>
+            <Copy className="h-4 w-4" />
+            Copy Summary
+          </Button>
         </CardContent>
       </Card>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>New Notes-Only Round</CardTitle>
-              <CardDescription>For a round you played without tracking shots.</CardDescription>
+              <CardTitle>My Reflection on the Last 5</CardTitle>
+              <CardDescription>Write your interpretation after reading the summary.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Textarea
+                value={summaryReflection}
+                onChange={(event) => setSummaryReflection(event.target.value)}
+                placeholder="What does this summary tell me about my game? What is improving? What is costing me shots? What pattern keeps repeating? What am I committing to next round? What should I practise this week?"
+                className="min-h-[180px]"
+              />
+              <Button variant="outline" className="gap-2" onClick={() => void copySummaryReflection()} disabled={!summaryReflection.trim()}>
+                <Copy className="h-4 w-4" />
+                Copy Reflection
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Round Reflection</CardTitle>
+              <CardDescription>For any round, tracked or untracked. Capture what happened, what you noticed, and what you want to remember.</CardDescription>
+            </CardHeader>
+            <CardContent id="journal-round-reflection-form" className="space-y-4 scroll-mt-6">
               <div className="max-w-xs space-y-2">
                 <Label htmlFor="journal-round-note-date">Round Date</Label>
                 <Input id="journal-round-note-date" type="date" value={roundNoteDate} onChange={(event) => setRoundNoteDate(event.target.value)} />
@@ -231,7 +317,7 @@ export function JournalTab() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Round Notes</CardTitle>
+              <CardTitle>Journal History</CardTitle>
               <CardDescription>Tracked rounds and notes-only rounds appear together here.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -255,10 +341,16 @@ export function JournalTab() {
                           {partners.length > 0 && <p className="mb-1 text-xs text-muted-foreground">Played with {partners.join(', ')}</p>}
                           <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">{preview || 'No written notes.'}</p>
                         </div>
-                        <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => openRound(reflection.roundDate)}>
-                          <ExternalLink className="h-4 w-4" />
-                          Open Review
-                        </Button>
+                        {shotDates.has(reflection.roundDate) ? (
+                          <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => openRound(reflection.roundDate)}>
+                            <ExternalLink className="h-4 w-4" />
+                            Open Review
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" className="w-fit" onClick={() => editInJournal(reflection.roundDate)}>
+                            Edit
+                          </Button>
+                        )}
                       </div>
                     );
                   })}
@@ -270,23 +362,26 @@ export function JournalTab() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Last 5 Round Notes
-              </CardTitle>
-              <CardDescription>Copy this block, then save your own dated reflection below.</CardDescription>
-            </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-md border bg-muted/20 p-4">
-                <pre className="max-h-[420px] whitespace-pre-wrap text-left text-sm leading-6 text-foreground">{summaryText || 'No round notes saved yet.'}</pre>
-              </div>
-              <div className="flex justify-start">
-                <Button className="gap-2" onClick={() => void copySummary()} disabled={!summaryText}>
-                  <Copy className="h-4 w-4" />
-                  Copy Summary
-                </Button>
-              </div>
+              <Accordion type="single" collapsible>
+                <AccordionItem value="raw-notes" className="border-b-0">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Raw Last 5 Notes
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="rounded-md border bg-muted/20 p-4">
+                      <pre className="max-h-[420px] whitespace-pre-wrap text-left text-sm leading-6 text-foreground">{summaryText || 'No round notes saved yet.'}</pre>
+                    </div>
+                    <Button className="mt-4 gap-2" onClick={() => void copyRawNotes()} disabled={!summaryText}>
+                      <Copy className="h-4 w-4" />
+                      Copy Raw Notes
+                    </Button>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </CardContent>
           </Card>
         </div>

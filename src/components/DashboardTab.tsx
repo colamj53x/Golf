@@ -88,21 +88,7 @@ export function DashboardTab({
   const shotRoundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
   )].sort((a, b) => b.localeCompare(a)), [shots]);
-  const roundReviewDateKeys = useMemo(() => [...new Set([
-    ...shotRoundReviewDateKeys,
-    ...roundReflections
-      .filter((reflection) => hasRoundReflectionContent({
-        generalComments: reflection.generalComments,
-        drivingNotes: reflection.drivingNotes,
-        ironsNotes: reflection.ironsNotes,
-        shortNotes: reflection.shortNotes,
-        puttingNotes: reflection.puttingNotes,
-        mentalNotes: reflection.mentalNotes,
-        courseManagementNotes: reflection.courseManagementNotes,
-        playingPartnerIds: reflection.playingPartnerIds,
-      }))
-      .map((reflection) => reflection.roundDate),
-  ])].sort((a, b) => b.localeCompare(a)), [roundReflections, shotRoundReviewDateKeys]);
+  const roundReviewDateKeys = shotRoundReviewDateKeys;
   const roundReviewScope: RoundReviewScope = selectedRoundDate === ROUND_REVIEW_ALL
     ? 'all'
     : selectedRoundDate === ROUND_REVIEW_LAST20
@@ -359,7 +345,6 @@ export function DashboardTab({
   const activeRoundShots = activeRoundDateKey && roundReviewScope === 'round'
     ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
     : [];
-  const activeRoundHasTrackedShots = activeRoundShotCount > 0;
 
   const handleSaveRoundReflection = async () => {
     if (!activeRoundDateKey) return false;
@@ -508,29 +493,18 @@ export function DashboardTab({
         {/* Latest Round Tab */}
         {showLatestRound && <TabsContent value="latest-round" className="mt-6">
           <div className="space-y-6">
-            {roundReviewScope === 'round' && !activeRoundHasTrackedShots ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Comments-only round</CardTitle>
-                  <CardDescription>
-                    No non-putting shots were tracked for this date, so the review is built from your saved round thoughts.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ) : (
-              <RoundReviewTab
-                shots={shots}
-                clubs={clubs}
-                distanceToTargetTolerance={distanceToTargetTolerance}
-                roundDate={activeRoundDateKey ?? ''}
-                scope={roundReviewScope}
-                thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
-                onEditThoughts={() => {
-                  setRoundThoughtsEditRequest(request => request + 1);
-                  requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                }}
-              />
-            )}
+            <RoundReviewTab
+              shots={shots}
+              clubs={clubs}
+              distanceToTargetTolerance={distanceToTargetTolerance}
+              roundDate={activeRoundDateKey ?? ''}
+              scope={roundReviewScope}
+              thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
+              onEditThoughts={() => {
+                setRoundThoughtsEditRequest(request => request + 1);
+                requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}
+            />
             {activeRoundDateKey && roundReviewScope === 'round' && (
               <div id="round-thoughts-editor" className="scroll-mt-6">
               <RoundReflectionEditor
