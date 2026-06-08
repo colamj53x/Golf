@@ -8,6 +8,7 @@ export type StoredReflectionDraft = {
   userId: string;
   roundDate: string;
   value: RoundReflectionDraft;
+  updatedAt?: string;
 };
 
 type StoredPendingUploadDraft = {
@@ -16,6 +17,11 @@ type StoredPendingUploadDraft = {
 };
 
 type StoredLocalSavedReflection = {
+  value: RoundReflectionDraft;
+  savedAt: string;
+};
+
+type StoredLocalDraftReflection = {
   value: RoundReflectionDraft;
   savedAt: string;
 };
@@ -53,6 +59,18 @@ export function roundReflectionDraftsEqual(a: RoundReflectionDraft, b: RoundRefl
     }
     return String(aValue ?? '').trim() === String(bValue ?? '').trim();
   });
+}
+
+function hasRoundReflectionDraftContent(value: RoundReflectionDraft): boolean {
+  return [
+    value.generalComments,
+    value.drivingNotes,
+    value.ironsNotes,
+    value.shortNotes,
+    value.puttingNotes,
+    value.mentalNotes,
+    value.courseManagementNotes,
+  ].some((field) => field.trim().length > 0) || value.playingPartnerIds.length > 0;
 }
 
 export function loadRoundReflectionLocalDraft(userId: string, roundDate: string): RoundReflectionDraft | null {
@@ -111,12 +129,61 @@ export function saveRoundReflectionLocalDraft(userId: string, roundDate: string,
 
   const storageKey = getRoundReflectionDraftStorageKey(userId, roundDate);
   const normalized = normalizeRoundReflectionDraft(value);
+  const updatedAt = new Date().toISOString();
   localStorage.setItem(storageKey, JSON.stringify(normalized));
   localStorage.setItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY, JSON.stringify({
     userId,
     roundDate,
     value: normalized,
+    updatedAt,
   } satisfies StoredReflectionDraft));
+}
+
+export function loadRoundReflectionLocalDrafts(userId: string): Record<string, StoredLocalDraftReflection> {
+  if (typeof window === 'undefined') return {};
+
+  const drafts: Record<string, StoredLocalDraftReflection> = {};
+  const prefix = `${ROUND_REFLECTION_DRAFT_STORAGE_KEY}:${userId}:`;
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+
+    const roundDate = key.slice(prefix.length);
+    if (!roundDate) continue;
+
+    try {
+      const value = normalizeRoundReflectionDraft(JSON.parse(localStorage.getItem(key) || 'null') as Partial<RoundReflectionDraft>);
+      if (hasRoundReflectionDraftContent(value)) {
+        drafts[roundDate] = {
+          value,
+          savedAt: new Date().toISOString(),
+        };
+      }
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }
+
+  const legacyRawDraft = localStorage.getItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+  if (legacyRawDraft) {
+    try {
+      const legacyDraft = JSON.parse(legacyRawDraft) as StoredReflectionDraft;
+      if (legacyDraft.userId === userId) {
+        const value = normalizeRoundReflectionDraft(legacyDraft.value);
+        if (legacyDraft.roundDate && hasRoundReflectionDraftContent(value)) {
+          drafts[legacyDraft.roundDate] = {
+            value,
+            savedAt: typeof legacyDraft.updatedAt === 'string' ? legacyDraft.updatedAt : new Date().toISOString(),
+          };
+        }
+      }
+    } catch {
+      localStorage.removeItem(ROUND_REFLECTION_DRAFT_STORAGE_KEY);
+    }
+  }
+
+  return drafts;
 }
 
 export function loadRoundReflectionLocalSaved(userId: string): Record<string, StoredLocalSavedReflection> {

@@ -8,6 +8,7 @@ import { parseDate } from '@/lib/golfCalculations';
 import { decodeRoundShotSequence } from '@/lib/roundShotSequence';
 import {
   clearRoundReflectionLocalSaved,
+  loadRoundReflectionLocalDrafts,
   loadRoundReflectionLocalSaved,
   saveRoundReflectionLocalSaved,
 } from '@/lib/roundReflectionDrafts';
@@ -102,10 +103,13 @@ function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
   };
 }
 
-function mergeLocalSavedRoundReflections(reflections: RoundReflection[], userId: string): RoundReflection[] {
-  const localSaved = loadRoundReflectionLocalSaved(userId);
+function mergeLocalRoundReflections(reflections: RoundReflection[], userId: string): RoundReflection[] {
+  const localReflections = {
+    ...loadRoundReflectionLocalSaved(userId),
+    ...loadRoundReflectionLocalDrafts(userId),
+  };
   const mergedReflections = reflections.map((reflection) => {
-    const local = localSaved[reflection.roundDate];
+    const local = localReflections[reflection.roundDate];
     if (!local) return reflection;
 
     return {
@@ -114,7 +118,7 @@ function mergeLocalSavedRoundReflections(reflections: RoundReflection[], userId:
       updatedAt: new Date(local.savedAt),
     };
   });
-  const localOnly = Object.entries(localSaved)
+  const localOnly = Object.entries(localReflections)
     .filter(([roundDate]) => !reflections.some((reflection) => reflection.roundDate === roundDate))
     .map(([roundDate, entry]) => ({
       id: `local:${roundDate}`,
@@ -436,7 +440,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
         }));
-        setRoundReflections(mergeLocalSavedRoundReflections(fallbackReflections, user.id));
+        setRoundReflections(mergeLocalRoundReflections(fallbackReflections, user.id));
         return;
       }
 
@@ -455,7 +459,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
       }));
-      setRoundReflections(mergeLocalSavedRoundReflections(remoteReflections, user.id));
+      setRoundReflections(mergeLocalRoundReflections(remoteReflections, user.id));
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('Failed to load round reflections:', getUserFriendlyError(error));
