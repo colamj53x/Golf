@@ -15,7 +15,6 @@ import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -270,33 +269,15 @@ export function UploadTab() {
     setPlayingPartners,
   } = useGolfData();
   const [isUploading, setIsUploading] = useState(false);
-  const [isSavingCommentsOnlyRound, setIsSavingCommentsOnlyRound] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [commentsOnlyResult, setCommentsOnlyResult] = useState<{ success: boolean; message: string } | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<{ row: number; issue: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
   const [replaceMatchingRounds, setReplaceMatchingRounds] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<PendingUploadDraft | null>(null);
-  const [commentsOnlyRoundDate, setCommentsOnlyRoundDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [commentsOnlyDraft, setCommentsOnlyDraft] = useState<RoundReflectionDraft>(createEmptyRoundReflectionDraft());
   const [hasRestoredPendingUpload, setHasRestoredPendingUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const existing = roundReflections.find((reflection) => reflection.roundDate === commentsOnlyRoundDate);
-    setCommentsOnlyDraft(existing ? {
-      generalComments: existing.generalComments,
-      drivingNotes: existing.drivingNotes,
-      ironsNotes: existing.ironsNotes,
-      shortNotes: existing.shortNotes,
-      puttingNotes: existing.puttingNotes,
-      mentalNotes: existing.mentalNotes,
-      courseManagementNotes: existing.courseManagementNotes,
-      playingPartnerIds: existing.playingPartnerIds,
-    } : createEmptyRoundReflectionDraft());
-  }, [commentsOnlyRoundDate, roundReflections]);
 
   useEffect(() => {
     if (!user || pendingUpload) {
@@ -519,42 +500,6 @@ export function UploadTab() {
     const id = crypto.randomUUID();
     setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '', hasMobileNumber: false, playedDates: [] }]);
     return id;
-  };
-
-  const saveCommentsOnlyRound = async () => {
-    if (!user) {
-      setCommentsOnlyResult({ success: false, message: 'Sign in before saving round comments.' });
-      return;
-    }
-    if (!commentsOnlyRoundDate) {
-      setCommentsOnlyResult({ success: false, message: 'Choose a round date before saving comments.' });
-      return;
-    }
-    if (!hasRoundReflectionContent(commentsOnlyDraft)) {
-      setCommentsOnlyResult({ success: false, message: 'Add a comment, thought, or playing partner before saving this round.' });
-      return;
-    }
-
-    setIsSavingCommentsOnlyRound(true);
-    setCommentsOnlyResult(null);
-    setUploadResult(null);
-    try {
-      saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, commentsOnlyDraft);
-      await upsertRoundReflection(commentsOnlyRoundDate, commentsOnlyDraft);
-      clearRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate);
-      await refreshRoundReflections();
-      setCommentsOnlyResult({ success: true, message: `Saved comments-only round for ${commentsOnlyRoundDate}.` });
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('Comments-only round saved locally but remote sync failed:', error);
-      }
-      setCommentsOnlyResult({
-        success: true,
-        message: `Saved comments-only round locally for ${commentsOnlyRoundDate}. Remote sync can retry later.`,
-      });
-    } finally {
-      setIsSavingCommentsOnlyRound(false);
-    }
   };
 
   const commitUpload = async () => {
@@ -911,57 +856,6 @@ export function UploadTab() {
             <code className="block overflow-x-auto rounded bg-muted p-3 text-xs">
               Date, Club, Type, Start Lie, End Lie, Strike Quality, Shot Quality, Target, End Distance from Target, Distance Hit, Dispersion
             </code>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Round Comments Only</CardTitle>
-          <CardDescription>
-            Save a round when you played but did not track shots.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="max-w-xs space-y-2">
-            <Label htmlFor="comments-only-round-date">Round Date</Label>
-            <Input
-              id="comments-only-round-date"
-              type="date"
-              value={commentsOnlyRoundDate}
-              onChange={(event) => {
-                setCommentsOnlyRoundDate(event.target.value);
-                setCommentsOnlyResult(null);
-              }}
-            />
-          </div>
-          <RoundReflectionEditor
-            title={`Round Thoughts · ${commentsOnlyRoundDate || 'Select a date'}`}
-            description="Capture who you played with and anything worth remembering from the round."
-            value={commentsOnlyDraft}
-            onChange={(next) => {
-              setCommentsOnlyDraft(next);
-              setCommentsOnlyResult(null);
-              if (!user || !commentsOnlyRoundDate) return;
-              if (hasRoundReflectionContent(next)) {
-                saveRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate, next);
-              } else {
-                clearRoundReflectionLocalDraft(user.id, commentsOnlyRoundDate);
-              }
-            }}
-            playingPartners={playingPartners}
-            onAddPlayingPartner={addPlayingPartner}
-          />
-          {commentsOnlyResult && (
-            <Alert variant={commentsOnlyResult.success ? 'default' : 'destructive'}>
-              {commentsOnlyResult.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-              <AlertDescription>{commentsOnlyResult.message}</AlertDescription>
-            </Alert>
-          )}
-          <div className="flex justify-end">
-            <Button onClick={() => void saveCommentsOnlyRound()} disabled={isSavingCommentsOnlyRound}>
-              {isSavingCommentsOnlyRound ? 'Saving...' : 'Save Comments Only Round'}
-            </Button>
           </div>
         </CardContent>
       </Card>

@@ -35,6 +35,7 @@ import {
 interface DashboardTabProps {
   onOpenUpload?: () => void;
   initialView?: 'latest-round' | 'overview';
+  initialRoundDate?: string;
   showLatestRound?: boolean;
   showOverview?: boolean;
 }
@@ -47,6 +48,7 @@ const ROUND_REVIEW_ALL = 'aggregate:all';
 export function DashboardTab({
   onOpenUpload,
   initialView = 'latest-round',
+  initialRoundDate = '',
   showLatestRound = true,
   showOverview = true,
 }: DashboardTabProps) {
@@ -68,7 +70,7 @@ export function DashboardTab({
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState<string>('all');
-  const [selectedRoundDate, setSelectedRoundDate] = useState<string>('');
+  const [selectedRoundDate, setSelectedRoundDate] = useState<string>(initialRoundDate);
   const [dashboardView, setDashboardView] = useState<string>(initialView);
   const [expandedTrendCategories, setExpandedTrendCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
   const [expandedCapabilityCategories, setExpandedCapabilityCategories] = useState<Set<string>>(new Set(['accuracy', 'quality']));
@@ -79,6 +81,10 @@ export function DashboardTab({
   const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
   const [roundThoughtsEditRequest, setRoundThoughtsEditRequest] = useState(0);
   const userId = user?.id ?? null;
+
+  useEffect(() => {
+    if (initialRoundDate) setSelectedRoundDate(initialRoundDate);
+  }, [initialRoundDate]);
   const shotRoundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
   )].sort((a, b) => b.localeCompare(a)), [shots]);

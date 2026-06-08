@@ -1,6 +1,7 @@
 import type { RoundReflectionDraft } from '@/components/RoundReflectionEditor';
 
 export const ROUND_REFLECTION_DRAFT_STORAGE_KEY = 'golf-dashboard-round-reflection-draft';
+export const ROUND_REFLECTION_LOCAL_SAVED_STORAGE_KEY = 'golf-round-reflections-local-saved';
 const PENDING_UPLOAD_STORAGE_KEY = 'golf-pending-upload-review-draft';
 
 export type StoredReflectionDraft = {
@@ -14,8 +15,16 @@ type StoredPendingUploadDraft = {
   reflectionsByDate?: Record<string, RoundReflectionDraft>;
 };
 
+type StoredLocalSavedReflection = {
+  value: RoundReflectionDraft;
+  savedAt: string;
+};
+
 export const getRoundReflectionDraftStorageKey = (userId: string, roundDate: string) =>
   `${ROUND_REFLECTION_DRAFT_STORAGE_KEY}:${userId}:${roundDate}`;
+
+export const getRoundReflectionLocalSavedStorageKey = (userId: string) =>
+  `${ROUND_REFLECTION_LOCAL_SAVED_STORAGE_KEY}:${userId}`;
 
 export function normalizeRoundReflectionDraft(value: Partial<RoundReflectionDraft> | null | undefined): RoundReflectionDraft {
   return {
@@ -108,6 +117,46 @@ export function saveRoundReflectionLocalDraft(userId: string, roundDate: string,
     roundDate,
     value: normalized,
   } satisfies StoredReflectionDraft));
+}
+
+export function loadRoundReflectionLocalSaved(userId: string): Record<string, StoredLocalSavedReflection> {
+  if (typeof window === 'undefined') return {};
+
+  const raw = localStorage.getItem(getRoundReflectionLocalSavedStorageKey(userId));
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, StoredLocalSavedReflection>;
+    return Object.fromEntries(Object.entries(parsed).map(([roundDate, entry]) => [
+      roundDate,
+      {
+        value: normalizeRoundReflectionDraft(entry?.value),
+        savedAt: typeof entry?.savedAt === 'string' ? entry.savedAt : new Date().toISOString(),
+      },
+    ]));
+  } catch {
+    localStorage.removeItem(getRoundReflectionLocalSavedStorageKey(userId));
+    return {};
+  }
+}
+
+export function saveRoundReflectionLocalSaved(userId: string, roundDate: string, value: RoundReflectionDraft): void {
+  if (typeof window === 'undefined') return;
+
+  const saved = loadRoundReflectionLocalSaved(userId);
+  saved[roundDate] = {
+    value: normalizeRoundReflectionDraft(value),
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(getRoundReflectionLocalSavedStorageKey(userId), JSON.stringify(saved));
+}
+
+export function clearRoundReflectionLocalSaved(userId: string, roundDate: string): void {
+  if (typeof window === 'undefined') return;
+
+  const saved = loadRoundReflectionLocalSaved(userId);
+  delete saved[roundDate];
+  localStorage.setItem(getRoundReflectionLocalSavedStorageKey(userId), JSON.stringify(saved));
 }
 
 export function clearRoundReflectionLocalDraft(userId: string, roundDate: string): void {

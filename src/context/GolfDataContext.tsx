@@ -7,6 +7,11 @@ import { getUserFriendlyError } from '@/lib/errorHandler';
 import { parseDate } from '@/lib/golfCalculations';
 import { decodeRoundShotSequence } from '@/lib/roundShotSequence';
 import {
+  clearRoundReflectionLocalSaved,
+  loadRoundReflectionLocalSaved,
+  saveRoundReflectionLocalSaved,
+} from '@/lib/roundReflectionDrafts';
+import {
   loadGolfUserSettings,
   parseGolfUserSettings,
   saveGolfUserSettings,
@@ -95,6 +100,31 @@ function parseRoundReflectionDraft(value: Json): RoundReflectionInput {
       ? draft.playingPartnerIds.filter((id): id is string => typeof id === 'string')
       : [],
   };
+}
+
+function mergeLocalSavedRoundReflections(reflections: RoundReflection[], userId: string): RoundReflection[] {
+  const localSaved = loadRoundReflectionLocalSaved(userId);
+  const mergedReflections = reflections.map((reflection) => {
+    const local = localSaved[reflection.roundDate];
+    if (!local) return reflection;
+
+    return {
+      ...reflection,
+      ...local.value,
+      updatedAt: new Date(local.savedAt),
+    };
+  });
+  const localOnly = Object.entries(localSaved)
+    .filter(([roundDate]) => !reflections.some((reflection) => reflection.roundDate === roundDate))
+    .map(([roundDate, entry]) => ({
+      id: `local:${roundDate}`,
+      roundDate,
+      ...entry.value,
+      createdAt: new Date(entry.savedAt),
+      updatedAt: new Date(entry.savedAt),
+    }));
+
+  return [...mergedReflections, ...localOnly].sort((a, b) => b.roundDate.localeCompare(a.roundDate));
 }
 
 const GolfDataContext = createContext<GolfDataContextType | undefined>(undefined);
@@ -399,18 +429,19 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         }
 
         setRoundReflectionsAvailable(true);
-        setRoundReflections((fallbackData || []).map((row) => ({
+        const fallbackReflections = (fallbackData || []).map((row) => ({
           id: row.id,
           roundDate: row.config_key.slice(ROUND_REFLECTION_CONFIG_PREFIX.length),
           ...parseRoundReflectionDraft(row.metrics),
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
-        })));
+        }));
+        setRoundReflections(mergeLocalSavedRoundReflections(fallbackReflections, user.id));
         return;
       }
 
       setRoundReflectionsAvailable(true);
-      setRoundReflections((data || []).map((row) => ({
+      const remoteReflections = (data || []).map((row) => ({
         id: row.id,
         roundDate: row.round_date,
         generalComments: row.general_comments || '',
@@ -423,7 +454,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
         playingPartnerIds: row.playing_partner_ids || [],
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
-      })));
+      }));
+      setRoundReflections(mergeLocalSavedRoundReflections(remoteReflections, user.id));
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error('Failed to load round reflections:', getUserFriendlyError(error));
@@ -506,10 +538,13 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
 
       if (fallbackError) {
         setRoundReflectionsAvailable(false);
+        saveRoundReflectionLocalSaved(user.id, roundDate, updates);
+        await loadRoundReflections();
         throw fallbackError;
       }
 
       setRoundReflectionsAvailable(true);
+      clearRoundReflectionLocalSaved(user.id, roundDate);
       await loadRoundReflections();
       return;
     }
@@ -519,6 +554,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     }
 
     setRoundReflectionsAvailable(true);
+    clearRoundReflectionLocalSaved(user.id, roundDate);
     await loadRoundReflections();
   }, [loadRoundReflections, user]);
 
