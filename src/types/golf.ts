@@ -54,6 +54,60 @@ export interface PlayingPartner {
   playedDates?: string[];
 }
 
+export type JournalCategoryKey =
+  | 'driving'
+  | 'irons'
+  | 'hybrids'
+  | 'approach'
+  | 'shortGame'
+  | 'putting'
+  | 'mental'
+  | 'courseManagement';
+
+export interface JournalCategoryReflection {
+  feelRating: number | null;
+  whatHappened: string;
+  likelyCause: string;
+  tryNextTime: string;
+  generalNotes: string;
+}
+
+export type JournalCategoryReflections = Record<JournalCategoryKey, JournalCategoryReflection>;
+
+export interface JournalEntryDraft {
+  roundReviewId: string | null;
+  date: string;
+  courseName: string;
+  roundType: string;
+  playingPartnerIds: string[];
+  weatherConditions: string;
+  generalContext: string;
+  overallComments: string;
+  overallFeelRating: number | null;
+  bestThingToday: string;
+  biggestFrustration: string;
+  mainLearning: string;
+  focusForNextRound: string;
+  categories: JournalCategoryReflections;
+}
+
+export interface JournalEntry extends JournalEntryDraft {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type GeneratedReflectionType = 'last5' | 'course' | 'preRound';
+
+export interface GeneratedJournalReflection {
+  id: string;
+  type: GeneratedReflectionType;
+  sourceJournalEntryIds: string[];
+  courseName: string | null;
+  generatedText: string;
+  createdAt: Date;
+}
+
 export interface ProcessedShot extends Shot {
   isOnTarget: boolean;
   isRight: boolean;

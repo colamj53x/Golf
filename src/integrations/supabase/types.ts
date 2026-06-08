@@ -14,6 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
+      generated_reflections: {
+        Row: {
+          course_name: string | null
+          created_at: string
+          generated_text: string
+          id: string
+          reflection_type: string
+          source_journal_entry_ids: string[]
+          user_id: string
+        }
+        Insert: {
+          course_name?: string | null
+          created_at?: string
+          generated_text: string
+          id?: string
+          reflection_type: string
+          source_journal_entry_ids?: string[]
+          user_id: string
+        }
+        Update: {
+          course_name?: string | null
+          created_at?: string
+          generated_text?: string
+          id?: string
+          reflection_type?: string
+          source_journal_entry_ids?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      journal_entries: {
+        Row: {
+          best_thing_today: string
+          biggest_frustration: string
+          categories: Json
+          course_name: string | null
+          created_at: string
+          entry_date: string
+          focus_for_next_round: string
+          general_context: string
+          id: string
+          main_learning: string
+          overall_comments: string
+          overall_feel_rating: number | null
+          playing_partner_ids: string[]
+          round_review_id: string | null
+          round_type: string
+          updated_at: string
+          user_id: string
+          weather_conditions: string
+        }
+        Insert: {
+          best_thing_today?: string
+          biggest_frustration?: string
+          categories?: Json
+          course_name?: string | null
+          created_at?: string
+          entry_date: string
+          focus_for_next_round?: string
+          general_context?: string
+          id?: string
+          main_learning?: string
+          overall_comments?: string
+          overall_feel_rating?: number | null
+          playing_partner_ids?: string[]
+          round_review_id?: string | null
+          round_type?: string
+          updated_at?: string
+          user_id: string
+          weather_conditions?: string
+        }
+        Update: {
+          best_thing_today?: string
+          biggest_frustration?: string
+          categories?: Json
+          course_name?: string | null
+          created_at?: string
+          entry_date?: string
+          focus_for_next_round?: string
+          general_context?: string
+          id?: string
+          main_learning?: string
+          overall_comments?: string
+          overall_feel_rating?: number | null
+          playing_partner_ids?: string[]
+          round_review_id?: string | null
+          round_type?: string
+          updated_at?: string
+          user_id?: string
+          weather_conditions?: string
+        }
+        Relationships: []
+      }
       practice_configs: {
         Row: {
           club: string
