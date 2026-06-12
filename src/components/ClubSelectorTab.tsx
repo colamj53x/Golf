@@ -788,8 +788,10 @@ function calculateRecommendations(
 
 export function ClubSelectorTab({
   defaultView = 'club-selector',
+  singleView = false,
 }: {
   defaultView?: 'club-selector' | 'wedge-matrix';
+  singleView?: boolean;
 } = {}) {
   const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
@@ -902,16 +904,8 @@ export function ClubSelectorTab({
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <Tabs defaultValue={defaultView} className="w-full">
-        <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
-          <TabsTrigger value="club-selector" className="shrink-0">Shot Picker</TabsTrigger>
-          <TabsTrigger value="wedge-matrix" className="shrink-0">Short Game Matrix</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="wedge-matrix">
-          <Card>
+  const matrixView = (
+    <Card>
             <CardHeader>
               <CardTitle>Short Game Matrix</CardTitle>
               <CardDescription>
@@ -981,10 +975,10 @@ export function ClubSelectorTab({
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+  );
 
-        <TabsContent value="club-selector">
-          <div className="space-y-6">
+  const selectorView = (
+    <div className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1167,6 +1161,30 @@ export function ClubSelectorTab({
               </CardContent>
             </Card>
           </div>
+  );
+
+  if (singleView) {
+    return (
+      <div className="space-y-6">
+        {defaultView === 'wedge-matrix' ? matrixView : selectorView}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue={defaultView} className="w-full">
+        <TabsList className="mb-6 w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="club-selector" className="shrink-0">Shot Picker</TabsTrigger>
+          <TabsTrigger value="wedge-matrix" className="shrink-0">Short Game Matrix</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="wedge-matrix">
+          {matrixView}
+        </TabsContent>
+
+        <TabsContent value="club-selector">
+          {selectorView}
         </TabsContent>
       </Tabs>
     </div>
