@@ -12,8 +12,12 @@ dist
 dist-ssr
 .env
 .env.local
+.env.migration
 .npm-cache
 *.local
+supabase/.temp/
+supabase_export_csvs/
+.codex-inspect/
 
 # Editor directories and files
 .vscode/*
