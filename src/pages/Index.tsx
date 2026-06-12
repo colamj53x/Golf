@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, BookOpen, BriefcaseBusiness, Crosshair, Goal, Home, LogOut, MoreHorizontal, Target, Users } from 'lucide-react';
+import { BarChart3, Crosshair, Goal, LogOut, Settings as SettingsIcon, Target } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,28 +21,43 @@ const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/Mo
 const PlayingPartnersTab = lazy(async () => ({ default: (await import('@/components/PlayingPartnersTab')).PlayingPartnersTab }));
 const JournalTab = lazy(async () => ({ default: (await import('@/components/JournalTab')).JournalTab }));
 
-const mainTabs = ['today', 'play', 'review', 'journal', 'practice', 'bag', 'partners', 'more'] as const;
-const reviewTabs = ['rounds', 'advanced'] as const;
+const mainTabs = ['play', 'review', 'practice', 'settings'] as const;
+const playTabs = ['on-course', 'bag'] as const;
+const reviewTabs = ['today', 'rounds', 'journal', 'advanced'] as const;
 const bagTabs = ['gapping', 'clubs', 'profiles', 'short-game'] as const;
-const moreTabs = ['upload', 'library', 'tools', 'settings'] as const;
+const settingsTabs = ['partners', 'upload', 'library', 'tools', 'preferences'] as const;
 type MainTab = typeof mainTabs[number];
 
 const TabLoader = () => <div className="space-y-4"><Skeleton className="h-10 w-48" /><Skeleton className="h-64 w-full" /><Skeleton className="h-32 w-full" /></div>;
 const isIn = <T extends readonly string[]>(items: T, value: string): value is T[number] => items.includes(value as T[number]);
-const path = (tab: MainTab, child?: string) => `/${tab}${child ? `/${child}` : ''}`;
+const path = (tab: MainTab, ...segments: string[]) => `/${[tab, ...segments].filter(Boolean).join('/')}`;
+const mainPath = (tab: MainTab) => {
+  if (tab === 'play') return path('play', 'on-course');
+  if (tab === 'review') return path('review', 'today');
+  if (tab === 'settings') return path('settings', 'preferences');
+  return path(tab);
+};
 
 function legacyRedirect(pathname: string): string | null {
-  if (pathname === '/') return '/today';
-  if (pathname === '/on-course') return '/play';
-  if (pathname === '/club-gapping') return '/bag/gapping';
+  if (pathname === '/') return '/review/today';
+  if (pathname === '/today') return '/review/today';
+  if (pathname === '/on-course') return '/play/on-course';
+  if (pathname === '/journal') return '/review/journal';
+  if (pathname === '/club-gapping') return '/play/bag/gapping';
+  if (pathname === '/bag') return '/play/bag/gapping';
+  if (pathname.startsWith('/bag/')) return pathname.replace('/bag/', '/play/bag/');
+  if (pathname === '/settings/bag') return '/play/bag/gapping';
+  if (pathname.startsWith('/settings/bag/')) return pathname.replace('/settings/bag/', '/play/bag/');
+  if (pathname === '/partners') return '/settings/partners';
   if (pathname === '/analyse' || pathname === '/analyse/overview' || pathname === '/playing-data') return '/review/rounds';
   if (pathname === '/analyse/rounds' || pathname === '/playing-data/dashboard') return '/review/rounds';
-  if (pathname === '/analyse/clubs' || pathname === '/playing-data/all-clubs') return '/bag/clubs';
-  if (pathname === '/analyse/gapping') return '/bag/gapping';
+  if (pathname === '/analyse/clubs' || pathname === '/playing-data/all-clubs') return '/play/bag/clubs';
+  if (pathname === '/analyse/gapping') return '/play/bag/gapping';
   if (pathname === '/analyse/reports' || pathname === '/playing-data/reports') return '/review/advanced';
-  if (pathname === '/analyse/upload' || pathname === '/playing-data/upload') return '/more/upload';
-  if (pathname === '/library') return '/more/library';
-  if (pathname === '/settings') return '/more/settings';
+  if (pathname === '/analyse/upload' || pathname === '/playing-data/upload') return '/settings/upload';
+  if (pathname === '/library') return '/settings/library';
+  if (pathname === '/more') return '/settings/upload';
+  if (pathname.startsWith('/more/')) return pathname.replace('/more/settings', '/settings/preferences').replace('/more/', '/settings/');
   return null;
 }
 
@@ -60,19 +75,23 @@ const Index = () => {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab = 'today', child] = location.pathname.split('/').filter(Boolean);
+  const [activeTab = 'review', child, grandchild] = location.pathname.split('/').filter(Boolean);
   const selectedRoundDate = new URLSearchParams(location.search).get('round') ?? '';
   const redirect = legacyRedirect(location.pathname);
 
   if (redirect) return <Navigate to={redirect} replace />;
-  if (!isIn(mainTabs, activeTab)) return <Navigate to="/today" replace />;
-  if (activeTab === 'review' && !isIn(reviewTabs, child || 'rounds')) return <Navigate to="/review/rounds" replace />;
-  if (activeTab === 'bag' && !isIn(bagTabs, child || 'gapping')) return <Navigate to="/bag/gapping" replace />;
-  if (activeTab === 'more' && !isIn(moreTabs, child || 'upload')) return <Navigate to="/more/upload" replace />;
+  if (!isIn(mainTabs, activeTab)) return <Navigate to="/review/today" replace />;
+  if (activeTab === 'play' && !isIn(playTabs, child || 'on-course')) return <Navigate to="/play/on-course" replace />;
+  if (activeTab === 'play' && (child || 'on-course') === 'bag' && !isIn(bagTabs, grandchild || 'gapping')) {
+    return <Navigate to="/play/bag/gapping" replace />;
+  }
+  if (activeTab === 'review' && !isIn(reviewTabs, child || 'today')) return <Navigate to="/review/today" replace />;
+  if (activeTab === 'settings' && !isIn(settingsTabs, child || 'preferences')) return <Navigate to="/settings/preferences" replace />;
 
-  const reviewTab = isIn(reviewTabs, child || '') ? child : 'rounds';
-  const bagTab = isIn(bagTabs, child || '') ? child : 'gapping';
-  const moreTab = isIn(moreTabs, child || '') ? child : 'upload';
+  const playTab = isIn(playTabs, child || '') ? child : 'on-course';
+  const reviewTab = isIn(reviewTabs, child || '') ? child : 'today';
+  const settingsTab = isIn(settingsTabs, child || '') ? child : 'preferences';
+  const bagTab = isIn(bagTabs, grandchild || '') ? grandchild : 'gapping';
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,16 +108,12 @@ const Index = () => {
                 <Button variant="outline" size="sm" onClick={signOut}><LogOut className="mr-2 h-4 w-4" />Sign Out</Button>
               </div>
             </div>
-            <Tabs value={activeTab} onValueChange={value => isIn(mainTabs, value) && navigate(path(value))} className="min-w-0 lg:flex-1">
+            <Tabs value={activeTab} onValueChange={value => isIn(mainTabs, value) && navigate(mainPath(value))} className="min-w-0 lg:flex-1">
               <TabsList className="w-full justify-start overflow-x-auto lg:w-auto">
-                <TabsTrigger value="today" className="shrink-0 gap-2"><Home className="h-4 w-4" />Today</TabsTrigger>
                 <TabsTrigger value="play" className="shrink-0 gap-2"><Crosshair className="h-4 w-4" />Play</TabsTrigger>
                 <TabsTrigger value="review" className="shrink-0 gap-2"><BarChart3 className="h-4 w-4" />Review</TabsTrigger>
-                <TabsTrigger value="journal" className="shrink-0 gap-2"><BookOpen className="h-4 w-4" />Journal</TabsTrigger>
                 <TabsTrigger value="practice" className="shrink-0 gap-2"><Target className="h-4 w-4" />Practice</TabsTrigger>
-                <TabsTrigger value="bag" className="shrink-0 gap-2"><BriefcaseBusiness className="h-4 w-4" />Bag</TabsTrigger>
-                <TabsTrigger value="partners" className="shrink-0 gap-2"><Users className="h-4 w-4" />Partners</TabsTrigger>
-                <TabsTrigger value="more" className="shrink-0 gap-2"><MoreHorizontal className="h-4 w-4" />More</TabsTrigger>
+                <TabsTrigger value="settings" className="shrink-0 gap-2"><SettingsIcon className="h-4 w-4" />Settings</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -106,29 +121,32 @@ const Index = () => {
       </header>
       <main className="container py-6">
         <Suspense fallback={<TabLoader />}>
-          {activeTab === 'today' && <AnalysisOverview onOpenPractice={() => navigate('/practice')} onOpenLatestRound={() => navigate('/review/rounds')} />}
-          {activeTab === 'play' && <ClubSelectorTab />}
+          {activeTab === 'play' && <>
+            <SectionTabs value={playTab} values={playTabs} labels={{ 'on-course': 'On Course', bag: 'Bag' }} onChange={value => navigate(path('play', value))} />
+            {playTab === 'on-course' && <ClubSelectorTab />}
+            {playTab === 'bag' && <>
+              <SectionTabs value={bagTab} values={bagTabs} labels={{ gapping: 'Gapping', clubs: 'Clubs & Distances', profiles: 'Shot Profiles', 'short-game': 'Short Game Matrix' }} onChange={value => navigate(path('play', 'bag', value))} />
+              {bagTab === 'gapping' && <ClubGappingTab />}
+              {bagTab === 'clubs' && <AllClubsTab />}
+              {bagTab === 'profiles' && <ShotProfilesCard />}
+              {bagTab === 'short-game' && <ClubSelectorTab defaultView="wedge-matrix" />}
+            </>}
+          </>}
           {activeTab === 'practice' && <PracticeTab />}
           {activeTab === 'review' && <>
-            <SectionTabs value={reviewTab} values={reviewTabs} labels={{ rounds: 'Round Review', advanced: 'Advanced Reports' }} onChange={value => navigate(path('review', value))} />
-            {reviewTab === 'rounds' && <DashboardTab showOverview={false} initialRoundDate={selectedRoundDate} onOpenUpload={() => navigate('/more/upload')} />}
+            <SectionTabs value={reviewTab} values={reviewTabs} labels={{ today: 'Today', rounds: 'Round Review', journal: 'Journal', advanced: 'Advanced Reports' }} onChange={value => navigate(path('review', value))} />
+            {reviewTab === 'today' && <AnalysisOverview onOpenPractice={() => navigate('/practice')} onOpenLatestRound={() => navigate('/review/rounds')} />}
+            {reviewTab === 'rounds' && <DashboardTab showOverview={false} initialRoundDate={selectedRoundDate} onOpenUpload={() => navigate('/settings/upload')} />}
+            {reviewTab === 'journal' && <JournalTab />}
             {reviewTab === 'advanced' && <div className="space-y-6"><ReportsTab /><DashboardTab initialView="overview" showLatestRound={false} /></div>}
           </>}
-          {activeTab === 'journal' && <JournalTab />}
-          {activeTab === 'bag' && <>
-            <SectionTabs value={bagTab} values={bagTabs} labels={{ gapping: 'Gapping', clubs: 'Clubs & Distances', profiles: 'Shot Profiles', 'short-game': 'Short Game Matrix' }} onChange={value => navigate(path('bag', value))} />
-            {bagTab === 'gapping' && <ClubGappingTab />}
-            {bagTab === 'clubs' && <AllClubsTab />}
-            {bagTab === 'profiles' && <ShotProfilesCard />}
-            {bagTab === 'short-game' && <ClubSelectorTab defaultView="wedge-matrix" />}
-          </>}
-          {activeTab === 'partners' && <PlayingPartnersTab />}
-          {activeTab === 'more' && <>
-            <SectionTabs value={moreTab} values={moreTabs} labels={{ upload: 'Upload', library: 'Drill Library', tools: 'Tools & Definitions', settings: 'Settings' }} onChange={value => navigate(path('more', value))} />
-            {moreTab === 'upload' && <UploadTab />}
-            {moreTab === 'library' && <LibraryTab />}
-            {moreTab === 'tools' && <MoreToolsTab />}
-            {moreTab === 'settings' && <SettingsTab />}
+          {activeTab === 'settings' && <>
+            <SectionTabs value={settingsTab} values={settingsTabs} labels={{ partners: 'Partners', upload: 'Upload', library: 'Drill Library', tools: 'Tools & Definitions', preferences: 'Preferences' }} onChange={value => navigate(path('settings', value))} />
+            {settingsTab === 'partners' && <PlayingPartnersTab />}
+            {settingsTab === 'upload' && <UploadTab />}
+            {settingsTab === 'library' && <LibraryTab />}
+            {settingsTab === 'tools' && <MoreToolsTab />}
+            {settingsTab === 'preferences' && <SettingsTab />}
           </>}
         </Suspense>
       </main>
