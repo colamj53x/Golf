@@ -11,8 +11,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4 text-base font-medium text-foreground">Loading Golf Hub...</p>
+          <p className="mt-1 text-sm text-muted-foreground">Checking your session against the new database.</p>
+        </div>
       </div>
     );
   }
