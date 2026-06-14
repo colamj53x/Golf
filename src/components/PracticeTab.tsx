@@ -5,20 +5,16 @@ import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
 import { PracticePlanTab } from '@/components/PracticePlanTab';
 import { PuttingHome, PuttingSection } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
-import { DriverPracticeView } from '@/components/DriverPracticeView';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PuttingPracticeSetId } from '@/lib/putting/drills';
-import { Dumbbell } from 'lucide-react';
 
 type PuttingView = 'home' | 'indoor';
-type FullSwingView = 'home' | 'driver';
 
 const secondaryNavItems = [
   { value: 'summary', label: 'Next Session' },
   { value: 'logs', label: 'Logs' },
   { value: 'plan', label: 'Plan' },
-  { value: 'types', label: 'Shot Types' },
 ];
 
 const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
@@ -28,19 +24,8 @@ const puttingNavItems: Array<{ value: PuttingSection; label: string }> = [
   { value: 'drills', label: 'Drill Library' },
 ];
 
-const fullSwingTiles = [
-  {
-    title: 'Club',
-    description: 'Driver is the first club ready for your drill instructions.',
-    icon: Dumbbell,
-    detail: 'Driver',
-    view: 'driver' as FullSwingView,
-  },
-];
-
 export function PracticeTab() {
   const [practiceMode, setPracticeMode] = useState<'full-swing' | 'putting'>('full-swing');
-  const [fullSwingView, setFullSwingView] = useState<FullSwingView>('home');
   const [fullSwingTab, setFullSwingTab] = useState<string>('summary');
   const [puttingSection, setPuttingSection] = useState<PuttingSection>('overview');
   const [puttingView, setPuttingView] = useState<PuttingView>('home');
@@ -112,51 +97,10 @@ export function PracticeTab() {
         {fullSwingTab === 'summary' && (
           <PracticeSummaryTab
             onOpenLog={openLog}
-            onAddClubShot={() => setFullSwingTab('types')}
           />
         )}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
-        {fullSwingTab === 'types' && (
-          <>
-            {fullSwingView === 'home' && (
-              <div className="grid gap-4 md:grid-cols-3">
-                {fullSwingTiles.map((tile) => {
-                  const Icon = tile.icon;
-                  return (
-                    <Card
-                      key={tile.title}
-                      className={`h-full transition-colors hover:border-primary/40 ${
-                        tile.view ? 'cursor-pointer' : ''
-                      }`}
-                      onClick={() => {
-                        if (tile.view) setFullSwingView(tile.view);
-                      }}
-                    >
-                      <CardHeader className="space-y-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="space-y-1">
-                          <CardTitle className="text-lg">{tile.title}</CardTitle>
-                          {tile.detail && (
-                            <p className="text-sm font-medium text-primary">{tile.detail}</p>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-muted-foreground">{tile.description}</p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-            {fullSwingView === 'driver' && (
-              <DriverPracticeView onBack={() => setFullSwingView('home')} />
-            )}
-          </>
-        )}
       </TabsContent>
 
       <TabsContent value="putting" className="mt-0">

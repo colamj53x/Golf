@@ -210,10 +210,8 @@ function clubOrderCompare(a: SummaryRow, b: SummaryRow): number {
 
 export function PracticeSummaryTab({
   onOpenLog,
-  onAddClubShot,
 }: {
   onOpenLog?: (configKey: string) => void;
-  onAddClubShot?: () => void;
 } = {}) {
   const { shots, gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
@@ -538,11 +536,6 @@ export function PracticeSummaryTab({
       <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
         <CardTitle>Practice Detail</CardTitle>
-        {onAddClubShot && (
-          <Button variant="outline" size="sm" onClick={onAddClubShot}>
-            Add Club/Shot
-          </Button>
-        )}
       </CardHeader>
       <CardContent>
         {sortedRows.length === 0 ? (
