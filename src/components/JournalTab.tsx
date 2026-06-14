@@ -444,7 +444,7 @@ export function JournalTab() {
       )}
 
       {view === 'entry' && (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="space-y-6">
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -503,75 +503,133 @@ export function JournalTab() {
             <Card className="border-primary/25 shadow-sm">
               <CardHeader>
                 <CardTitle>Round Truth Snapshot</CardTitle>
-                <CardDescription>The headline version of the round: what happened, what it cost, and what comes next.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="one-line-story">One-line round story</Label>
-                  <Textarea
-                    id="one-line-story"
-                    value={draft.oneLineStory}
-                    onChange={(event) => updateDraft({ oneLineStory: event.target.value })}
-                    className="min-h-[88px]"
-                    placeholder="What was this round really about?"
-                  />
-                  <p className="text-xs leading-5 text-muted-foreground">What was this round really about?</p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Round feel</Label>
-                    <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
-                      <Select value={ratingValue(draft.overallFeelRating)} onValueChange={(value) => updateDraft({ overallFeelRating: value === 'none' ? null : Number(value) })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="none">No rating</SelectItem>{ratingOptions()}</SelectContent>
-                      </Select>
-                      <Input
-                        value={draft.feelReason}
-                        onChange={(event) => updateDraft({ feelReason: event.target.value })}
-                        placeholder="3 / 5 - unsettled early, better once tempo improved."
-                      />
-                    </div>
-                  </div>
-                  <PromptInput
-                    label="Best thing today"
-                    value={draft.bestThingToday}
-                    onChange={(bestThingToday) => updateDraft({ bestThingToday })}
-                    helper="Capture what genuinely worked."
-                  />
-                  <PromptInput
-                    label="Biggest cost today"
-                    value={draft.biggestFrustration}
-                    onChange={(biggestFrustration) => updateDraft({ biggestFrustration })}
-                    helper="Name the thing that most hurt the round."
-                  />
-                  <PromptInput
-                    label="Main lesson"
-                    value={draft.mainLearning}
-                    onChange={(mainLearning) => updateDraft({ mainLearning })}
-                    helper="One clear learning, not five scattered thoughts."
-                  />
-                  <div className="md:col-span-2">
-                    <PromptInput
-                      label="Next-round commitment"
-                      value={draft.focusForNextRound}
-                      onChange={(focusForNextRound) => updateDraft({ focusForNextRound })}
-                      helper="Make this behaviour-based, not score-based."
-                      placeholder="Before every full shot, pick a clear target and rehearse tempo once."
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Overall Reflection</CardTitle>
-                <CardDescription>The longer-form version of the truth snapshot.</CardDescription>
+                <CardDescription>The main tile for the round: what happened, what it cost, and what the linked numbers say.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <Label htmlFor="overall-comments">Overall comments</Label>
-                  <Textarea id="overall-comments" value={draft.overallComments} onChange={(event) => updateDraft({ overallComments: event.target.value })} className="min-h-[180px]" placeholder="What did I notice, feel, learn, and want to work on from this round?" />
+                <div className={selectedRoundReview ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start' : 'space-y-5'}>
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="one-line-story">One-line round story</Label>
+                      <Textarea
+                        id="one-line-story"
+                        value={draft.oneLineStory}
+                        onChange={(event) => updateDraft({ oneLineStory: event.target.value })}
+                        className="min-h-[88px]"
+                        placeholder="What was this round really about?"
+                      />
+                      <p className="text-xs leading-5 text-muted-foreground">What was this round really about?</p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Round feel</Label>
+                        <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
+                          <Select value={ratingValue(draft.overallFeelRating)} onValueChange={(value) => updateDraft({ overallFeelRating: value === 'none' ? null : Number(value) })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="none">No rating</SelectItem>{ratingOptions()}</SelectContent>
+                          </Select>
+                          <Input
+                            value={draft.feelReason}
+                            onChange={(event) => updateDraft({ feelReason: event.target.value })}
+                            placeholder="3 / 5 - unsettled early, better once tempo improved."
+                          />
+                        </div>
+                      </div>
+                      <PromptInput
+                        label="Best thing today"
+                        value={draft.bestThingToday}
+                        onChange={(bestThingToday) => updateDraft({ bestThingToday })}
+                        helper="Capture what genuinely worked."
+                      />
+                      <PromptInput
+                        label="Biggest cost today"
+                        value={draft.biggestFrustration}
+                        onChange={(biggestFrustration) => updateDraft({ biggestFrustration })}
+                        helper="Name the thing that most hurt the round."
+                      />
+                      <PromptInput
+                        label="Main lesson"
+                        value={draft.mainLearning}
+                        onChange={(mainLearning) => updateDraft({ mainLearning })}
+                        helper="One clear learning, not five scattered thoughts."
+                      />
+                      <div className="md:col-span-2">
+                        <PromptInput
+                          label="Next-round commitment"
+                          value={draft.focusForNextRound}
+                          onChange={(focusForNextRound) => updateDraft({ focusForNextRound })}
+                          helper="Make this behaviour-based, not score-based."
+                          placeholder="Before every full shot, pick a clear target and rehearse tempo once."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedRoundReview && (
+                    <div className="space-y-5 rounded-lg border bg-muted/10 p-4">
+                      <div>
+                        <h3 className="text-base font-semibold">Round Evidence</h3>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">Stats and evidence attached to this reflection.</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                        <MetricEvidenceCard
+                          label="Shot quality"
+                          value={formatMetric(selectedRoundReview.round.shotQualityIndex)}
+                          context={`Season avg ${formatMetric(selectedRoundReview.season.shotQualityIndex)}`}
+                          interpretation={evidenceLabel('shotQuality', selectedRoundReview.round.shotQualityIndex)}
+                        />
+                        <MetricEvidenceCard
+                          label="Target success"
+                          value={formatMetric(selectedRoundReview.round.targetSuccessPct, true)}
+                          context={`Last 5 avg ${formatMetric(selectedRoundReview.last5.targetSuccessPct, true)}`}
+                          interpretation={evidenceLabel('targetSuccess', selectedRoundReview.round.targetSuccessPct)}
+                        />
+                        <MetricEvidenceCard
+                          label="Safe shot rate"
+                          value={formatMetric(selectedRoundReview.round.safeShotRate, true)}
+                          context={`Previous 5 avg ${formatMetric(selectedRoundReview.previous5.safeShotRate, true)}`}
+                          interpretation={evidenceLabel('safeShotRate', selectedRoundReview.round.safeShotRate)}
+                        />
+                        <MetricEvidenceCard
+                          label="Scoring zone"
+                          value={formatMetric(selectedRoundReview.round.scoringZoneSuccessPct, true)}
+                          context={`Season avg ${formatMetric(selectedRoundReview.season.scoringZoneSuccessPct, true)}`}
+                          interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
+                        />
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <h3 className="text-sm font-semibold">What do the numbers suggest?</h3>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{roundEvidenceInterpretation(selectedRoundReview)}</p>
+                      </div>
+                      <div className="space-y-4 rounded-lg border bg-background p-4">
+                        <div className="space-y-2">
+                          <Label>Does this match how the round felt?</Label>
+                          <Select value={draft.evidenceMatch ?? 'none'} onValueChange={(value) => updateDraft({ evidenceMatch: value === 'none' ? null : value as JournalEntryDraft['evidenceMatch'] })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Select an answer</SelectItem>
+                              <SelectItem value="yes">Yes</SelectItem>
+                              <SelectItem value="partly">Partly</SelectItem>
+                              <SelectItem value="no">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="evidence-match-reason">Why?</Label>
+                          <Textarea
+                            id="evidence-match-reason"
+                            value={draft.evidenceMatchReason}
+                            onChange={(event) => updateDraft({ evidenceMatchReason: event.target.value })}
+                            className="min-h-[120px]"
+                            placeholder="Where did the data confirm your memory, and where did it challenge it?"
+                          />
+                        </div>
+                      </div>
+                      <Button variant="outline" className="w-full gap-2" onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}>
+                        <ExternalLink className="h-4 w-4" />
+                        Open Round Review
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -614,81 +672,6 @@ export function JournalTab() {
                   </Button>
                   <Button variant="outline" onClick={startNewEntry}>Start New</Button>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6 xl:sticky xl:top-6">
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Round Evidence</CardTitle>
-                <CardDescription>Compare what the round felt like with what the linked data suggests.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {selectedRoundReview ? (
-                  <>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                      <MetricEvidenceCard
-                        label="Shot quality"
-                        value={formatMetric(selectedRoundReview.round.shotQualityIndex)}
-                        context={`Season avg ${formatMetric(selectedRoundReview.season.shotQualityIndex)}`}
-                        interpretation={evidenceLabel('shotQuality', selectedRoundReview.round.shotQualityIndex)}
-                      />
-                      <MetricEvidenceCard
-                        label="Target success"
-                        value={formatMetric(selectedRoundReview.round.targetSuccessPct, true)}
-                        context={`Last 5 avg ${formatMetric(selectedRoundReview.last5.targetSuccessPct, true)}`}
-                        interpretation={evidenceLabel('targetSuccess', selectedRoundReview.round.targetSuccessPct)}
-                      />
-                      <MetricEvidenceCard
-                        label="Safe shot rate"
-                        value={formatMetric(selectedRoundReview.round.safeShotRate, true)}
-                        context={`Previous 5 avg ${formatMetric(selectedRoundReview.previous5.safeShotRate, true)}`}
-                        interpretation={evidenceLabel('safeShotRate', selectedRoundReview.round.safeShotRate)}
-                      />
-                      <MetricEvidenceCard
-                        label="Scoring zone"
-                        value={formatMetric(selectedRoundReview.round.scoringZoneSuccessPct, true)}
-                        context={`Season avg ${formatMetric(selectedRoundReview.season.scoringZoneSuccessPct, true)}`}
-                        interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
-                      />
-                    </div>
-                    <div className="rounded-lg border bg-muted/20 p-4">
-                      <h3 className="text-sm font-semibold">What do the numbers suggest?</h3>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{roundEvidenceInterpretation(selectedRoundReview)}</p>
-                    </div>
-                    <div className="space-y-4 rounded-lg border p-4">
-                      <div className="space-y-2">
-                        <Label>Does this match how the round felt?</Label>
-                        <Select value={draft.evidenceMatch ?? 'none'} onValueChange={(value) => updateDraft({ evidenceMatch: value === 'none' ? null : value as JournalEntryDraft['evidenceMatch'] })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Select an answer</SelectItem>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="partly">Partly</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="evidence-match-reason">Why?</Label>
-                        <Textarea
-                          id="evidence-match-reason"
-                          value={draft.evidenceMatchReason}
-                          onChange={(event) => updateDraft({ evidenceMatchReason: event.target.value })}
-                          className="min-h-[120px]"
-                          placeholder="Where did the data confirm your memory, and where did it challenge it?"
-                        />
-                      </div>
-                    </div>
-                    <Button variant="outline" className="w-full gap-2" onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}>
-                      <ExternalLink className="h-4 w-4" />
-                      Open Round Review
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-sm leading-6 text-muted-foreground">Select an uploaded round to show review cards beside the journal entry.</p>
-                )}
               </CardContent>
             </Card>
           </div>
