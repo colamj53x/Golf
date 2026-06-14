@@ -38,9 +38,11 @@ import {
   calculateTrend,
   computeSmashFactorDisplayFromInputs,
   computeSmashFactorMetricFromMetrics,
+  formatDirectionTargetValue,
   getMetricTolerancePct,
   getMetricValues,
   getSessionMetricValue,
+  parseDirectionalNumber,
   parseInputValue,
   type TrendDirection,
 } from '@/lib/practiceDashboardDomain';
@@ -58,6 +60,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   dispersion: 'Dispersion',
   swing: 'Swing',
   tempo: 'Tempo',
+};
+
+const formatTargetEditValue = (metricId: string, value: number | null): string => {
+  if (value === null) return '';
+  return metricId === 'launch_direction' ? formatDirectionTargetValue(value) : String(value);
+};
+
+const formatTargetDisplay = (metricId: string, min: number | null, max: number | null): string => {
+  const formatValue = (value: number) => metricId === 'launch_direction'
+    ? formatDirectionTargetValue(value)
+    : String(value);
+
+  if (min !== null && max !== null) return `${formatValue(min)}–${formatValue(max)}`;
+  if (min !== null) return `≥${formatValue(min)}`;
+  if (max !== null) return `≤${formatValue(max)}`;
+  return '–';
 };
 
 function getStatusColor(status: MetricStatus): string {
@@ -367,8 +385,8 @@ export function PracticeDashboardTab() {
     const targets: Record<string, { min: string; max: string }> = {};
     config.metrics.forEach(m => {
       targets[m.id] = {
-        min: m.targetMin !== null ? String(m.targetMin) : '',
-        max: m.targetMax !== null ? String(m.targetMax) : '',
+        min: formatTargetEditValue(m.id, m.targetMin),
+        max: formatTargetEditValue(m.id, m.targetMax),
       };
     });
     setEditTargets(targets);
@@ -413,17 +431,16 @@ export function PracticeDashboardTab() {
       }
       
       const target = editTargets[m.id];
-      const targetMin = target?.min ? parseFloat(target.min) : null;
-      const targetMax = target?.max ? parseFloat(target.max) : null;
+      const parsedTargetMin = target?.min ? parseDirectionalNumber(target.min) : null;
+      const parsedTargetMax = target?.max ? parseDirectionalNumber(target.max) : null;
+      const targetMin = parsedTargetMin !== null && parsedTargetMax !== null
+        ? Math.min(parsedTargetMin, parsedTargetMax)
+        : parsedTargetMin;
+      const targetMax = parsedTargetMin !== null && parsedTargetMax !== null
+        ? Math.max(parsedTargetMin, parsedTargetMax)
+        : parsedTargetMax;
       
-      let targetDisplay = '–';
-      if (targetMin !== null && targetMax !== null) {
-        targetDisplay = `${targetMin}–${targetMax}`;
-      } else if (targetMin !== null) {
-        targetDisplay = `≥${targetMin}`;
-      } else if (targetMax !== null) {
-        targetDisplay = `≤${targetMax}`;
-      }
+      const targetDisplay = formatTargetDisplay(m.id, targetMin, targetMax);
       
       return {
         ...m,

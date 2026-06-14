@@ -97,9 +97,36 @@ export function calculateStatus(
     }
   }
 
-  // Calculate value status based on target alignment
+  const lowerTarget = targetMin !== null && targetMax !== null ? Math.min(targetMin, targetMax) : targetMin;
+  const upperTarget = targetMin !== null && targetMax !== null ? Math.max(targetMin, targetMax) : targetMax;
   let valueStatus: MetricStatus = 'green';
 
+  // Closed target bands mean "inside this window", including signed direction windows like 4L-4R.
+  if (lowerTarget !== null && upperTarget !== null) {
+    const measuredMin = Math.min(effectiveMin ?? effectiveMax ?? 0, effectiveMax ?? effectiveMin ?? 0);
+    const measuredMax = Math.max(effectiveMin ?? effectiveMax ?? 0, effectiveMax ?? effectiveMin ?? 0);
+    const inBand = measuredMin >= lowerTarget && measuredMax <= upperTarget;
+
+    if (inBand) {
+      valueStatus = 'green';
+    } else {
+      const underBy = measuredMin < lowerTarget ? lowerTarget - measuredMin : 0;
+      const overBy = measuredMax > upperTarget ? measuredMax - upperTarget : 0;
+      const deviation = Math.max(underBy, overBy);
+      const reference = Math.max(Math.abs(lowerTarget), Math.abs(upperTarget), 1);
+      const deviationPct = deviation / reference;
+
+      if (deviationPct >= (tolerancePct / 100) * 2) valueStatus = 'red';
+      else if (deviationPct >= tolerancePct / 100) valueStatus = 'amber';
+      else valueStatus = 'green';
+    }
+
+    if (consistencyPenalty === 'red' || valueStatus === 'red') return 'red';
+    if (consistencyPenalty === 'amber' || valueStatus === 'amber') return 'amber';
+    return 'green';
+  }
+
+  // Calculate value status based on target alignment
   // For higherIsBetter: above max = excellent (green), below min = bad
   if (higherIsBetter) {
     if (targetMax !== null && actualValue > targetMax) {
@@ -162,21 +189,45 @@ export const getMetricValues = (metric: PracticeMetricValue | undefined): { min:
   };
 };
 
-// Parse user input like "123", "120–125", "120-125" into numbers
+export const parseDirectionalNumber = (value: string): number | null => {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+  const normalized = raw
+    .normalize('NFKC')
+    .replace(/[\u2212\u2013\u2014\u2012\u2010\u2011]/g, '-')
+    .replace(/°/g, '')
+    .trim();
+  const match = normalized.match(/^(-?\d+(?:\.\d+)?)\s*([LR])?$/i);
+  if (!match) return null;
+  const valueNumber = parseFloat(match[1]);
+  if (Number.isNaN(valueNumber)) return null;
+  const direction = match[2]?.toUpperCase();
+  if (direction === 'L') return -Math.abs(valueNumber);
+  if (direction === 'R') return Math.abs(valueNumber);
+  return valueNumber;
+};
+
+export const formatDirectionTargetValue = (value: number): string => {
+  if (value < 0) return `${Math.abs(value)}L`;
+  if (value > 0) return `${value}R`;
+  return '0';
+};
+
+// Parse user input like "123", "120–125", "120-125", "4L", or "4L-4R" into numbers.
 export const parseInputValue = (valueStr: string): { min: number | null; max: number | null } => {
   const raw = (valueStr || '').trim();
   if (!raw) return { min: null, max: null };
 
-  // Support either en-dash or hyphen
-  if (raw.includes('–') || raw.includes('-')) {
-    const parts = raw.split(/[–-]/).map(s => parseFloat(s.trim()));
-    const min = isNaN(parts[0]) ? null : parts[0];
-    const max = isNaN(parts[1]) ? null : parts[1];
-    return { min, max };
+  const normalized = raw.normalize('NFKC').replace(/[\u2013\u2014\u2012\u2010\u2011]/g, '-');
+  const rangeMatch = normalized.match(/^\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*-\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*$/i);
+  if (rangeMatch) {
+    const parts = [rangeMatch[1], rangeMatch[2]].map(parseDirectionalNumber);
+    if (parts[0] === null || parts[1] === null) return { min: null, max: null };
+    return { min: Math.min(parts[0], parts[1]), max: Math.max(parts[0], parts[1]) };
   }
 
-  const val = parseFloat(raw);
-  if (isNaN(val)) return { min: null, max: null };
+  const val = parseDirectionalNumber(raw);
+  if (val === null) return { min: null, max: null };
   return { min: val, max: val };
 };
 

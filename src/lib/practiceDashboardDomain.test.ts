@@ -3,6 +3,8 @@ import {
   calculateStatus,
   calculateTrend,
   computeSmashFactorMetricFromMetrics,
+  formatDirectionTargetValue,
+  parseDirectionalNumber,
   parseInputValue,
 } from '@/lib/practiceDashboardDomain';
 import type { PracticeMetricValue } from '@/types/practice';
@@ -21,6 +23,15 @@ describe('practice dashboard domain', () => {
     expect(parseInputValue('145')).toEqual({ min: 145, max: 145 });
     expect(parseInputValue('140-150')).toEqual({ min: 140, max: 150 });
     expect(parseInputValue('140–150')).toEqual({ min: 140, max: 150 });
+  });
+
+  it('parses left and right direction values as signed numbers', () => {
+    expect(parseDirectionalNumber('4L')).toBe(-4);
+    expect(parseDirectionalNumber('4R')).toBe(4);
+    expect(parseInputValue('4L-4R')).toEqual({ min: -4, max: 4 });
+    expect(parseInputValue('2L–6L')).toEqual({ min: -6, max: -2 });
+    expect(formatDirectionTargetValue(-4)).toBe('4L');
+    expect(formatDirectionTargetValue(4)).toBe('4R');
   });
 
   it('computes smash factor from ball speed and swing speed', () => {
@@ -42,5 +53,11 @@ describe('practice dashboard domain', () => {
 
   it('marks a materially wide range as inconsistent', () => {
     expect(calculateStatus(metric('carry', 130, 160), 140, 150, true)).toBe('red');
+  });
+
+  it('treats target ranges as closed windows', () => {
+    expect(calculateStatus(metric('launch_direction', -3), -4, 4, false)).toBe('green');
+    expect(calculateStatus(metric('launch_direction', -6), -4, 4, false)).toBe('red');
+    expect(calculateStatus(metric('carry', 151), 140, 150, true)).toBe('green');
   });
 });
