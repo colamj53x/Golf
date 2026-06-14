@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { PracticeMetricValue, MetricStatus, PracticeSession, ClubPracticeConfig } from '@/types/practice';
 import { PRACTICE_CLUBS, getConfigDisplayName } from '@/types/practiceClubs';
-import { useEnabledCombos, getEnabledShotTypesForClub, getEnabledPowersForClub } from '@/lib/practiceEnabledCombos';
+import { useShotProfiles } from '@/lib/shotProfiles';
+import { getEnabledShotFamilyOptions, getEnabledSwingEffortOptions } from '@/lib/shotOptions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,7 +94,7 @@ export function PracticeDashboardTab() {
     practiceBallFlightTolerancePct,
     practiceOtherTolerancePct,
   } = useGolfData();
-  useEnabledCombos(); // re-render when enabled combos change
+  const shotProfiles = useShotProfiles();
   const { 
     practiceConfigs, 
     getSessionsForClub, 
@@ -108,6 +109,14 @@ export function PracticeDashboardTab() {
     setSelectedPower,
     currentConfigKey,
   } = usePracticeData();
+  const shotTypeOptions = useMemo(
+    () => getEnabledShotFamilyOptions(shotProfiles, selectedClub, 'practice'),
+    [selectedClub, shotProfiles],
+  );
+  const powerOptions = useMemo(
+    () => getEnabledSwingEffortOptions(shotProfiles, selectedClub, selectedShotType, 'practice'),
+    [selectedClub, selectedShotType, shotProfiles],
+  );
   
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false);
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
@@ -130,6 +139,16 @@ export function PracticeDashboardTab() {
   const [calculatedData, setCalculatedData] = useState<CalculatedMetrics | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!shotTypeOptions.length || shotTypeOptions.some((option) => option.value === selectedShotType)) return;
+    setSelectedShotType(shotTypeOptions[0].value);
+  }, [selectedShotType, setSelectedShotType, shotTypeOptions]);
+
+  useEffect(() => {
+    if (!powerOptions.length || powerOptions.some((option) => option.value === selectedPower)) return;
+    setSelectedPower(powerOptions[0].value);
+  }, [powerOptions, selectedPower, setSelectedPower]);
   
   // Store parsed shots for saving after session creation
   const [parsedShots, setParsedShots] = useState<PracticeShot[]>([]);
@@ -596,7 +615,7 @@ export function PracticeDashboardTab() {
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getEnabledShotTypesForClub(selectedClub).map(type => (
+                  {shotTypeOptions.map(type => (
                     <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -609,7 +628,7 @@ export function PracticeDashboardTab() {
                   <SelectValue placeholder="Select power" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getEnabledPowersForClub(selectedClub, selectedShotType).map(power => (
+                  {powerOptions.map(power => (
                     <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
                   ))}
                 </SelectContent>

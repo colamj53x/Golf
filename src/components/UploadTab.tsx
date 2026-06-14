@@ -11,7 +11,22 @@ import {
   clearRoundReflectionLocalDraft,
   saveRoundReflectionLocalDraft,
 } from '@/lib/roundReflectionDrafts';
-import { CLUB_CODE_MAP, normalizeClubCode, Shot } from '@/types/golf';
+import { normalizeClubCode, Shot } from '@/types/golf';
+import { useShotProfiles } from '@/lib/shotProfiles';
+import {
+  CLUB_OPTIONS,
+  END_LIE_OPTIONS,
+  START_LIE_OPTIONS,
+  TARGET_INTENT_OPTIONS,
+  ensureOption,
+  getEnabledShotFamilyOptions,
+  getEnabledSwingEffortOptions,
+  getEnabledTargetIntentOptions,
+  getPredictedShotLabel,
+  getShotFamilyLabel,
+  getSwingEffortLabel,
+  roundClubToPracticeClubId,
+} from '@/lib/shotOptions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,89 +99,12 @@ type UploadShotInsert = {
 
 const PENDING_UPLOAD_STORAGE_KEY = 'golf-pending-upload-review-draft';
 
-const CLUB_OPTIONS = [
-  { value: 'Dr', label: 'Driver' },
-  { value: '5W', label: '5 Wood' },
-  { value: '4H', label: '4 Hybrid' },
-  { value: '5H', label: '5 Hybrid' },
-  { value: '6I', label: '6 Iron' },
-  { value: '7I', label: '7 Iron' },
-  { value: '8I', label: '8 Iron' },
-  { value: '9I', label: '9 Iron' },
-  { value: 'PW', label: 'Pitching Wedge' },
-  { value: 'GW', label: 'Gap Wedge' },
-  { value: 'SW', label: 'Sand Wedge' },
-  { value: 'LW', label: 'Lob Wedge' },
-] as const;
-
-const TARGET_INTENT_OPTIONS = [
-  { value: 'fairway', label: 'Fairway' },
-  { value: 'green', label: 'Green' },
-] as const;
-
-const START_LIE_OPTIONS = [
-  { value: 'Tee', label: 'Tee' },
-  { value: 'Fairway', label: 'Fairway' },
-  { value: 'Rough', label: 'Rough' },
-  { value: 'Recovery', label: 'Recovery' },
-  { value: 'Sand', label: 'Sand' },
-  { value: 'Green', label: 'Green' },
-] as const;
-
-const END_LIE_OPTIONS = [
-  { value: 'Fairway', label: 'Fairway' },
-  { value: 'Rough', label: 'Rough' },
-  { value: 'Recovery', label: 'Recovery' },
-  { value: 'Sand', label: 'Sand' },
-  { value: 'Green', label: 'Green' },
-  { value: 'Fringe', label: 'Fringe' },
-  { value: 'Hole', label: 'Hole' },
-  { value: 'Penalty', label: 'Penalty' },
-  { value: 'Water', label: 'Water' },
-  { value: 'OB', label: 'OB' },
-] as const;
-
-const SHOT_FAMILY_OPTIONS = [
-  { value: 'full', label: 'Full' },
-  { value: 'punch', label: 'Punch' },
-  { value: 'pitch', label: 'Pitch' },
-  { value: 'chip', label: 'Chip' },
-  { value: 'bump', label: 'Bump and Run' },
-] as const;
-
-const SWING_EFFORT_OPTIONS = [
-  { value: 'full', label: 'Full' },
-  { value: '9pm', label: 'Half' },
-] as const;
-
 function normalizeClub(club: string): string {
   return normalizeClubCode(club);
 }
 
 function getClubId(club: string): string {
-  return (CLUB_CODE_MAP[club] ?? CLUB_CODE_MAP[club.toUpperCase()] ?? club).toLowerCase();
-}
-
-function availableShotFamiliesForClub(club: string) {
-  const clubId = getClubId(club);
-  if (clubId === 'dr' || clubId === '5w' || clubId === '4h' || clubId === '5h') {
-    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full');
-  }
-  if (clubId === '6i' || clubId === '7i') {
-    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'punch');
-  }
-  if (clubId === '8i' || clubId === '9i') {
-    return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'bump');
-  }
-  return SHOT_FAMILY_OPTIONS.filter((option) => option.value === 'full' || option.value === 'pitch' || option.value === 'chip');
-}
-
-function getShotFamilyLabel(value: string): string {
-  return SHOT_FAMILY_OPTIONS.find((option) => option.value === value)?.label ?? value;
-}
-
-function getSwingEffortLabel(value: string): string {
-  return SWING_EFFORT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  return roundClubToPracticeClubId(club);
 }
 
 function inferShotFamily(shot: Shot): string {
@@ -207,7 +145,7 @@ function inferTargetIntent(shot: Shot, shotFamily: string): string {
 }
 
 function getPredictedLabel(shotFamily: string, swingEffort: string): string {
-  return `${getShotFamilyLabel(shotFamily)} · ${getSwingEffortLabel(swingEffort)}`;
+  return getPredictedShotLabel(shotFamily, swingEffort);
 }
 
 function isMissingReviewedUploadSchemaError(error: unknown): boolean {
@@ -259,6 +197,7 @@ function buildReviewRow(shot: Shot): UploadReviewRow {
 
 export function UploadTab() {
   const { user } = useAuth();
+  const shotProfiles = useShotProfiles();
   const {
     refreshShots,
     refreshRoundReflections,
@@ -454,6 +393,20 @@ export function UploadTab() {
         rows: current.rows.map((row) => {
           if (row.id !== rowId) return row;
           const next = { ...row, ...updates };
+          if (updates.club || updates.shotFamily || updates.swingEffort) {
+            const families = getEnabledShotFamilyOptions(shotProfiles, next.club, 'onCourse');
+            if (families.length && !families.some((option) => option.value === next.shotFamily)) {
+              next.shotFamily = families[0].value;
+            }
+            const efforts = getEnabledSwingEffortOptions(shotProfiles, next.club, next.shotFamily, 'onCourse');
+            if (efforts.length && !efforts.some((option) => option.value === next.swingEffort)) {
+              next.swingEffort = efforts[0].value;
+            }
+            const targets = getEnabledTargetIntentOptions(shotProfiles, next.club, next.shotFamily, next.swingEffort, 'onCourse');
+            if (targets.length && !targets.some((option) => option.value === next.targetIntent)) {
+              next.targetIntent = targets[0].value;
+            }
+          }
           return {
             ...next,
             predictedLabel: getPredictedLabel(next.shotFamily, next.swingEffort),
@@ -887,7 +840,21 @@ export function UploadTab() {
                 </thead>
                 <tbody>
                   {pendingUpload.rows.map((row) => {
-                    const availableFamilies = availableShotFamiliesForClub(row.club);
+                    const availableFamilies = ensureOption(
+                      getEnabledShotFamilyOptions(shotProfiles, row.club, 'onCourse'),
+                      row.shotFamily,
+                      getShotFamilyLabel(row.shotFamily),
+                    );
+                    const availableEfforts = ensureOption(
+                      getEnabledSwingEffortOptions(shotProfiles, row.club, row.shotFamily, 'onCourse'),
+                      row.swingEffort,
+                      getSwingEffortLabel(row.swingEffort),
+                    );
+                    const availableTargets = ensureOption(
+                      getEnabledTargetIntentOptions(shotProfiles, row.club, row.shotFamily, row.swingEffort, 'onCourse'),
+                      row.targetIntent,
+                      row.targetIntent,
+                    );
                     return (
                       <tr key={row.id} className={`border-t align-top ${row.accepted ? 'bg-primary/5' : ''}`}>
                         <td className="px-3 py-3">
@@ -920,7 +887,7 @@ export function UploadTab() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {TARGET_INTENT_OPTIONS.map((option) => (
+                              {availableTargets.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
                                   {option.label}
                                 </SelectItem>
@@ -976,7 +943,7 @@ export function UploadTab() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {SWING_EFFORT_OPTIONS.map((option) => (
+                              {availableEfforts.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
                                   {option.label}
                                 </SelectItem>

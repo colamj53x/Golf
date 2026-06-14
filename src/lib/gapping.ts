@@ -263,12 +263,8 @@ function getPowerLabel(power: string): string {
 }
 
 export function getShotLabel(profile: ShotProfile): string {
-  if (profile.shotType === 'full' && profile.power === 'full') return 'Full';
-  if (profile.shotType === 'bump') return 'Bump';
-  if (profile.shotType === 'pitch') return 'Pitch';
-  if (profile.shotType === 'chip') return 'Chip';
-
   const shotName = SHOT_TYPES.find((shot) => shot.id === profile.shotType)?.name ?? profile.shotType;
+  if (isShortShot(profile)) return shotName;
   const power = getPowerLabel(profile.power);
   return power ? `${shotName} ${power}` : shotName;
 }

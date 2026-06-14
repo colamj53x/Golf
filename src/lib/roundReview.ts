@@ -2,6 +2,7 @@ import { calculateMetrics, getClubConfigId, getShotDateKey, MetricsResult, proce
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { clubSortIndex, CourseShotGappingAssignment, getClubName, getExpandedGappingShotLabel } from '@/lib/gapping';
 import { ClubConfig, ProcessedShot, Shot } from '@/types/golf';
+import { SHOT_TYPES } from '@/types/practiceClubs';
 
 export interface RoundReviewRow {
   key: string;
@@ -95,9 +96,9 @@ export function getRoundReviewShotLabel(shot: Shot): string {
   const family = shot.shotFamily.trim().toLowerCase();
   const effort = shot.swingEffort.trim().toLowerCase();
   if (!family) return shot.type || 'Unspecified';
-  if (family === 'full' && effort === 'full') return 'Full';
+  const familyLabel = SHOT_TYPES.find((option) => option.id === family)?.name ?? titleCase(family);
+  if (family === 'full' && effort === 'full') return familyLabel;
   const effortLabel = effort === '9pm' ? 'Half' : effort === 'full' ? 'Full' : titleCase(effort);
-  const familyLabel = family === 'bump' ? 'Bump' : titleCase(family);
   return effortLabel ? `${familyLabel} ${effortLabel}` : familyLabel;
 }
 

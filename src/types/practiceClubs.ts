@@ -15,11 +15,11 @@ export const PRACTICE_CLUBS = [
 ] as const;
 
 export const SHOT_TYPES = [
-  { id: 'full', name: 'Normal' },
+  { id: 'full', name: 'Full' },
   { id: 'punch', name: 'Punch' },
   { id: 'pitch', name: 'Pitch' },
   { id: 'chip', name: 'Chip' },
-  { id: 'bump', name: 'Bump and Run' },
+  { id: 'bump', name: 'Bump' },
 ] as const;
 
 export const POWER_OPTIONS = [

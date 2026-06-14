@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
-import { PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
+import { POWER_OPTIONS, PRACTICE_CLUBS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
@@ -23,7 +23,9 @@ const CLUB_ORDER: Record<string, number> = Object.fromEntries(
 const SHOT_ORDER: Record<string, number> = Object.fromEntries(
   SHOT_TYPES.map((s, i) => [s.id, i]),
 );
-const POWER_ORDER: Record<string, number> = { full: 0, half: 1 };
+const POWER_ORDER: Record<string, number> = Object.fromEntries(
+  POWER_OPTIONS.map((power, i) => [power.id, i]),
+);
 
 interface SummaryRow {
   configKey: string;
@@ -67,10 +69,6 @@ function names(configKey: string) {
 }
 
 function getShotLabel(shotType: string): string {
-  if (shotType === 'full') return 'Full';
-  if (shotType === 'bump') return 'Bump';
-  if (shotType === 'pitch') return 'Pitch';
-  if (shotType === 'chip') return 'Chip';
   return SHOT_TYPES.find((shot) => shot.id === shotType)?.name ?? shotType;
 }
 
