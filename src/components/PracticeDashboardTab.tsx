@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { usePracticeData } from '@/context/PracticeDataContext';
-import { PracticeMetricValue, MetricStatus, PracticeSession, ClubPracticeConfig } from '@/types/practice';
+import { BestShotCondition, PracticeMetricValue, MetricStatus, PracticeSession, ClubPracticeConfig } from '@/types/practice';
 import { PRACTICE_CLUBS, getConfigDisplayName } from '@/types/practiceClubs';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { getEnabledShotFamilyOptions, getEnabledSwingEffortOptions } from '@/lib/shotOptions';
@@ -39,6 +39,7 @@ import {
   computeSmashFactorDisplayFromInputs,
   computeSmashFactorMetricFromMetrics,
   formatDirectionTargetValue,
+  getDefaultBestShotDefinition,
   getMetricTolerancePct,
   getMetricValues,
   getSessionMetricValue,
@@ -62,6 +63,27 @@ const CATEGORY_LABELS: Record<string, string> = {
   swing: 'Swing',
   tempo: 'Tempo',
 };
+
+const BEST_SHOT_MODE_LABELS: Record<BestShotCondition['mode'], string> = {
+  window: 'Inside window',
+  min: 'At least min',
+  max: 'At most max',
+};
+
+const BEST_SHOT_METRIC_IDS = new Set([
+  'carry',
+  'total_distance',
+  'ball_speed',
+  'peak_height',
+  'launch_angle',
+  'launch_direction',
+  'avg_lateral_miss',
+  'attack_angle',
+  'swing_speed',
+  'peak_hand_speed',
+  'smash_factor',
+  'tempo_ratio',
+]);
 
 const formatTargetEditValue = (metricId: string, value: number | null): string => {
   if (value === null) return '';
@@ -91,6 +113,60 @@ const getShotMetricRange = (
   return {
     min: Math.min(...values),
     max: Math.max(...values),
+  };
+};
+
+const isShotMetricInTarget = (
+  shot: { metrics: Record<string, unknown> },
+  condition: BestShotCondition,
+  target: { targetMin: number | null; targetMax: number | null } | undefined,
+): boolean => {
+  const value = getShotMetricValue(condition.metricId, shot);
+  if (value === null || !target || (target.targetMin === null && target.targetMax === null)) return false;
+
+  if (condition.mode === 'min') {
+    const min = target.targetMin ?? target.targetMax;
+    return min !== null && value >= min;
+  }
+
+  if (condition.mode === 'max') {
+    const max = target.targetMax ?? target.targetMin;
+    return max !== null && value <= max;
+  }
+
+  const min = target.targetMin ?? target.targetMax!;
+  const max = target.targetMax ?? target.targetMin!;
+  return value >= Math.min(min, max) && value <= Math.max(min, max);
+};
+
+const getBestShotStats = (
+  shots: Array<{ metrics: Record<string, unknown> }> | undefined,
+  targets: ClubPracticeConfig['metrics'],
+  conditions: BestShotCondition[],
+): { count: number; total: number; pct: number } | null => {
+  if (!shots?.length || conditions.length === 0) return null;
+
+  let considered = 0;
+  let hits = 0;
+  for (const shot of shots) {
+    const hasValues = conditions.every(condition => getShotMetricValue(condition.metricId, shot) !== null);
+    if (!hasValues) continue;
+
+    considered++;
+    const isBest = conditions.every(condition => {
+      const target = targets.find(metric => metric.id === condition.metricId);
+      return isShotMetricInTarget(shot, condition, target);
+    });
+    if (isBest) {
+      hits++;
+    }
+  }
+
+  if (considered === 0) return null;
+  return {
+    count: hits,
+    total: considered,
+    pct: Math.round((hits / considered) * 100),
   };
 };
 
@@ -169,6 +245,7 @@ export function PracticeDashboardTab() {
   const [editSessionMetrics, setEditSessionMetrics] = useState<Record<string, string>>({});
   const [editSessionNotes, setEditSessionNotes] = useState('');
   const [editTargets, setEditTargets] = useState<Record<string, { min: string; max: string }>>({});
+  const [editBestShotConditions, setEditBestShotConditions] = useState<BestShotCondition[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [calculatedData, setCalculatedData] = useState<CalculatedMetrics | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -317,6 +394,19 @@ export function PracticeDashboardTab() {
       const lateralMax = lateralTarget?.targetMax ?? 10;
 
       const calculated = calculateMetricsFromShots(shots, distanceMin, distanceMax, lateralMax);
+      const bestShotConditions = config.bestShotDefinition?.conditions?.length
+        ? config.bestShotDefinition.conditions
+        : getDefaultBestShotDefinition(selectedShotType).conditions;
+      const bestShotStats = getBestShotStats(
+        shots.map(shot => ({ metrics: shot as unknown as Record<string, unknown> })),
+        config.metrics,
+        bestShotConditions,
+      );
+      if (bestShotStats) {
+        calculated.consistency.bestCount = bestShotStats.count;
+        calculated.consistency.bestPct = bestShotStats.pct;
+        calculated.consistency.overallScore = Math.round((calculated.consistency.distancePct + calculated.consistency.lateralPct) / 2);
+      }
       setCalculatedData(calculated);
 
       // Pre-fill the form with calculated values
@@ -406,6 +496,9 @@ export function PracticeDashboardTab() {
       };
     });
     setEditTargets(targets);
+    setEditBestShotConditions(config.bestShotDefinition?.conditions?.length
+      ? config.bestShotDefinition.conditions.map(condition => ({ ...condition }))
+      : getDefaultBestShotDefinition(selectedShotType).conditions);
     setIsEditTargetsOpen(true);
   };
 
@@ -466,15 +559,25 @@ export function PracticeDashboardTab() {
       };
     });
 
-    const success = await updatePracticeConfig(currentConfigKey, updatedMetrics);
+    const bestShotDefinition = {
+      conditions: editBestShotConditions.filter(condition => (
+        condition.metricId
+        && updatedMetrics.some(metric => metric.id === condition.metricId)
+      )),
+    };
+
+    const success = await updatePracticeConfig(currentConfigKey, updatedMetrics, bestShotDefinition);
     setIsEditTargetsOpen(false);
     if (success) {
-      toast.success('Targets saved successfully');
+      toast.success('Practice settings saved successfully');
     }
   };
 
   // Calculate consistency scores for a single session
-  const calculateSessionConsistency = (session: PracticeSession | null) => {
+  const calculateSessionConsistency = (
+    session: PracticeSession | null,
+    shots: Array<{ metrics: Record<string, unknown> }> = [],
+  ) => {
     if (!session) return { distance: null, lateral: null, best: null, overall: null };
 
     const totalDistanceMetric = session.metrics.find(m => m.metricId === 'total_distance');
@@ -485,9 +588,19 @@ export function PracticeDashboardTab() {
     
     const distanceTarget = config.metrics.find(m => m.id === 'total_distance');
     const lateralTarget = config.metrics.find(m => m.id === 'avg_lateral_miss');
+    const bestShotConditions = config.bestShotDefinition?.conditions?.length
+      ? config.bestShotDefinition.conditions
+      : getDefaultBestShotDefinition(selectedShotType).conditions;
+    const distanceShotPct = shots.length
+      ? pctWithinTarget('total_distance', shots, distanceTarget?.targetMin ?? null, distanceTarget?.targetMax ?? null, 0)
+      : null;
+    const lateralShotPct = shots.length
+      ? pctWithinTarget('avg_lateral_miss', shots, lateralTarget?.targetMin ?? null, lateralTarget?.targetMax ?? null, 0)
+      : null;
+    const bestShotStats = getBestShotStats(shots, config.metrics, bestShotConditions);
 
     // Distance Consistency: % of shots in target distance range
-    let distanceConsistency: number | null = null;
+    let distanceConsistency: number | null = distanceShotPct;
     if (totalDistanceValue.min !== null && distanceTarget?.targetMin !== null && distanceTarget?.targetMax !== null) {
       const targetMin = distanceTarget.targetMin;
       const targetMax = distanceTarget.targetMax;
@@ -501,18 +614,18 @@ export function PracticeDashboardTab() {
         const userRange = userMax - userMin;
         
         if (userRange === 0) {
-          distanceConsistency = (userMin >= targetMin && userMin <= targetMax) ? 100 : 0;
+          distanceConsistency = distanceConsistency ?? ((userMin >= targetMin && userMin <= targetMax) ? 100 : 0);
         } else if (overlapMax >= overlapMin) {
           const overlapRange = overlapMax - overlapMin;
-          distanceConsistency = Math.min(100, Math.round((overlapRange / userRange) * 100));
+          distanceConsistency = distanceConsistency ?? Math.min(100, Math.round((overlapRange / userRange) * 100));
         } else {
-          distanceConsistency = 0;
+          distanceConsistency = distanceConsistency ?? 0;
         }
       }
     }
 
     // Lateral Consistency: % within the lateral miss target
-    let lateralConsistency: number | null = null;
+    let lateralConsistency: number | null = lateralShotPct;
     if (lateralMissValue.min !== null && lateralTarget?.targetMax !== null) {
       const targetMax = lateralTarget.targetMax;
       
@@ -521,21 +634,21 @@ export function PracticeDashboardTab() {
       
       if (userMin !== null && userMax !== null) {
         if (userMax <= targetMax) {
-          lateralConsistency = 100;
+          lateralConsistency = lateralConsistency ?? 100;
         } else if (userMin > targetMax) {
-          lateralConsistency = 0;
+          lateralConsistency = lateralConsistency ?? 0;
         } else {
           const userRange = userMax - userMin;
           const inRangeRange = targetMax - userMin;
-          lateralConsistency = Math.round((inRangeRange / userRange) * 100);
+          lateralConsistency = lateralConsistency ?? Math.round((inRangeRange / userRange) * 100);
         }
       }
     }
 
     // Best Shots: % that have BOTH in range
-    let bestConsistency: number | null = null;
+    let bestConsistency: number | null = bestShotStats?.pct ?? null;
     if (distanceConsistency !== null && lateralConsistency !== null) {
-      bestConsistency = Math.round((distanceConsistency / 100) * (lateralConsistency / 100) * 100);
+      bestConsistency = bestConsistency ?? Math.round((distanceConsistency / 100) * (lateralConsistency / 100) * 100);
     }
 
     // Overall Consistency Score: weighted average
@@ -562,7 +675,9 @@ export function PracticeDashboardTab() {
     
     if (recentSessions.length === 0) return { distance: null, lateral: null, best: null, overall: null, sessionCount: 0 };
 
-    const sessionScores = recentSessions.map(s => calculateSessionConsistency(s));
+    const sessionScores = recentSessions.map(s => (
+      calculateSessionConsistency(s, (shotsBySession[s.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>)
+    ));
     
     const avgScore = (key: 'distance' | 'lateral' | 'best' | 'overall') => {
       const validScores = sessionScores.map(s => s[key]).filter((v): v is number => v !== null);
@@ -579,7 +694,10 @@ export function PracticeDashboardTab() {
     };
   };
 
-  const currentConsistencyScores = calculateSessionConsistency(currentSession);
+  const currentConsistencyScores = calculateSessionConsistency(
+    currentSession,
+    currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>,
+  );
   const rollingConsistencyScores = calculateRollingConsistency();
 
   const getScoreColor = (score: number | null) => {
@@ -676,7 +794,7 @@ export function PracticeDashboardTab() {
               </Button>
               <Button variant="outline" size="sm" className="gap-2" onClick={openEditTargets}>
                 <Settings className="h-4 w-4" />
-                Edit Targets
+                Edit Settings
               </Button>
               <Button size="sm" className="gap-2" onClick={() => setIsAddSessionOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -695,9 +813,9 @@ export function PracticeDashboardTab() {
       <Dialog open={isEditTargetsOpen} onOpenChange={setIsEditTargetsOpen}>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Edit Metric Targets</DialogTitle>
+                <DialogTitle>Edit Practice Settings</DialogTitle>
                 <DialogDescription>
-                  Set target ranges for {config.clubName} practice metrics
+                  Set target ranges and best-shot scoring for {config.clubName}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -814,10 +932,84 @@ export function PracticeDashboardTab() {
                     </div>
                   </div>
                 ))}
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        Best Shot Rule
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        A best shot must pass every selected condition.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditBestShotConditions(prev => ([
+                        ...prev,
+                        { metricId: 'peak_height', mode: 'window' },
+                      ]))}
+                    >
+                      Add Metric
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {editBestShotConditions.map((condition, index) => (
+                      <div key={`${condition.metricId}-${index}`} className="grid grid-cols-[1fr,140px,40px] items-center gap-2">
+                        <Select
+                          value={condition.metricId}
+                          onValueChange={(value) => setEditBestShotConditions(prev => prev.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, metricId: value } : item
+                          )))}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Metric" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {config.metrics
+                              .filter(metric => BEST_SHOT_METRIC_IDS.has(metric.id))
+                              .map(metric => (
+                                <SelectItem key={metric.id} value={metric.id}>{metric.metricName}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={condition.mode}
+                          onValueChange={(value) => setEditBestShotConditions(prev => prev.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, mode: value as BestShotCondition['mode'] } : item
+                          )))}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Rule" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(BEST_SHOT_MODE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setEditBestShotConditions(prev => prev.filter((_, itemIndex) => itemIndex !== index))}
+                          title="Remove metric"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    {editBestShotConditions.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No metrics selected. Add at least one metric to score best shots.</p>
+                    )}
+                  </div>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsEditTargetsOpen(false)}>Cancel</Button>
-                <Button onClick={handleSaveTargets}>Save Targets</Button>
+                <Button onClick={handleSaveTargets}>Save Settings</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

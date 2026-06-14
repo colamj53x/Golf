@@ -2,9 +2,36 @@ import { format } from 'date-fns';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { pctWithinTarget } from '@/lib/practiceConsistency';
 import { getConfigDisplayName } from '@/types/practiceClubs';
-import type { ClubPracticeConfig, MetricStatus, PracticeMetricValue, PracticeSession } from '@/types/practice';
+import type { BestShotDefinition, ClubPracticeConfig, MetricStatus, PracticeMetricValue, PracticeSession } from '@/types/practice';
 
 export type TrendDirection = 'improving' | 'declining' | 'stable' | 'no-data';
+
+export function getDefaultBestShotDefinition(shotType: string): BestShotDefinition {
+  if (shotType === 'pitch') {
+    return {
+      conditions: [
+        { metricId: 'avg_lateral_miss', mode: 'max' },
+        { metricId: 'carry', mode: 'window' },
+      ],
+    };
+  }
+
+  if (shotType === 'chip' || shotType === 'bump') {
+    return {
+      conditions: [
+        { metricId: 'avg_lateral_miss', mode: 'max' },
+        { metricId: 'total_distance', mode: 'window' },
+      ],
+    };
+  }
+
+  return {
+    conditions: [
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'total_distance', mode: 'min' },
+    ],
+  };
+}
 
 export function statusFromWithinTarget(withinTarget: number | null): MetricStatus | null {
   if (withinTarget === null) return null;

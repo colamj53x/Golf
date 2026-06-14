@@ -12,6 +12,17 @@ export interface PracticeMetricTarget {
   category: 'distance' | 'ball_flight' | 'dispersion' | 'swing' | 'tempo';
 }
 
+export type BestShotRuleMode = 'window' | 'min' | 'max';
+
+export interface BestShotCondition {
+  metricId: string;
+  mode: BestShotRuleMode;
+}
+
+export interface BestShotDefinition {
+  conditions: BestShotCondition[];
+}
+
 export interface PracticeMetricValue {
   metricId: string;
   valueMin: number | null;
@@ -51,6 +62,7 @@ export interface ClubPracticeConfig {
   clubId: string;
   clubName: string;
   metrics: PracticeMetricTarget[];
+  bestShotDefinition: BestShotDefinition;
 }
 
 // Default 4H practice metrics based on the document

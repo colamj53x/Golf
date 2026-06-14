@@ -5,7 +5,8 @@ import {
   PracticeMetricTarget,
   PracticeMetricValue,
   ConsistencyData,
-  DEFAULT_4H_PRACTICE_METRICS 
+  DEFAULT_4H_PRACTICE_METRICS,
+  BestShotDefinition,
 } from '@/types/practice';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -16,6 +17,7 @@ import { getUserFriendlyError } from '@/lib/errorHandler';
 import { insertPracticeShots } from '@/lib/practiceRepository';
 import type { PracticeShot } from '@/lib/practiceSpreadsheetParser';
 import { USER_SETTINGS_CONFIG_PREFIX } from '@/lib/userSettingsRepository';
+import { getDefaultBestShotDefinition } from '@/lib/practiceDashboardDomain';
 
 // Stored config from database
 interface StoredPracticeConfig {
@@ -25,14 +27,45 @@ interface StoredPracticeConfig {
   shotType: string;
   power: string;
   metrics: PracticeMetricTarget[];
+  bestShotDefinition: BestShotDefinition;
+}
+
+type PracticeConfigPayload = PracticeMetricTarget[] | {
+  metrics?: PracticeMetricTarget[];
+  bestShotDefinition?: BestShotDefinition;
+};
+
+function parsePracticeConfigPayload(value: unknown, shotType: string): { metrics: PracticeMetricTarget[]; bestShotDefinition: BestShotDefinition } {
+  const fallback = getDefaultBestShotDefinition(shotType);
+  if (Array.isArray(value)) {
+    return { metrics: value as PracticeMetricTarget[], bestShotDefinition: fallback };
+  }
+
+  const payload = value as PracticeConfigPayload | null;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+    const bestShotDefinition = payload.bestShotDefinition?.conditions?.length
+      ? payload.bestShotDefinition
+      : fallback;
+    return { metrics, bestShotDefinition };
+  }
+
+  return { metrics: [], bestShotDefinition: fallback };
+}
+
+function serializePracticeConfig(metrics: PracticeMetricTarget[], bestShotDefinition: BestShotDefinition): PracticeConfigPayload {
+  return {
+    metrics,
+    bestShotDefinition,
+  };
 }
 
 interface PracticeDataContextType {
   practiceConfigs: ClubPracticeConfig[];
   storedConfigs: StoredPracticeConfig[];
   setPracticeConfigs: React.Dispatch<React.SetStateAction<ClubPracticeConfig[]>>;
-  updatePracticeConfig: (clubId: string, metrics: PracticeMetricTarget[]) => Promise<boolean>;
-  savePracticeConfig: (club: string, shotType: string, power: string, metrics: PracticeMetricTarget[]) => Promise<void>;
+  updatePracticeConfig: (clubId: string, metrics: PracticeMetricTarget[], bestShotDefinition?: BestShotDefinition) => Promise<boolean>;
+  savePracticeConfig: (club: string, shotType: string, power: string, metrics: PracticeMetricTarget[], bestShotDefinition?: BestShotDefinition) => Promise<void>;
   deletePracticeConfig: (configKey: string) => Promise<void>;
   resetToDefaults: () => void;
   practiceSessions: PracticeSession[];
@@ -67,6 +100,7 @@ function generateDefaultConfigs(): ClubPracticeConfig[] {
           clubId: configKey,
           clubName: `${club.name} - ${shotType.name} - ${power.name}`,
           metrics: DEFAULT_4H_PRACTICE_METRICS.map(m => ({ ...m })), // Clone metrics
+          bestShotDefinition: getDefaultBestShotDefinition(shotType.id),
         });
       }
     }
@@ -143,14 +177,18 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         const configs: StoredPracticeConfig[] = (configsData || [])
           .filter((row) => !row.config_key.startsWith('round_reflection:'))
           .filter((row) => !row.config_key.startsWith(USER_SETTINGS_CONFIG_PREFIX))
-          .map((row) => ({
-            id: row.id,
-            configKey: row.config_key,
-            club: row.club,
-            shotType: row.shot_type,
-            power: row.power,
-            metrics: row.metrics as unknown as PracticeMetricTarget[],
-          }));
+          .map((row) => {
+            const payload = parsePracticeConfigPayload(row.metrics, row.shot_type);
+            return {
+              id: row.id,
+              configKey: row.config_key,
+              club: row.club,
+              shotType: row.shot_type,
+              power: row.power,
+              metrics: payload.metrics,
+              bestShotDefinition: payload.bestShotDefinition,
+            };
+          });
 
         setStoredConfigs(configs);
 
@@ -180,6 +218,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
                 updated[idx] = {
                   ...updated[idx],
                   metrics: mergedMetrics,
+                  bestShotDefinition: stored.bestShotDefinition,
                 };
               }
             });
@@ -203,20 +242,21 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
     return storedConfigs.some(c => c.configKey === configKey);
   }, [storedConfigs]);
 
-  const updatePracticeConfig = useCallback(async (clubId: string, metrics: PracticeMetricTarget[]): Promise<boolean> => {
+  const updatePracticeConfig = useCallback(async (clubId: string, metrics: PracticeMetricTarget[], bestShotDefinition?: BestShotDefinition): Promise<boolean> => {
     if (!user) return false;
+    const { club, shotType, power } = parsePracticeConfigKey(clubId);
+    const nextBestShotDefinition = bestShotDefinition ?? practiceConfigs.find(c => c.clubId === clubId)?.bestShotDefinition ?? getDefaultBestShotDefinition(shotType);
 
     // Update local state
     setPracticeConfigs(prev => {
       const existing = prev.find(c => c.clubId === clubId);
       if (existing) {
-        return prev.map(c => c.clubId === clubId ? { ...c, metrics } : c);
+        return prev.map(c => c.clubId === clubId ? { ...c, metrics, bestShotDefinition: nextBestShotDefinition } : c);
       }
       return prev;
     });
 
     // Save to database
-    const { club, shotType, power } = parsePracticeConfigKey(clubId);
     try {
       const { data, error } = await supabase
         .from('practice_configs')
@@ -225,7 +265,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
           club,
           shot_type: shotType,
           power,
-          metrics: JSON.parse(JSON.stringify(metrics)),
+          metrics: JSON.parse(JSON.stringify(serializePracticeConfig(metrics, nextBestShotDefinition))),
           user_id: user.id,
         }, { onConflict: 'user_id,config_key' })
         .select();
@@ -235,12 +275,14 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       // Update storedConfigs to reflect the save
       if (data && data.length > 0) {
         const saved = data[0];
+        const payload = parsePracticeConfigPayload(saved.metrics, saved.shot_type);
         setStoredConfigs(prev => {
           const existing = prev.find(c => c.configKey === clubId);
           if (existing) {
             return prev.map(c => c.configKey === clubId ? {
               ...c,
-              metrics: saved.metrics as unknown as PracticeMetricTarget[],
+              metrics: payload.metrics,
+              bestShotDefinition: payload.bestShotDefinition,
             } : c);
           }
           return [...prev, {
@@ -249,7 +291,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
             club: saved.club,
             shotType: saved.shot_type,
             power: saved.power,
-            metrics: saved.metrics as unknown as PracticeMetricTarget[],
+            metrics: payload.metrics,
+            bestShotDefinition: payload.bestShotDefinition,
           }];
         });
       }
@@ -262,12 +305,13 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       toast.error('Failed to save configuration. Please try again.');
       return false;
     }
-  }, [user]);
+  }, [practiceConfigs, user]);
 
-  const savePracticeConfig = useCallback(async (club: string, shotType: string, power: string, metrics: PracticeMetricTarget[]) => {
+  const savePracticeConfig = useCallback(async (club: string, shotType: string, power: string, metrics: PracticeMetricTarget[], bestShotDefinition?: BestShotDefinition) => {
     if (!user) return;
 
     const configKey = getPracticeConfigKey(club, shotType, power);
+    const nextBestShotDefinition = bestShotDefinition ?? practiceConfigs.find(c => c.clubId === configKey)?.bestShotDefinition ?? getDefaultBestShotDefinition(shotType);
     
     try {
       const { data, error } = await supabase
@@ -277,13 +321,14 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
           club,
           shot_type: shotType,
           power,
-          metrics: JSON.parse(JSON.stringify(metrics)),
+          metrics: JSON.parse(JSON.stringify(serializePracticeConfig(metrics, nextBestShotDefinition))),
           user_id: user.id,
         }, { onConflict: 'user_id,config_key' })
         .select()
         .single();
 
       if (error) throw error;
+      const payload = parsePracticeConfigPayload(data.metrics, data.shot_type);
 
       const newStoredConfig: StoredPracticeConfig = {
         id: data.id,
@@ -291,7 +336,8 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
         club: data.club,
         shotType: data.shot_type,
         power: data.power,
-        metrics: data.metrics as unknown as PracticeMetricTarget[],
+        metrics: payload.metrics,
+        bestShotDefinition: payload.bestShotDefinition,
       };
 
       setStoredConfigs(prev => {
@@ -304,7 +350,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
 
       // Update practiceConfigs
       setPracticeConfigs(prev => {
-        return prev.map(c => c.clubId === configKey ? { ...c, metrics } : c);
+        return prev.map(c => c.clubId === configKey ? { ...c, metrics, bestShotDefinition: payload.bestShotDefinition } : c);
       });
 
       toast.success('Club/Shot configuration saved');
@@ -314,7 +360,7 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Failed to save configuration. Please try again.');
     }
-  }, [user]);
+  }, [practiceConfigs, user]);
 
   const deletePracticeConfig = useCallback(async (configKey: string) => {
     if (!user) return;
@@ -334,9 +380,11 @@ export function PracticeDataProvider({ children }: { children: ReactNode }) {
       setPracticeConfigs(prev => {
         return prev.map(c => {
           if (c.clubId === configKey) {
+            const { shotType } = parsePracticeConfigKey(configKey);
             return {
               ...c,
               metrics: DEFAULT_4H_PRACTICE_METRICS.map(m => ({ ...m })),
+              bestShotDefinition: getDefaultBestShotDefinition(shotType),
             };
           }
           return c;

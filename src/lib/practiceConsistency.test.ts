@@ -22,4 +22,14 @@ describe('pctWithinTarget', () => {
 
     expect(pctWithinTarget('launch_direction', directionShots, -4, 4, 0)).toBe(75);
   });
+
+  it('treats max-only targets as at-or-below the target', () => {
+    const lateralShots = [
+      { metrics: { carrySide: -3 } },
+      { metrics: { carrySide: 8 } },
+      { metrics: { carrySide: 12 } },
+    ];
+
+    expect(pctWithinTarget('avg_lateral_miss', lateralShots, null, 10, 0)).toBe(67);
+  });
 });

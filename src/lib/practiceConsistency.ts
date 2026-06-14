@@ -66,11 +66,12 @@ export function pctWithinTarget(
     return Math.round((hits / vals.length) * 100);
   }
 
-  const tMin = targetMin ?? targetMax!;
-  const tMax = targetMax ?? targetMin!;
-  const tol = Math.max(Math.abs(tMin), Math.abs(tMax)) * (tolerancePct / 100);
-  const lo = Math.min(tMin, tMax) - tol;
-  const hi = Math.max(tMin, tMax) + tol;
+  const reference = Math.max(Math.abs(targetMin ?? 0), Math.abs(targetMax ?? 0), 1);
+  const tol = reference * (tolerancePct / 100);
+  const lo = targetMin === null ? -Infinity : targetMin - tol;
+  const hi = targetMax === null ? Infinity : targetMax + tol;
+  const lowerBound = Math.min(lo, hi);
+  const upperBound = Math.max(lo, hi);
 
   let considered = 0;
   let hits = 0;
@@ -78,7 +79,7 @@ export function pctWithinTarget(
     const v = getShotMetricValue(metricId, shot);
     if (v === null) continue;
     considered++;
-    if (v >= lo && v <= hi) hits++;
+    if (v >= lowerBound && v <= upperBound) hits++;
   }
   if (considered === 0) return null;
   return Math.round((hits / considered) * 100);

@@ -4,6 +4,7 @@ import {
   calculateTrend,
   computeSmashFactorMetricFromMetrics,
   formatDirectionTargetValue,
+  getDefaultBestShotDefinition,
   parseDirectionalNumber,
   parseInputValue,
   statusFromWithinTarget,
@@ -68,5 +69,28 @@ describe('practice dashboard domain', () => {
     expect(statusFromWithinTarget(83)).toBe('amber');
     expect(statusFromWithinTarget(0)).toBe('red');
     expect(statusFromWithinTarget(null)).toBeNull();
+  });
+
+  it('sets default best-shot rules by shot type', () => {
+    expect(getDefaultBestShotDefinition('full').conditions).toEqual([
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'total_distance', mode: 'min' },
+    ]);
+    expect(getDefaultBestShotDefinition('punch').conditions).toEqual([
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'total_distance', mode: 'min' },
+    ]);
+    expect(getDefaultBestShotDefinition('pitch').conditions).toEqual([
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'carry', mode: 'window' },
+    ]);
+    expect(getDefaultBestShotDefinition('chip').conditions).toEqual([
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'total_distance', mode: 'window' },
+    ]);
+    expect(getDefaultBestShotDefinition('bump').conditions).toEqual([
+      { metricId: 'avg_lateral_miss', mode: 'max' },
+      { metricId: 'total_distance', mode: 'window' },
+    ]);
   });
 });
