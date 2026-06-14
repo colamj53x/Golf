@@ -12,7 +12,13 @@ import { PracticeSession } from '@/types/practice';
 import { Shot } from '@/types/golf';
 import { ShotProfile, useShotProfiles } from '@/lib/shotProfiles';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
-import { buildCourseShotGappingAssignments, visibleGappingConfigKey } from '@/lib/gapping';
+import {
+  buildClubGappingRows,
+  buildCourseShotGappingAssignments,
+  loadShotCategoryOverrides,
+  visibleGappingConfigKey,
+  type ShotContext,
+} from '@/lib/gapping';
 import { cn } from '@/lib/utils';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { buildPracticePriorities, type PracticePriority } from '@/lib/practicePriorities';
@@ -40,6 +46,8 @@ interface SummaryRow {
   carryBest: number | null;
   totalAvg: number | null;
   totalBest: number | null;
+  actualTotal: number | null;
+  actualTotalCount: number;
   reliancePerRound: number | null;
   courseShotCount: number;
   last20Score: number | null;
@@ -54,6 +62,7 @@ type SortKey =
   | 'shot'
   | 'last'
   | 'priority'
+  | 'actualTotal'
   | 'carry'
   | 'total'
   | 'reliance'
@@ -190,6 +199,11 @@ function reliabilityTitle(value: number | null, count: number): string {
   return `${value.toFixed(1)} shots per round · ${count} total shots`;
 }
 
+function actualTotalTitle(value: number | null, count: number): string {
+  if (value === null) return 'No actual gapping total from on-course shots';
+  return `${value.toFixed(0)}m actual total from ${count} gapping shot${count === 1 ? '' : 's'}`;
+}
+
 // Sort helpers
 function nullsLast(a: number | null, b: number | null, dir: 'asc' | 'desc'): number {
   if (a === null && b === null) return 0;
@@ -241,6 +255,45 @@ export function PracticeSummaryTab({
       shotClassificationRules,
     }).map((priority) => [visibleGappingConfigKey(priority.configKey), priority]),
   ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+
+  const actualTotalsByConfig = useMemo(() => {
+    const totals = new Map<string, { weightedTotal: number; count: number }>();
+    const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
+    const shotCategoryOverrides = loadShotCategoryOverrides();
+
+    for (const shotContext of contexts) {
+      const gappingRows = buildClubGappingRows({
+        profiles,
+        shots,
+        shotContext,
+        practiceSessions,
+        practiceConfigs,
+        shotsBySession,
+        gappingHcpTarget,
+        shotCategoryOverrides,
+        shotClassificationRules,
+      });
+
+      for (const row of gappingRows) {
+        if (row.liveTotal === null || row.topQuartile.length === 0) continue;
+        const configKey = visibleGappingConfigKey(row.profile.id);
+        const existing = totals.get(configKey) ?? { weightedTotal: 0, count: 0 };
+        existing.weightedTotal += row.liveTotal * row.topQuartile.length;
+        existing.count += row.topQuartile.length;
+        totals.set(configKey, existing);
+      }
+    }
+
+    return new Map(
+      [...totals.entries()].map(([configKey, value]) => [
+        configKey,
+        {
+          total: value.count ? value.weightedTotal / value.count : null,
+          count: value.count,
+        },
+      ]),
+    );
+  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
 
   const courseSignals = useMemo(() => {
     const shotsByConfig = new Map<string, Shot[]>();
@@ -383,6 +436,7 @@ export function PracticeSummaryTab({
       const courseShotCount = courseSignals.shotsByConfig.get(g.configKey)?.length ?? 0;
       const reliancePerRound = courseSignals.roundCount > 0 ? courseShotCount / courseSignals.roundCount : null;
       const priority = prioritiesByConfig.get(g.configKey) ?? null;
+      const actualTotal = actualTotalsByConfig.get(g.configKey) ?? { total: null, count: 0 };
       return {
         configKey: g.configKey,
         clubId: club,
@@ -396,6 +450,8 @@ export function PracticeSummaryTab({
         carryBest,
         totalAvg,
         totalBest,
+        actualTotal: actualTotal.total,
+        actualTotalCount: actualTotal.count,
         reliancePerRound,
         courseShotCount,
         last20Score,
@@ -405,7 +461,7 @@ export function PracticeSummaryTab({
         priority,
       };
     });
-  }, [courseSignals, groupedRows, prioritiesByConfig, shotsBySession]);
+  }, [actualTotalsByConfig, courseSignals, groupedRows, prioritiesByConfig, shotsBySession]);
 
 
   // Apply sorting
@@ -428,6 +484,8 @@ export function PracticeSummaryTab({
           );
         case 'priority':
           return nullsLast(prioritySignal(a).score, prioritySignal(b).score, dir);
+        case 'actualTotal':
+          return nullsLast(a.actualTotal, b.actualTotal, dir);
         case 'carry':
           return nullsLast(a.carryAvg, b.carryAvg, dir);
         case 'total':
@@ -455,7 +513,7 @@ export function PracticeSummaryTab({
     } else {
       setSortKey(key);
       // Default direction: alpha/club asc, numerics desc
-      setSortDir(['carry', 'total', 'reliance', 'last20', 'last3', 'last', 'priority'].includes(key) ? 'desc' : 'asc');
+      setSortDir(['actualTotal', 'carry', 'total', 'reliance', 'last20', 'last3', 'last', 'priority'].includes(key) ? 'desc' : 'asc');
     }
   }
 
@@ -542,7 +600,7 @@ export function PracticeSummaryTab({
           <p className="text-sm text-muted-foreground">No practice shot options configured yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-auto min-w-[820px] text-sm border-separate border-spacing-0">
+            <table className="w-auto min-w-[940px] text-sm border-separate border-spacing-0">
               <colgroup>
                 <col className="w-36" />
                 <col className="w-28" />
@@ -551,6 +609,7 @@ export function PracticeSummaryTab({
                 <col className="w-20" />
                 <col className="w-20" />
                 <col className="w-20" />
+                <col className="w-28" />
                 <col className="w-28" />
                 <col className="w-28" />
               </colgroup>
@@ -563,11 +622,12 @@ export function PracticeSummaryTab({
                   <SortHeader label="Reliance" sKey="reliance" align="center" />
                   <SortHeader label="Last 20" sKey="last20" align="center" />
                   <SortHeader label="Last 3" sKey="last3" align="center" />
-                  <SortHeader label="Total" sKey="total" align="right" />
-                  <SortHeader label="Carry" sKey="carry" align="right" />
+                  <SortHeader label="Actual Total" sKey="actualTotal" align="right" />
+                  <SortHeader label="Log Total" sKey="total" align="right" />
+                  <SortHeader label="Log Carry" sKey="carry" align="right" />
                 </tr>
                 <tr>
-                  <th colSpan={9} className="border-b border-border p-0" />
+                  <th colSpan={10} className="border-b border-border p-0" />
                 </tr>
               </thead>
               <tbody>
@@ -583,7 +643,7 @@ export function PracticeSummaryTab({
                     <Fragment key={row.configKey}>
                       {showGap && (
                         <tr aria-hidden="true">
-                          <td colSpan={9} className="h-3" />
+                          <td colSpan={10} className="h-3" />
                         </tr>
                       )}
                       <tr className="hover:bg-muted/40 border-b border-border/50">
@@ -663,6 +723,17 @@ export function PracticeSummaryTab({
                                 : `${Math.round(row.last3PracticeScore)}% from last ${row.last3PracticeCount} practices`
                             }
                           />
+                        </td>
+                        <td
+                          className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums"
+                          title={actualTotalTitle(row.actualTotal, row.actualTotalCount)}
+                        >
+                          <div className="flex justify-end">
+                            <span className={metricValueClass(false)}>{fmt(row.actualTotal)}</span>
+                          </div>
+                          <div className="text-[11px] leading-tight text-muted-foreground">
+                            {row.actualTotalCount ? `${row.actualTotalCount} shots` : 'no shots'}
+                          </div>
                         </td>
                         <td className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className="flex justify-end">
