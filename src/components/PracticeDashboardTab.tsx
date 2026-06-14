@@ -44,6 +44,7 @@ import {
   getSessionMetricValue,
   parseDirectionalNumber,
   parseInputValue,
+  statusFromWithinTarget,
   type TrendDirection,
 } from '@/lib/practiceDashboardDomain';
 import {
@@ -1187,9 +1188,10 @@ export function PracticeDashboardTab() {
                           const olderValues = olderSessions.map(s => getSessionMetricValue(s, metric.id));
                           const tolerancePct = toleranceForMetric(metric.category);
 
-                          const currentStatus = calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
                           const trend = calculateTrend(currentValue, [previousValue, ...olderValues], metric.higherIsBetter);
                           const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct);
+                          const currentStatus = statusFromWithinTarget(withinTarget)
+                            ?? calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
 
                           // Average within-5% across the previous 2 sessions
                           const prev2Values = prev2SessionIds

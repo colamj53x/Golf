@@ -6,6 +6,13 @@ import type { ClubPracticeConfig, MetricStatus, PracticeMetricValue, PracticeSes
 
 export type TrendDirection = 'improving' | 'declining' | 'stable' | 'no-data';
 
+export function statusFromWithinTarget(withinTarget: number | null): MetricStatus | null {
+  if (withinTarget === null) return null;
+  if (withinTarget >= 100) return 'green';
+  if (withinTarget > 0) return 'amber';
+  return 'red';
+}
+
 export function calculateTrend(
   currentValue: PracticeMetricValue | null,
   previousValues: (PracticeMetricValue | null)[],

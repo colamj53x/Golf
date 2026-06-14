@@ -6,6 +6,7 @@ import {
   formatDirectionTargetValue,
   parseDirectionalNumber,
   parseInputValue,
+  statusFromWithinTarget,
 } from '@/lib/practiceDashboardDomain';
 import type { PracticeMetricValue } from '@/types/practice';
 
@@ -59,5 +60,12 @@ describe('practice dashboard domain', () => {
     expect(calculateStatus(metric('launch_direction', -3), -4, 4, false)).toBe('green');
     expect(calculateStatus(metric('launch_direction', -6), -4, 4, false)).toBe('red');
     expect(calculateStatus(metric('carry', 151), 140, 150, true)).toBe('green');
+  });
+
+  it('maps shot-level in-target percentages to status dots', () => {
+    expect(statusFromWithinTarget(100)).toBe('green');
+    expect(statusFromWithinTarget(83)).toBe('amber');
+    expect(statusFromWithinTarget(0)).toBe('red');
+    expect(statusFromWithinTarget(null)).toBeNull();
   });
 });
