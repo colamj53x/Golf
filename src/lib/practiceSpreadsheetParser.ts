@@ -381,7 +381,7 @@ export function calculateMetricsFromShots(
       metricId: 'attack_angle',
       valueMin: round(min(attackAngles)),
       valueMax: round(max(attackAngles)),
-      valueDisplay: `${round(min(attackAngles))} to ${round(max(attackAngles))}`,
+      valueDisplay: `${round(min(attackAngles))}–${round(max(attackAngles))}`,
     },
     swing_speed: {
       metricId: 'swing_speed',

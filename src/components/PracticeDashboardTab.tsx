@@ -32,7 +32,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { parseSpreadsheet, calculateMetricsFromShots, CalculatedMetrics, PracticeShot } from '@/lib/practiceSpreadsheetParser';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { useGolfData } from '@/context/GolfDataContext';
-import { pctWithinTarget } from '@/lib/practiceConsistency';
+import { getShotMetricValue, pctWithinTarget } from '@/lib/practiceConsistency';
 import {
   calculateStatus,
   calculateTrend,
@@ -77,6 +77,21 @@ const formatTargetDisplay = (metricId: string, min: number | null, max: number |
   if (min !== null) return `≥${formatValue(min)}`;
   if (max !== null) return `≤${formatValue(max)}`;
   return '–';
+};
+
+const getShotMetricRange = (
+  metricId: string,
+  shots: Array<{ metrics: Record<string, unknown> }> | undefined,
+): { min: number | null; max: number | null } => {
+  const values = (shots ?? [])
+    .map(shot => getShotMetricValue(metricId, shot))
+    .filter((value): value is number => value !== null);
+
+  if (values.length === 0) return { min: null, max: null };
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values),
+  };
 };
 
 function getStatusColor(status: MetricStatus): string {
@@ -695,12 +710,15 @@ export function PracticeDashboardTab() {
                     {metrics.map(metric => {
                         // Get current session value for this metric
                         const currentMetric = currentSession?.metrics.find(m => m.metricId === metric.id);
-                        const hasCurrentValue = currentMetric && (currentMetric.valueMin !== null || currentMetric.valueMax !== null);
+                        const shotMetricRange = getShotMetricRange(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>);
+                        const currentValueMin = currentMetric?.valueMin ?? shotMetricRange.min;
+                        const currentValueMax = currentMetric?.valueMax ?? shotMetricRange.max;
+                        const hasCurrentValue = currentValueMin !== null || currentValueMax !== null;
                         
                         const handleUseCurrent = () => {
-                          if (!currentMetric) return;
-                          const minVal = currentMetric.valueMin !== null ? String(currentMetric.valueMin) : '';
-                          const maxVal = currentMetric.valueMax !== null ? String(currentMetric.valueMax) : minVal;
+                          if (!hasCurrentValue) return;
+                          const minVal = currentValueMin !== null ? formatTargetEditValue(metric.id, currentValueMin) : '';
+                          const maxVal = currentValueMax !== null ? formatTargetEditValue(metric.id, currentValueMax) : minVal;
                           setEditTargets(prev => ({
                             ...prev,
                             [metric.id]: { min: minVal, max: maxVal }

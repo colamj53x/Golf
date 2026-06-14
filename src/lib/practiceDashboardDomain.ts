@@ -225,8 +225,8 @@ export const parseInputValue = (valueStr: string): { min: number | null; max: nu
   const raw = (valueStr || '').trim();
   if (!raw) return { min: null, max: null };
 
-  const normalized = raw.normalize('NFKC').replace(/[\u2013\u2014\u2012\u2010\u2011]/g, '-');
-  const rangeMatch = normalized.match(/^\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*-\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*$/i);
+  const normalized = raw.normalize('NFKC').replace(/[\u2212\u2013\u2014\u2012\u2010\u2011]/g, '-');
+  const rangeMatch = normalized.match(/^\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*(?:-|to)\s*(-?\d+(?:\.\d+)?\s*[LR]?)\s*$/i);
   if (rangeMatch) {
     const parts = [rangeMatch[1], rangeMatch[2]].map(parseDirectionalNumber);
     if (parts[0] === null || parts[1] === null) return { min: null, max: null };

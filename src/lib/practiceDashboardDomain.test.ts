@@ -24,6 +24,7 @@ describe('practice dashboard domain', () => {
     expect(parseInputValue('145')).toEqual({ min: 145, max: 145 });
     expect(parseInputValue('140-150')).toEqual({ min: 140, max: 150 });
     expect(parseInputValue('140–150')).toEqual({ min: 140, max: 150 });
+    expect(parseInputValue('-6 to -3')).toEqual({ min: -6, max: -3 });
   });
 
   it('parses left and right direction values as signed numbers', () => {
