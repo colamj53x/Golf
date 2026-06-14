@@ -616,7 +616,7 @@ export function PracticeDashboardTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {shotTypeOptions.map(type => (
-                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -629,7 +629,7 @@ export function PracticeDashboardTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {powerOptions.map(power => (
-                    <SelectItem key={power.id} value={power.id}>{power.name}</SelectItem>
+                    <SelectItem key={power.value} value={power.value}>{power.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
