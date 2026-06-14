@@ -622,9 +622,9 @@ export function PracticeSummaryTab({
                   <SortHeader label="Reliance" sKey="reliance" align="center" />
                   <SortHeader label="Last 20" sKey="last20" align="center" />
                   <SortHeader label="Last 3" sKey="last3" align="center" />
-                  <SortHeader label="Actual Total" sKey="actualTotal" align="right" />
                   <SortHeader label="Log Total" sKey="total" align="right" />
                   <SortHeader label="Log Carry" sKey="carry" align="right" />
+                  <SortHeader label="Actual Total" sKey="actualTotal" align="right" />
                 </tr>
                 <tr>
                   <th colSpan={10} className="border-b border-border p-0" />
@@ -724,17 +724,6 @@ export function PracticeSummaryTab({
                             }
                           />
                         </td>
-                        <td
-                          className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums"
-                          title={actualTotalTitle(row.actualTotal, row.actualTotalCount)}
-                        >
-                          <div className="flex justify-end">
-                            <span className={metricValueClass(false)}>{fmt(row.actualTotal)}</span>
-                          </div>
-                          <div className="text-[11px] leading-tight text-muted-foreground">
-                            {row.actualTotalCount ? `${row.actualTotalCount} shots` : 'no shots'}
-                          </div>
-                        </td>
                         <td className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums">
                           <div className="flex justify-end">
                             <span className={metricValueClass(primaryMetric === 'total')}>{fmt(row.totalAvg)}</span>
@@ -749,6 +738,17 @@ export function PracticeSummaryTab({
                           </div>
                           <div className="text-[11px] leading-tight text-muted-foreground">
                             best {fmt(row.carryBest)}
+                          </div>
+                        </td>
+                        <td
+                          className="py-1.5 pl-2 pr-2 text-right whitespace-nowrap tabular-nums"
+                          title={actualTotalTitle(row.actualTotal, row.actualTotalCount)}
+                        >
+                          <div className="flex justify-end">
+                            <span className={metricValueClass(false)}>{fmt(row.actualTotal)}</span>
+                          </div>
+                          <div className="text-[11px] leading-tight text-muted-foreground">
+                            {row.actualTotalCount ? `${row.actualTotalCount} shots` : 'no shots'}
                           </div>
                         </td>
 
