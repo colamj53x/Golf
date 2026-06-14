@@ -591,11 +591,13 @@ export function PracticeDashboardTab() {
     const bestShotConditions = config.bestShotDefinition?.conditions?.length
       ? config.bestShotDefinition.conditions
       : getDefaultBestShotDefinition(selectedShotType).conditions;
+    const distanceTolerancePct = distanceTarget ? toleranceForMetric(distanceTarget.category) : 0;
+    const lateralTolerancePct = lateralTarget ? toleranceForMetric(lateralTarget.category) : 0;
     const distanceShotPct = shots.length
-      ? pctWithinTarget('total_distance', shots, distanceTarget?.targetMin ?? null, distanceTarget?.targetMax ?? null, 0)
+      ? pctWithinTarget('total_distance', shots, distanceTarget?.targetMin ?? null, distanceTarget?.targetMax ?? null, distanceTolerancePct)
       : null;
     const lateralShotPct = shots.length
-      ? pctWithinTarget('avg_lateral_miss', shots, lateralTarget?.targetMin ?? null, lateralTarget?.targetMax ?? null, 0)
+      ? pctWithinTarget('avg_lateral_miss', shots, lateralTarget?.targetMin ?? null, lateralTarget?.targetMax ?? null, lateralTolerancePct)
       : null;
     const bestShotStats = getBestShotStats(shots, config.metrics, bestShotConditions);
 
