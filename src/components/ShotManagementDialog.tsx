@@ -20,6 +20,7 @@ interface ShotManagementDialogProps {
   onOpenChange: (open: boolean) => void;
   session: PracticeSession | null;
   distanceTargetMin?: number;
+  distanceTargetMax?: number | null;
   lateralTargetMax?: number;
 }
 
@@ -28,6 +29,7 @@ export function ShotManagementDialog({
   onOpenChange,
   session,
   distanceTargetMin = 145,
+  distanceTargetMax = null,
   lateralTargetMax = 10,
 }: ShotManagementDialogProps) {
   const { updatePracticeSession } = usePracticeData();
@@ -71,6 +73,7 @@ export function ShotManagementDialog({
       const result = calculateMetricsFromShots(
         includedPracticeShots,
         distanceTargetMin,
+        distanceTargetMax,
         lateralTargetMax
       );
 

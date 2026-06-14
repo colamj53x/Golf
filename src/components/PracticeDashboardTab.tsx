@@ -279,9 +279,10 @@ export function PracticeDashboardTab() {
       const lateralTarget = config.metrics.find(m => m.id === 'avg_lateral_miss');
       
       const distanceMin = distanceTarget?.targetMin ?? 145;
+      const distanceMax = distanceTarget?.targetMax ?? null;
       const lateralMax = lateralTarget?.targetMax ?? 10;
 
-      const calculated = calculateMetricsFromShots(shots, distanceMin, lateralMax);
+      const calculated = calculateMetricsFromShots(shots, distanceMin, distanceMax, lateralMax);
       setCalculatedData(calculated);
 
       // Pre-fill the form with calculated values
@@ -443,16 +444,6 @@ export function PracticeDashboardTab() {
   const calculateSessionConsistency = (session: PracticeSession | null) => {
     if (!session) return { distance: null, lateral: null, best: null, overall: null };
 
-    // Use stored consistency data if available (from spreadsheet upload)
-    if (session.consistency) {
-      return {
-        distance: session.consistency.distancePct,
-        lateral: session.consistency.lateralPct,
-        best: session.consistency.bestPct,
-        overall: session.consistency.overallScore,
-      };
-    }
-
     const totalDistanceMetric = session.metrics.find(m => m.metricId === 'total_distance');
     const lateralMissMetric = session.metrics.find(m => m.metricId === 'avg_lateral_miss');
     
@@ -532,12 +523,9 @@ export function PracticeDashboardTab() {
     };
   };
 
-  // Calculate 3-session rolling average consistency scores
-  // Only include sessions that have shot-by-shot data (consistency data from spreadsheet)
+  // Calculate 3-session rolling average consistency scores from the same visible metric targets.
   const calculateRollingConsistency = () => {
-    // Filter to only sessions that have consistency data (from spreadsheet upload)
-    const sessionsWithConsistencyData = allSessions.filter(s => s.consistency !== undefined);
-    const recentSessions = sessionsWithConsistencyData.slice(0, 3); // Most recent 3 with data
+    const recentSessions = allSessions.slice(0, 3);
     
     if (recentSessions.length === 0) return { distance: null, lateral: null, best: null, overall: null, sessionCount: 0 };
 
@@ -1375,6 +1363,7 @@ export function PracticeDashboardTab() {
         onOpenChange={setIsShotManagementOpen}
         session={shotManagementSession}
         distanceTargetMin={config.metrics.find(m => m.id === 'total_distance')?.targetMin ?? 145}
+        distanceTargetMax={config.metrics.find(m => m.id === 'total_distance')?.targetMax ?? null}
         lateralTargetMax={config.metrics.find(m => m.id === 'avg_lateral_miss')?.targetMax ?? 10}
       />
       

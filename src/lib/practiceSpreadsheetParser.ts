@@ -221,6 +221,7 @@ export async function parseSpreadsheet(file: File): Promise<PracticeShot[]> {
 export function calculateMetricsFromShots(
   shots: PracticeShot[],
   distanceTargetMin: number = 145,
+  distanceTargetMax: number | null = null,
   lateralTargetMax: number = 10
 ): CalculatedMetrics {
   if (shots.length === 0) {
@@ -275,9 +276,14 @@ export function calculateMetricsFromShots(
   else if (avgCarrySide < -2) biasDirection = 'Slight left';
 
   // Consistency calculations
-  const distanceCount = shots.filter(s => s.total >= distanceTargetMin).length;
-  const lateralCount = shots.filter(s => Math.abs(s.carrySide) <= lateralTargetMax).length;
-  const bestCount = shots.filter(s => s.total >= distanceTargetMin && Math.abs(s.carrySide) <= lateralTargetMax).length;
+  const isDistanceInTarget = (shot: PracticeShot) => (
+    shot.total >= distanceTargetMin &&
+    (distanceTargetMax === null || shot.total <= distanceTargetMax)
+  );
+  const isLateralInTarget = (shot: PracticeShot) => Math.abs(shot.carrySide) <= lateralTargetMax;
+  const distanceCount = shots.filter(isDistanceInTarget).length;
+  const lateralCount = shots.filter(isLateralInTarget).length;
+  const bestCount = shots.filter(s => isDistanceInTarget(s) && isLateralInTarget(s)).length;
 
   const distancePct = round((distanceCount / totalShots) * 100, 1);
   const lateralPct = round((lateralCount / totalShots) * 100, 1);
