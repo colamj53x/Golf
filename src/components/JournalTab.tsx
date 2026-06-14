@@ -509,6 +509,51 @@ export function JournalTab() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
+                  {selectedRoundReview && (
+                    <div className="space-y-5 rounded-lg border bg-muted/10 p-4 md:p-5">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <h3 className="text-base font-semibold">Round Evidence</h3>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">Stats and evidence attached to this reflection.</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}>
+                          <ExternalLink className="h-4 w-4" />
+                          Open Round Review
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <MetricEvidenceCard
+                          label="Shot quality"
+                          value={formatMetric(selectedRoundReview.round.shotQualityIndex)}
+                          context={`Season avg ${formatMetric(selectedRoundReview.season.shotQualityIndex)}`}
+                          interpretation={evidenceLabel('shotQuality', selectedRoundReview.round.shotQualityIndex)}
+                        />
+                        <MetricEvidenceCard
+                          label="Target success"
+                          value={formatMetric(selectedRoundReview.round.targetSuccessPct, true)}
+                          context={`Last 5 avg ${formatMetric(selectedRoundReview.last5.targetSuccessPct, true)}`}
+                          interpretation={evidenceLabel('targetSuccess', selectedRoundReview.round.targetSuccessPct)}
+                        />
+                        <MetricEvidenceCard
+                          label="Safe shot rate"
+                          value={formatMetric(selectedRoundReview.round.safeShotRate, true)}
+                          context={`Previous 5 avg ${formatMetric(selectedRoundReview.previous5.safeShotRate, true)}`}
+                          interpretation={evidenceLabel('safeShotRate', selectedRoundReview.round.safeShotRate)}
+                        />
+                        <MetricEvidenceCard
+                          label="Scoring zone"
+                          value={formatMetric(selectedRoundReview.round.scoringZoneSuccessPct, true)}
+                          context={`Season avg ${formatMetric(selectedRoundReview.season.scoringZoneSuccessPct, true)}`}
+                          interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
+                        />
+                      </div>
+                      <div className="rounded-lg border bg-background p-4">
+                        <h3 className="text-sm font-semibold">What do the numbers suggest?</h3>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{roundEvidenceInterpretation(selectedRoundReview)}</p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-5">
                     <div className="space-y-2">
                       <Label htmlFor="one-line-story">One-line round story</Label>
@@ -565,77 +610,6 @@ export function JournalTab() {
                       </div>
                     </div>
                   </div>
-
-                  {selectedRoundReview && (
-                    <div className="space-y-5 rounded-lg border bg-muted/10 p-4 md:p-5">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold">Round Evidence</h3>
-                          <p className="mt-1 text-sm leading-6 text-muted-foreground">Stats and evidence attached to this reflection.</p>
-                        </div>
-                        <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}>
-                          <ExternalLink className="h-4 w-4" />
-                          Open Round Review
-                        </Button>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <MetricEvidenceCard
-                          label="Shot quality"
-                          value={formatMetric(selectedRoundReview.round.shotQualityIndex)}
-                          context={`Season avg ${formatMetric(selectedRoundReview.season.shotQualityIndex)}`}
-                          interpretation={evidenceLabel('shotQuality', selectedRoundReview.round.shotQualityIndex)}
-                        />
-                        <MetricEvidenceCard
-                          label="Target success"
-                          value={formatMetric(selectedRoundReview.round.targetSuccessPct, true)}
-                          context={`Last 5 avg ${formatMetric(selectedRoundReview.last5.targetSuccessPct, true)}`}
-                          interpretation={evidenceLabel('targetSuccess', selectedRoundReview.round.targetSuccessPct)}
-                        />
-                        <MetricEvidenceCard
-                          label="Safe shot rate"
-                          value={formatMetric(selectedRoundReview.round.safeShotRate, true)}
-                          context={`Previous 5 avg ${formatMetric(selectedRoundReview.previous5.safeShotRate, true)}`}
-                          interpretation={evidenceLabel('safeShotRate', selectedRoundReview.round.safeShotRate)}
-                        />
-                        <MetricEvidenceCard
-                          label="Scoring zone"
-                          value={formatMetric(selectedRoundReview.round.scoringZoneSuccessPct, true)}
-                          context={`Season avg ${formatMetric(selectedRoundReview.season.scoringZoneSuccessPct, true)}`}
-                          interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
-                        />
-                      </div>
-                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-                        <div className="rounded-lg border bg-background p-4">
-                          <h3 className="text-sm font-semibold">What do the numbers suggest?</h3>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{roundEvidenceInterpretation(selectedRoundReview)}</p>
-                        </div>
-                        <div className="space-y-4 rounded-lg border bg-background p-4">
-                          <div className="space-y-2">
-                            <Label>Does this match how the round felt?</Label>
-                            <Select value={draft.evidenceMatch ?? 'none'} onValueChange={(value) => updateDraft({ evidenceMatch: value === 'none' ? null : value as JournalEntryDraft['evidenceMatch'] })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Select an answer</SelectItem>
-                                <SelectItem value="yes">Yes</SelectItem>
-                                <SelectItem value="partly">Partly</SelectItem>
-                                <SelectItem value="no">No</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="evidence-match-reason">Why?</Label>
-                            <Textarea
-                              id="evidence-match-reason"
-                              value={draft.evidenceMatchReason}
-                              onChange={(event) => updateDraft({ evidenceMatchReason: event.target.value })}
-                              className="min-h-[104px]"
-                              placeholder="Where did the data confirm your memory, and where did it challenge it?"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
