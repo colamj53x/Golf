@@ -29,7 +29,12 @@ export async function hydrateDurableLocalSettings(userId: string): Promise<void>
   const values = data.metrics as Record<string, Json | undefined>;
   for (const key of KEYS) {
     const value = values[key];
-    if (value !== undefined) localStorage.setItem(key, JSON.stringify(value));
+    if (value === undefined) continue;
+    if (value === null) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
   }
   window.dispatchEvent(new Event('golf-durable-local-settings-hydrated'));
 }

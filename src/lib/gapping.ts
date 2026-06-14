@@ -977,7 +977,16 @@ function buildRow(
 export function loadShotCategoryOverrides(): ShotCategoryOverrides {
   try {
     const raw = localStorage.getItem(SHOT_CATEGORY_OVERRIDES_KEY);
-    return raw ? JSON.parse(raw) as ShotCategoryOverrides : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const override = value as Partial<ShotCategoryOverride>;
+        return typeof override.profileId === 'string' && (override.target === 'green' || override.target === 'fairway');
+      }),
+    ) as ShotCategoryOverrides;
   } catch {
     return {};
   }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildClubGappingRows } from '@/lib/gapping';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildClubGappingRows, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_KEY } from '@/lib/gapping';
 import type { ShotProfile } from '@/lib/shotProfiles';
 import type { Shot } from '@/types/golf';
 
@@ -65,7 +65,27 @@ const fullIronProfile = (power: 'full' | '9pm', enabled = true): ShotProfile => 
   targets: ['green'],
 });
 
+function stubLocalStorage(initial: Record<string, string> = {}) {
+  const store = new Map(Object.entries(initial));
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => store.set(key, value),
+    removeItem: (key: string) => store.delete(key),
+    clear: () => store.clear(),
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('buildClubGappingRows', () => {
+  it('treats durable-cache null shot category overrides as an empty map', () => {
+    stubLocalStorage({ [SHOT_CATEGORY_OVERRIDES_KEY]: 'null' });
+
+    expect(loadShotCategoryOverrides()).toEqual({});
+  });
+
   it('builds a tee gapping row from a normalized driver shot', () => {
     const rows = buildClubGappingRows({
       profiles: { [driverProfile.id]: driverProfile },
