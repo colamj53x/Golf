@@ -82,12 +82,16 @@ export interface JournalEntryDraft {
   playingPartnerIds: string[];
   weatherConditions: string;
   generalContext: string;
+  oneLineStory: string;
   overallComments: string;
   overallFeelRating: number | null;
+  feelReason: string;
   bestThingToday: string;
   biggestFrustration: string;
   mainLearning: string;
   focusForNextRound: string;
+  evidenceMatch: 'yes' | 'partly' | 'no' | null;
+  evidenceMatchReason: string;
   categories: JournalCategoryReflections;
 }
 

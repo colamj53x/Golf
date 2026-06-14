@@ -22,12 +22,16 @@ export function createEmptyJournalEntryDraft(date = new Date().toISOString().sli
     playingPartnerIds: [],
     weatherConditions: '',
     generalContext: '',
+    oneLineStory: '',
     overallComments: '',
     overallFeelRating: null,
+    feelReason: '',
     bestThingToday: '',
     biggestFrustration: '',
     mainLearning: '',
     focusForNextRound: '',
+    evidenceMatch: null,
+    evidenceMatchReason: '',
     categories: Object.fromEntries(JOURNAL_CATEGORIES.map(({ key }) => [key, {
       feelRating: null,
       whatHappened: '',
@@ -50,12 +54,16 @@ export function normalizeJournalEntryDraft(value: Partial<JournalEntryDraft>): J
     playingPartnerIds: Array.isArray(value.playingPartnerIds) ? value.playingPartnerIds.filter((id): id is string => typeof id === 'string') : [],
     weatherConditions: typeof value.weatherConditions === 'string' ? value.weatherConditions : '',
     generalContext: typeof value.generalContext === 'string' ? value.generalContext : '',
+    oneLineStory: typeof value.oneLineStory === 'string' ? value.oneLineStory : '',
     overallComments: typeof value.overallComments === 'string' ? value.overallComments : '',
     overallFeelRating: typeof value.overallFeelRating === 'number' ? value.overallFeelRating : null,
+    feelReason: typeof value.feelReason === 'string' ? value.feelReason : '',
     bestThingToday: typeof value.bestThingToday === 'string' ? value.bestThingToday : '',
     biggestFrustration: typeof value.biggestFrustration === 'string' ? value.biggestFrustration : '',
     mainLearning: typeof value.mainLearning === 'string' ? value.mainLearning : '',
     focusForNextRound: typeof value.focusForNextRound === 'string' ? value.focusForNextRound : '',
+    evidenceMatch: value.evidenceMatch === 'yes' || value.evidenceMatch === 'partly' || value.evidenceMatch === 'no' ? value.evidenceMatch : null,
+    evidenceMatchReason: typeof value.evidenceMatchReason === 'string' ? value.evidenceMatchReason : '',
     categories: Object.fromEntries(JOURNAL_CATEGORIES.map(({ key }) => {
       const category = value.categories?.[key] ?? empty.categories[key];
       return [key, {
@@ -74,16 +82,19 @@ export function hasJournalEntryContent(entry: JournalEntryDraft): boolean {
     entry.courseName,
     entry.weatherConditions,
     entry.generalContext,
+    entry.oneLineStory,
     entry.overallComments,
+    entry.feelReason,
     entry.bestThingToday,
     entry.biggestFrustration,
     entry.mainLearning,
     entry.focusForNextRound,
+    entry.evidenceMatchReason,
     ...JOURNAL_CATEGORIES.flatMap(({ key }) => {
       const category = entry.categories[key];
       return [category.whatHappened, category.likelyCause, category.tryNextTime, category.generalNotes];
     }),
-  ].some((field) => field.trim().length > 0) || entry.playingPartnerIds.length > 0 || entry.overallFeelRating !== null;
+  ].some((field) => field.trim().length > 0) || entry.playingPartnerIds.length > 0 || entry.overallFeelRating !== null || entry.evidenceMatch !== null;
 }
 
 function lines(values: string[]): string {
@@ -110,11 +121,14 @@ export function buildLastFiveReflection(entries: JournalEntry[]): string {
 
   const source = latest.map((entry, index) => lines([
     `Round ${index + 1}: ${entryLabel(entry)}`,
+    entry.oneLineStory && `Story: ${entry.oneLineStory}`,
     entry.overallComments && `Overall: ${entry.overallComments}`,
+    entry.overallFeelRating && `Feel: ${entry.overallFeelRating}/5${entry.feelReason ? ` - ${entry.feelReason}` : ''}`,
     entry.bestThingToday && `Best thing: ${entry.bestThingToday}`,
-    entry.biggestFrustration && `Frustration: ${entry.biggestFrustration}`,
+    entry.biggestFrustration && `Biggest cost: ${entry.biggestFrustration}`,
     entry.mainLearning && `Learning: ${entry.mainLearning}`,
-    entry.focusForNextRound && `Next focus: ${entry.focusForNextRound}`,
+    entry.focusForNextRound && `Next commitment: ${entry.focusForNextRound}`,
+    entry.evidenceMatch && `Evidence match: ${entry.evidenceMatch}${entry.evidenceMatchReason ? ` - ${entry.evidenceMatchReason}` : ''}`,
   ])).join('\n\n');
 
   const categoryBlocks = JOURNAL_CATEGORIES.map(({ key, label }) => {
@@ -203,6 +217,7 @@ function repeatedThemes(entries: JournalEntry[]): string {
     entry.biggestFrustration,
     entry.mainLearning,
     entry.focusForNextRound,
+    entry.evidenceMatchReason,
   ]).filter((value) => value.trim().length > 0);
   return themes.length ? themes.slice(0, 10).map((theme) => `- ${theme}`).join('\n') : 'No repeated written themes are obvious yet.';
 }

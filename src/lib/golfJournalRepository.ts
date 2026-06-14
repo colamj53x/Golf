@@ -32,12 +32,16 @@ function parseEntry(row: JournalEntryRow): JournalEntry {
     playingPartnerIds: row.playing_partner_ids ?? [],
     weatherConditions: row.weather_conditions ?? '',
     generalContext: row.general_context ?? '',
+    oneLineStory: row.one_line_story ?? '',
     overallComments: row.overall_comments ?? '',
     overallFeelRating: row.overall_feel_rating,
+    feelReason: row.feel_reason ?? '',
     bestThingToday: row.best_thing_today ?? '',
     biggestFrustration: row.biggest_frustration ?? '',
     mainLearning: row.main_learning ?? '',
     focusForNextRound: row.focus_for_next_round ?? '',
+    evidenceMatch: row.evidence_match,
+    evidenceMatchReason: row.evidence_match_reason ?? '',
     categories: row.categories as JournalEntryDraft['categories'],
   });
   return {
@@ -102,12 +106,16 @@ function entryPayload(userId: string, draft: JournalEntryDraft) {
     playing_partner_ids: draft.playingPartnerIds,
     weather_conditions: draft.weatherConditions,
     general_context: draft.generalContext,
+    one_line_story: draft.oneLineStory,
     overall_comments: draft.overallComments,
     overall_feel_rating: draft.overallFeelRating,
+    feel_reason: draft.feelReason,
     best_thing_today: draft.bestThingToday,
     biggest_frustration: draft.biggestFrustration,
     main_learning: draft.mainLearning,
     focus_for_next_round: draft.focusForNextRound,
+    evidence_match: draft.evidenceMatch,
+    evidence_match_reason: draft.evidenceMatchReason,
     categories: draft.categories as unknown as Json,
   };
 }

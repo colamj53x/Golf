@@ -52,10 +52,14 @@ export type Database = {
           course_name: string | null
           created_at: string
           entry_date: string
+          evidence_match: "yes" | "partly" | "no" | null
+          evidence_match_reason: string
+          feel_reason: string
           focus_for_next_round: string
           general_context: string
           id: string
           main_learning: string
+          one_line_story: string
           overall_comments: string
           overall_feel_rating: number | null
           playing_partner_ids: string[]
@@ -72,10 +76,14 @@ export type Database = {
           course_name?: string | null
           created_at?: string
           entry_date: string
+          evidence_match?: "yes" | "partly" | "no" | null
+          evidence_match_reason?: string
+          feel_reason?: string
           focus_for_next_round?: string
           general_context?: string
           id?: string
           main_learning?: string
+          one_line_story?: string
           overall_comments?: string
           overall_feel_rating?: number | null
           playing_partner_ids?: string[]
@@ -92,10 +100,14 @@ export type Database = {
           course_name?: string | null
           created_at?: string
           entry_date?: string
+          evidence_match?: "yes" | "partly" | "no" | null
+          evidence_match_reason?: string
+          feel_reason?: string
           focus_for_next_round?: string
           general_context?: string
           id?: string
           main_learning?: string
+          one_line_story?: string
           overall_comments?: string
           overall_feel_rating?: number | null
           playing_partner_ids?: string[]
