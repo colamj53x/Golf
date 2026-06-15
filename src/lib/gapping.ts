@@ -280,31 +280,15 @@ export function getSidePattern(row: Pick<GappingRow, 'displaySideLeft' | 'displa
   label: string;
   className: string;
 } {
-  const left = row.displaySideLeft ?? 0;
-  const right = row.displaySideRight ?? 0;
   const bias = row.sideBias ?? 0;
-  const spread = Math.max(left, right);
   const absBias = Math.abs(bias);
-  const direction = bias > 0 ? 'R' : 'L';
 
   if (row.displaySideLeft === null && row.displaySideRight === null && row.sideBias === null) {
     return { label: '-', className: 'text-muted-foreground' };
   }
-  if (absBias >= 8) {
-    return { label: `${Math.round(absBias)}m ${direction} bias`, className: 'text-red-600 font-medium' };
-  }
-  if (spread >= 22) {
-    return { label: 'Wide both', className: 'text-red-600 font-medium' };
-  }
-  if (left >= 15 && left >= right * 1.35) {
-    return { label: 'Left heavy', className: 'text-amber-600 font-medium' };
-  }
-  if (right >= 15 && right >= left * 1.35) {
-    return { label: 'Right heavy', className: 'text-amber-600 font-medium' };
-  }
-  if (absBias >= 4) {
-    return { label: `${Math.round(absBias)}m ${direction}`, className: 'text-amber-600 font-medium' };
-  }
+  if (absBias < 3) return { label: 'Neutral', className: 'text-emerald-600 font-medium' };
+  if (bias > 0) return { label: 'Right', className: 'text-amber-600 font-medium' };
+  if (bias < 0) return { label: 'Left', className: 'text-amber-600 font-medium' };
   return { label: 'Neutral', className: 'text-emerald-600 font-medium' };
 }
 
@@ -984,19 +968,21 @@ function buildRow(
   const variationTotals = referenceShots.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
   const liveTotal = mean(totals);
+  const liveTotalMin = totals.length ? Math.min(...totals) : null;
+  const liveTotalMax = totals.length ? Math.max(...totals) : null;
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
   const displayTotal = liveTotal ?? rangeTotal;
   const liveVariationPct = variationPct(variationTotals, liveTotal);
   const displayVariationPct = liveVariationPct ?? rangeLiveVariationPct;
   const usesLiveTotal = displayTotal !== null && liveTotal !== null && Math.abs(displayTotal - liveTotal) < 0.5;
-  const variationWindow = displayTotal !== null && displayVariationPct !== null
+  const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
+  const liveCarryWindow = liveTotalMin !== null && liveTotalMax !== null
     ? {
-        min: displayTotal * (1 - displayVariationPct / 100),
-        max: displayTotal * (1 + displayVariationPct / 100),
+        min: getRangeCarryEstimate(liveTotalMin, practiceConfig),
+        max: getRangeCarryEstimate(liveTotalMax, practiceConfig),
       }
     : null;
-  const liveCarry = getRangeCarryEstimate(liveTotal, practiceConfig);
-  const displayCarryWindow = rangeSideStats.carryMin !== null && rangeSideStats.carryMax !== null
+  const rangeCarryWindow = rangeSideStats.carryMin !== null && rangeSideStats.carryMax !== null
     ? { min: rangeSideStats.carryMin, max: rangeSideStats.carryMax }
     : getRangeCarryWindow(displayTotal, practiceConfig);
   const estimatedVerticalWindow = getEstimatedVerticalWindow(displayTotal, practiceConfig);
@@ -1021,10 +1007,10 @@ function buildRow(
     displayVariationPct,
     displayTotal,
     displayCarry: (usesLiveTotal ? liveCarry : null) ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? rangeCarry,
-    displayCarryMin: displayCarryWindow.min,
-    displayCarryMax: displayCarryWindow.max,
-    totalMin: variationWindow?.min ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
-    totalMax: variationWindow?.max ?? (rangeOnly ? rangeTotalWindow.max : estimatedVerticalWindow.max),
+    displayCarryMin: liveCarryWindow?.min ?? rangeCarryWindow.min,
+    displayCarryMax: liveCarryWindow?.max ?? rangeCarryWindow.max,
+    totalMin: liveTotalMin ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
+    totalMax: liveTotalMax ?? (rangeOnly ? rangeTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
     displaySideLeft: (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
