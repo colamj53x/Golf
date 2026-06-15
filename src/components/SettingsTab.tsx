@@ -4,7 +4,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Goal, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
+import { Crosshair, Goal, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -24,6 +24,19 @@ import { ProfileTarget, ShotProfile, updateShotProfile, useShotProfiles } from '
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
 import { getClubConfigId } from '@/lib/golfCalculations';
+import {
+  DEFAULT_SHOT_PICKER_ADJUSTMENTS,
+  getClubAdjustmentLabel,
+  getDirectionAdjustmentLabel,
+  parseShotPickerAdjustments,
+  type ShotPickerAdjustmentRule,
+  type ShotPickerAdjustmentSettings,
+  type ShotPickerDirection,
+  type ShotPickerDirectionAmount,
+  type ShotPickerFeet,
+  type ShotPickerLie,
+  type ShotPickerSlope,
+} from '@/lib/shotPickerAdjustments';
 
 const SETTINGS_SECTIONS = [
   {
@@ -31,6 +44,12 @@ const SETTINGS_SECTIONS = [
     title: 'Global Settings',
     description: 'Calculation rules and gapping targets.',
     icon: SettingsIcon,
+  },
+  {
+    href: '#settings-shot-picker-adjustments',
+    title: 'Shot Picker Adjustments',
+    description: 'Lie, slope, and feet rules for on-course targeting.',
+    icon: Crosshair,
   },
   {
     href: '#settings-shot-profiles',
@@ -44,6 +63,36 @@ const SETTINGS_SECTIONS = [
     description: 'Distance-to-target cutoffs for Full and Half shots.',
     icon: SlidersHorizontal,
   },
+];
+
+const lieAdjustmentRows: Array<{ key: ShotPickerLie; label: string; note: string }> = [
+  { key: 'tee', label: 'Tee', note: 'Clean lie. Usually no adjustment.' },
+  { key: 'fairway', label: 'Fairway', note: 'Standard approach baseline.' },
+  { key: 'roughRecovery', label: 'Rough / Recovery', note: 'Default is one more club.' },
+];
+
+const slopeAdjustmentRows: Array<{ key: ShotPickerSlope; label: string; note: string }> = [
+  { key: 'flat', label: 'Flat', note: 'No slope adjustment.' },
+  { key: 'uphill', label: 'Uphill', note: 'Default is one more club.' },
+  { key: 'downhill', label: 'Downhill', note: 'Default is one less club.' },
+];
+
+const feetAdjustmentRows: Array<{ key: ShotPickerFeet; label: string; note: string }> = [
+  { key: 'level', label: 'Feet level', note: 'No stance adjustment.' },
+  { key: 'above', label: 'Ball above feet', note: 'Default target is right for a right-handed player.' },
+  { key: 'below', label: 'Ball below feet', note: 'Default target is left for a right-handed player.' },
+];
+
+const directionOptions: Array<{ value: ShotPickerDirection; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'left', label: 'Aim left' },
+  { value: 'right', label: 'Aim right' },
+];
+
+const directionAmountOptions: Array<{ value: ShotPickerDirectionAmount; label: string }> = [
+  { value: 'small', label: 'Slight' },
+  { value: 'medium', label: 'Moderate' },
+  { value: 'large', label: 'Large' },
 ];
 
 export function SettingsTab() {
@@ -301,6 +350,10 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
+      <section id="settings-shot-picker-adjustments" className="scroll-mt-6">
+        <ShotPickerAdjustmentsCard />
+      </section>
+
       <section id="settings-shot-profiles" className="scroll-mt-6">
         <ShotProfilesCard />
       </section>
@@ -309,6 +362,163 @@ export function SettingsTab() {
         <ShotClassificationRulesCard />
       </section>
 
+    </div>
+  );
+}
+
+function ShotPickerAdjustmentsCard() {
+  const { shotPickerAdjustments, setShotPickerAdjustments } = useGolfData();
+  const [draft, setDraft] = useState<ShotPickerAdjustmentSettings>(() => parseShotPickerAdjustments(shotPickerAdjustments));
+
+  useEffect(() => {
+    setDraft(parseShotPickerAdjustments(shotPickerAdjustments));
+  }, [shotPickerAdjustments]);
+
+  const setRule = (
+    group: keyof ShotPickerAdjustmentSettings,
+    key: string,
+    updates: Partial<ShotPickerAdjustmentRule>,
+  ) => {
+    setDraft(prev => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [key]: {
+          ...prev[group][key as never],
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const handleSave = () => {
+    setShotPickerAdjustments(parseShotPickerAdjustments(draft));
+    toast.success('Shot Picker adjustments saved');
+  };
+
+  const handleReset = () => {
+    setDraft(DEFAULT_SHOT_PICKER_ADJUSTMENTS);
+    setShotPickerAdjustments(DEFAULT_SHOT_PICKER_ADJUSTMENTS);
+    toast.info('Shot Picker adjustments reset');
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Crosshair className="h-5 w-5" />
+            Shot Picker Adjustments
+          </CardTitle>
+          <CardDescription>
+            Tune the default club and target adjustments used by the Play Shot Picker.
+          </CardDescription>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" size="sm" onClick={handleReset}>Reset</Button>
+          <Button size="sm" onClick={handleSave} className="gap-2">
+            <Save className="h-4 w-4" />
+            Save
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <AdjustmentGroup
+          title="Lie"
+          rows={lieAdjustmentRows}
+          rules={draft.lie}
+          onChange={(key, updates) => setRule('lie', key, updates)}
+        />
+        <AdjustmentGroup
+          title="Slope"
+          rows={slopeAdjustmentRows}
+          rules={draft.slope}
+          onChange={(key, updates) => setRule('slope', key, updates)}
+        />
+        <AdjustmentGroup
+          title="Feet"
+          rows={feetAdjustmentRows}
+          rules={draft.feet}
+          onChange={(key, updates) => setRule('feet', key, updates)}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdjustmentGroup<K extends string>({
+  title,
+  rows,
+  rules,
+  onChange,
+}: {
+  title: string;
+  rows: Array<{ key: K; label: string; note: string }>;
+  rules: Record<K, ShotPickerAdjustmentRule>;
+  onChange: (key: K, updates: Partial<ShotPickerAdjustmentRule>) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <div className="grid gap-3">
+        {rows.map((row) => {
+          const rule = rules[row.key];
+          return (
+            <div key={row.key} className="grid gap-3 rounded-md border bg-background p-3 lg:grid-cols-[minmax(160px,1fr)_120px_150px_140px] lg:items-center">
+              <div>
+                <div className="font-medium">{row.label}</div>
+                <div className="text-xs text-muted-foreground">{row.note}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {getClubAdjustmentLabel(rule.clubDelta)} · {getDirectionAdjustmentLabel(rule)}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`adjustment-club-${title}-${row.key}`} className="text-xs">Club</Label>
+                <Input
+                  id={`adjustment-club-${title}-${row.key}`}
+                  type="number"
+                  min={-3}
+                  max={3}
+                  step={1}
+                  value={rule.clubDelta}
+                  onChange={(event) => onChange(row.key, { clubDelta: Math.max(-3, Math.min(3, Math.round(Number(event.target.value) || 0))) })}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Direction</Label>
+                <Select value={rule.direction} onValueChange={(value) => onChange(row.key, { direction: value as ShotPickerDirection })}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {directionOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Bias size</Label>
+                <Select
+                  value={rule.directionAmount}
+                  onValueChange={(value) => onChange(row.key, { directionAmount: value as ShotPickerDirectionAmount })}
+                  disabled={rule.direction === 'none'}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {directionAmountOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

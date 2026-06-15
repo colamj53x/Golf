@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 import type { ClubConfig, PlayingPartner } from '@/types/golf';
+import { parseShotPickerAdjustments, type ShotPickerAdjustmentSettings } from '@/lib/shotPickerAdjustments';
 
 export const USER_SETTINGS_CONFIG_KEY = '__user_settings__:golf_data';
 export const USER_SETTINGS_CONFIG_PREFIX = '__user_settings__:';
@@ -15,6 +16,7 @@ export interface GolfUserSettings {
   practiceBallFlightTolerancePct: number;
   practiceOtherTolerancePct: number;
   todayRecentShotCount: number;
+  shotPickerAdjustments: ShotPickerAdjustmentSettings;
   playingPartners: PlayingPartner[];
 }
 
@@ -83,6 +85,7 @@ export function parseGolfUserSettings(
     practiceBallFlightTolerancePct: numberOr(value.practiceBallFlightTolerancePct, fallback.practiceBallFlightTolerancePct),
     practiceOtherTolerancePct: numberOr(value.practiceOtherTolerancePct, fallback.practiceOtherTolerancePct),
     todayRecentShotCount: numberOr(value.todayRecentShotCount, fallback.todayRecentShotCount),
+    shotPickerAdjustments: parseShotPickerAdjustments(value.shotPickerAdjustments ?? fallback.shotPickerAdjustments),
     playingPartners,
   };
 }

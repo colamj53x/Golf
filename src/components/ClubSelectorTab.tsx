@@ -19,6 +19,15 @@ import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } 
 import { POWER_OPTIONS, SHOT_TYPES, parsePracticeConfigKey } from '@/types/practiceClubs';
 import { ClubConfig, Shot } from '@/types/golf';
 import { ClubPracticeConfig, PracticeSession } from '@/types/practice';
+import {
+  SHOT_PICKER_CLUB_DELTA_METRES,
+  getClubAdjustmentLabel,
+  getDirectionAdjustmentLabel,
+  type ShotPickerAdjustmentRule,
+  type ShotPickerFeet,
+  type ShotPickerLie,
+  type ShotPickerSlope,
+} from '@/lib/shotPickerAdjustments';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
@@ -36,7 +45,9 @@ const MATRIX_POWER_COLUMNS = [
   { id: '9pm', label: 'Half' },
 ] as const;
 
-type LieOption = 'tee' | 'fairway' | 'roughRecovery' | 'uphill' | 'downhill';
+type LieOption = ShotPickerLie;
+type SlopeOption = ShotPickerSlope;
+type FeetOption = ShotPickerFeet;
 type TargetOption = 'green' | 'fairway';
 type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
@@ -116,8 +127,18 @@ const lieOptions: Array<{ value: LieOption; label: string }> = [
   { value: 'tee', label: 'Tee' },
   { value: 'fairway', label: 'Fairway' },
   { value: 'roughRecovery', label: 'Rough / Recovery' },
-  { value: 'uphill', label: 'Uphill Lie' },
-  { value: 'downhill', label: 'Downhill Lie' },
+];
+
+const slopeOptions: Array<{ value: SlopeOption; label: string }> = [
+  { value: 'flat', label: 'Flat' },
+  { value: 'uphill', label: 'Uphill' },
+  { value: 'downhill', label: 'Downhill' },
+];
+
+const feetOptions: Array<{ value: FeetOption; label: string }> = [
+  { value: 'level', label: 'Feet level' },
+  { value: 'above', label: 'Above' },
+  { value: 'below', label: 'Below' },
 ];
 
 const targetOptions: Array<{ value: TargetOption; label: string }> = [
@@ -166,22 +187,6 @@ function normalizeLie(value: string): string {
 
 function matchesLie(shot: Shot, lie: LieOption): boolean {
   return normalizeLie(shot.startLie || '') === lie;
-}
-
-function isSlopeLie(lie: LieOption): boolean {
-  return lie === 'uphill' || lie === 'downhill';
-}
-
-function slopeDistanceAdjustment(targetDistance: number, lie: LieOption): number {
-  if (lie === 'uphill') return Math.max(8, targetDistance * 0.08);
-  if (lie === 'downhill') return -Math.max(8, targetDistance * 0.08);
-  return 0;
-}
-
-function slopeSideAdjustment(lie: LieOption): number {
-  if (lie === 'uphill') return -5;
-  if (lie === 'downhill') return 5;
-  return 0;
 }
 
 function getSelectorShotContext(lie: LieOption): ShotContext {
@@ -597,9 +602,20 @@ function toggleTroubleSide(current: TroubleOption[], side: TroubleOption): Troub
     : [...current, side];
 }
 
-function buildPointer(result: ClubRecommendation, target: TargetOption, trouble: TroubleOption[], mustCarry: boolean, lie: LieOption): string {
-  if (lie === 'uphill') return 'Take more club for the shorter flight and aim right to cover the left tendency.';
-  if (lie === 'downhill') return 'Take less club for the lower running flight and aim left to cover the right tendency.';
+function buildPointer(
+  result: ClubRecommendation,
+  target: TargetOption,
+  trouble: TroubleOption[],
+  mustCarry: boolean,
+  clubAdjustmentDelta: number,
+  directionNotes: string[],
+): string {
+  if (clubAdjustmentDelta !== 0 || directionNotes.length > 0) {
+    return [
+      clubAdjustmentDelta !== 0 ? getClubAdjustmentLabel(clubAdjustmentDelta) : null,
+      ...directionNotes,
+    ].filter(Boolean).join(' · ');
+  }
   if (mustCarry && result.shortRisk > 30) return 'Take more club or choose a fuller swing; short is the main problem.';
   if (trouble.includes('left') && result.leftRisk > 25) return 'Commit to start line and avoid trying to turn this over.';
   if (trouble.includes('right') && result.rightRisk > 25) return 'Aim with room right; hold the face through impact.';
@@ -616,6 +632,8 @@ function calculateRecommendations(
   minimumSafeDistance: number | null,
   tolerancePct: number,
   lie: LieOption,
+  clubAdjustmentDelta: number,
+  directionNotes: string[],
   target: TargetOption,
   trouble: TroubleOption[],
   mustCarry: boolean,
@@ -633,8 +651,8 @@ function calculateRecommendations(
       const mappedTotal = row.displayTotal;
       const mappedSide = Math.max(row.displaySideLeft ?? 0, row.displaySideRight ?? 0) || null;
       const fallbackDistance = mappedTotal;
-      const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
-      const sideAdjustment = slopeSideAdjustment(lie);
+      const adjustedTargetDistance = targetDistance + clubAdjustmentDelta * SHOT_PICKER_CLUB_DELTA_METRES;
+      const sideAdjustment = 0;
       if (Math.abs(fallbackDistance - adjustedTargetDistance) > 45) return null;
 
       const distanceWindow = 10;
@@ -692,7 +710,7 @@ function calculateRecommendations(
       }, 0) / Math.max(1, trouble.length);
       const carryPenalty = mustCarry ? shortRisk * 0.7 : 0;
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
-      const liePenalty = lie === 'roughRecovery' || isSlopeLie(lie) ? 6 : 0;
+      const liePenalty = lie === 'roughRecovery' || clubAdjustmentDelta !== 0 ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const mappingConfidence = row.recentTargetPct ?? row.rangeConfidence ?? goodShotPct;
       const isShortOfTarget = target === 'green' && avgTotal < adjustedTargetDistance - 5;
@@ -733,8 +751,8 @@ function calculateRecommendations(
       if (minSafe) badges.push(`safe ${Math.round(minSafe)}m+`);
       if (hitPct === 0) badges.push(`no ${target} hits at number`);
       if (Math.abs(avgSide) > sideBand) badges.push(avgSide > 0 ? 'right bias' : 'left bias');
-      if (lie === 'uphill') badges.push('take more club', 'aim right');
-      if (lie === 'downhill') badges.push('take less club', 'aim left');
+      if (clubAdjustmentDelta !== 0) badges.push(getClubAdjustmentLabel(clubAdjustmentDelta).toLowerCase());
+      directionNotes.forEach((note) => badges.push(note.toLowerCase()));
 
       const result: ClubRecommendation = {
         clubId: club.id,
@@ -773,17 +791,23 @@ function calculateRecommendations(
         pointer: '',
       };
 
-      result.pointer = buildPointer(result, target, trouble, mustCarry, lie);
+      result.pointer = buildPointer(result, target, trouble, mustCarry, clubAdjustmentDelta, directionNotes);
       return result;
     })
     .filter((result): result is ClubRecommendation => Boolean(result))
     .sort((a, b) => {
-      const adjustedTargetDistance = targetDistance + slopeDistanceAdjustment(targetDistance, lie);
+      const adjustedTargetDistance = targetDistance + clubAdjustmentDelta * SHOT_PICKER_CLUB_DELTA_METRES;
       const aDistance = Math.abs(a.avgTotal - adjustedTargetDistance);
       const bDistance = Math.abs(b.avgTotal - adjustedTargetDistance);
       return b.bestFitScore - a.bestFitScore || aDistance - bDistance;
     })
     .slice(0, 10);
+}
+
+function getDirectionNotes(rules: ShotPickerAdjustmentRule[]): string[] {
+  return rules
+    .filter((rule) => rule.direction !== 'none')
+    .map((rule) => getDirectionAdjustmentLabel(rule));
 }
 
 export function ClubSelectorTab({
@@ -793,7 +817,7 @@ export function ClubSelectorTab({
   defaultView?: 'club-selector' | 'wedge-matrix';
   singleView?: boolean;
 } = {}) {
-  const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct } = useGolfData();
+  const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct, shotPickerAdjustments } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -802,6 +826,8 @@ export function ClubSelectorTab({
   const [targetDistance, setTargetDistance] = useState('120');
   const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
+  const [slope, setSlope] = useState<SlopeOption>('flat');
+  const [feet, setFeet] = useState<FeetOption>('level');
   const [target, setTarget] = useState<TargetOption>('green');
   const [trouble, setTrouble] = useState<TroubleOption[]>([]);
   const [mustCarry, setMustCarry] = useState(false);
@@ -822,6 +848,14 @@ export function ClubSelectorTab({
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
   const numericDistanceTolerancePct = shotPickerDistanceTolerancePct > 0 ? shotPickerDistanceTolerancePct : 5;
+  const selectedAdjustmentRules = [
+    shotPickerAdjustments.lie[lie],
+    shotPickerAdjustments.slope[slope],
+    shotPickerAdjustments.feet[feet],
+  ];
+  const clubAdjustmentDelta = selectedAdjustmentRules.reduce((total, rule) => total + rule.clubDelta, 0);
+  const directionNotes = getDirectionNotes(selectedAdjustmentRules);
+  const effectiveTargetDistance = numericTarget + clubAdjustmentDelta * SHOT_PICKER_CLUB_DELTA_METRES;
   const selectorGappingRows = useMemo(() => buildClubGappingRows({
     profiles: shotProfiles,
     shots,
@@ -834,8 +868,8 @@ export function ClubSelectorTab({
     shotClassificationRules,
   }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules]);
   const recommendations = useMemo(
-    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry),
-    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, target, trouble, mustCarry],
+    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry),
+    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -1032,6 +1066,32 @@ export function ClubSelectorTab({
                         </Button>
                       ))}
                     </ButtonGroup>
+                    <ButtonGroup label="Slope">
+                      {slopeOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant={slope === option.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSlope(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                    <ButtonGroup label="Feet">
+                      {feetOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant={feet === option.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFeet(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
                     <ButtonGroup label="Target">
                       {targetOptions.map((option) => (
                         <Button
@@ -1084,6 +1144,12 @@ export function ClubSelectorTab({
                     </Button>
                   </div>
                 </div>
+
+                <div className="grid gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+                  <Metric label="Playing number" value={formatDistance(Number.isFinite(effectiveTargetDistance) ? effectiveTargetDistance : null)} />
+                  <Metric label="Club adjustment" value={getClubAdjustmentLabel(clubAdjustmentDelta)} />
+                  <Metric label="Target adjustment" value={directionNotes.length ? directionNotes.join(' · ') : 'Normal target'} />
+                </div>
               </CardContent>
             </Card>
 
@@ -1124,7 +1190,7 @@ export function ClubSelectorTab({
                               </div>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {result.isShortOfTarget
-                                  ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(numericTarget)}.`
+                                  ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(effectiveTargetDistance)}.`
                                   : result.pointer}
                               </p>
                             </div>
@@ -1140,8 +1206,8 @@ export function ClubSelectorTab({
                             <Metric label={`Within ${numericDistanceTolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
                           </div>
                           <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-2">
-                            <Metric label={`Short of ${formatDistance(numericTarget)}`} value={fmtPct(result.nominatedShortPct)} />
-                            <Metric label={`Long of ${formatDistance(numericTarget)}`} value={fmtPct(result.nominatedLongPct)} />
+                            <Metric label={`Short of ${formatDistance(effectiveTargetDistance)}`} value={fmtPct(result.nominatedShortPct)} />
+                            <Metric label={`Long of ${formatDistance(effectiveTargetDistance)}`} value={fmtPct(result.nominatedLongPct)} />
                           </div>
                           {result.badges.length > 0 && (
                             <div className="flex flex-wrap gap-2 px-4 pb-4">

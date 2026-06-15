@@ -18,6 +18,11 @@ import {
   saveGolfUserSettings,
   type GolfUserSettings,
 } from '@/lib/userSettingsRepository';
+import {
+  DEFAULT_SHOT_PICKER_ADJUSTMENTS,
+  parseShotPickerAdjustments,
+  type ShotPickerAdjustmentSettings,
+} from '@/lib/shotPickerAdjustments';
 
 type ShotRow = Database['public']['Tables']['shots']['Row'];
 
@@ -46,6 +51,8 @@ interface GolfDataContextType {
   setPracticeOtherTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   todayRecentShotCount: number;
   setTodayRecentShotCount: React.Dispatch<React.SetStateAction<number>>;
+  shotPickerAdjustments: ShotPickerAdjustmentSettings;
+  setShotPickerAdjustments: React.Dispatch<React.SetStateAction<ShotPickerAdjustmentSettings>>;
   playingPartners: PlayingPartner[];
   setPlayingPartners: React.Dispatch<React.SetStateAction<PlayingPartner[]>>;
   roundReflections: RoundReflection[];
@@ -182,6 +189,15 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     return saved ? parseFloat(saved) : 100;
   });
 
+  const [shotPickerAdjustments, setShotPickerAdjustments] = useState<ShotPickerAdjustmentSettings>(() => {
+    const saved = localStorage.getItem('golf-shot-picker-adjustments');
+    try {
+      return saved ? parseShotPickerAdjustments(JSON.parse(saved)) : DEFAULT_SHOT_PICKER_ADJUSTMENTS;
+    } catch {
+      return DEFAULT_SHOT_PICKER_ADJUSTMENTS;
+    }
+  });
+
   const [playingPartners, setPlayingPartners] = useState<PlayingPartner[]>(() => {
     const saved = localStorage.getItem('golf-playing-partners');
     if (!saved) return [];
@@ -235,6 +251,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   }, [todayRecentShotCount]);
 
   useEffect(() => {
+    localStorage.setItem('golf-shot-picker-adjustments', JSON.stringify(shotPickerAdjustments));
+  }, [shotPickerAdjustments]);
+
+  useEffect(() => {
     localStorage.setItem('golf-playing-partners', JSON.stringify(playingPartners));
   }, [playingPartners]);
 
@@ -248,6 +268,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceBallFlightTolerancePct,
     practiceOtherTolerancePct,
     todayRecentShotCount,
+    shotPickerAdjustments,
     playingPartners,
   };
   const currentSettingsRef = useRef(currentSettings);
@@ -275,6 +296,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           setPracticeBallFlightTolerancePct(next.practiceBallFlightTolerancePct);
           setPracticeOtherTolerancePct(next.practiceOtherTolerancePct);
           setTodayRecentShotCount(next.todayRecentShotCount);
+          setShotPickerAdjustments(next.shotPickerAdjustments);
           setPlayingPartners(next.playingPartners);
         } else {
           await saveGolfUserSettings(user.id, currentSettingsRef.current);
@@ -314,6 +336,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     practiceDistanceTolerancePct,
     practiceOtherTolerancePct,
     shotPickerDistanceTolerancePct,
+    shotPickerAdjustments,
     todayRecentShotCount,
     playingPartners,
     user,
@@ -602,6 +625,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setPracticeOtherTolerancePct,
       todayRecentShotCount,
       setTodayRecentShotCount,
+      shotPickerAdjustments,
+      setShotPickerAdjustments,
       playingPartners,
       setPlayingPartners,
       roundReflections,
