@@ -96,7 +96,6 @@ interface WedgeMatrixCell {
   profileId: string;
   carry: number | null;
   total: number | null;
-  bias: number | null;
   last20TargetPct: number | null;
   actualShots: number;
   rangeSessions: number;
@@ -410,6 +409,12 @@ function getMatrixRowDistance(row: WedgeMatrixRow): number {
   const half = row.cells['9pm']?.total;
   const values = [full, half].filter((value): value is number => value !== null && value !== undefined);
   return values.length ? Math.max(...values) : Number.NEGATIVE_INFINITY;
+}
+
+function getMatrixCellPrimaryDistance(cell: WedgeMatrixCell | undefined, shotType: string): number | null {
+  if (!cell) return null;
+  if (shotType === 'pitch') return cell.carry ?? cell.total;
+  return cell.total ?? cell.carry;
 }
 
 function compareMatrixRows(a: WedgeMatrixRow, b: WedgeMatrixRow, sortKey: MatrixSortKey): number {
@@ -898,7 +903,6 @@ export function ClubSelectorTab({
             profileId: profile.id,
             carry: row.displayCarry,
             total: row.displayTotal,
-            bias: row.sideBias,
             last20TargetPct: row.recentTargetPct,
             actualShots: row.intentShotCount,
             rangeSessions: row.rangeShotCount,
@@ -947,46 +951,58 @@ export function ClubSelectorTab({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Lie</span>
-                {matrixLieOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    size="sm"
-                    variant={matrixLieContext === option.value ? 'default' : 'outline'}
-                    onClick={() => setMatrixLieContext(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-                <span className="ml-0 text-sm font-medium text-muted-foreground sm:ml-4">Sort by</span>
-                {[
-                  { id: 'club', label: 'Club' },
-                  { id: 'shot', label: 'Shot Type' },
-                  { id: 'distance', label: 'Distance' },
-                ].map((option) => (
-                  <Button
-                    key={option.id}
-                    type="button"
-                    size="sm"
-                    variant={matrixSort === option.id ? 'default' : 'outline'}
-                    className="gap-2"
-                    onClick={() => setMatrixSort(option.id as MatrixSortKey)}
-                  >
-                    <ArrowDownUp className="h-4 w-4" />
-                    {option.label}
-                  </Button>
+              <div className="grid gap-3 rounded-md border bg-muted/20 p-3 lg:grid-cols-[1fr_auto] lg:items-end">
+                <ButtonGroup label="Lie">
+                  {matrixLieOptions.map((option) => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      size="sm"
+                      variant={matrixLieContext === option.value ? 'default' : 'outline'}
+                      onClick={() => setMatrixLieContext(option.value)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+                <ButtonGroup label="Sort">
+                  {[
+                    { id: 'club', label: 'Club' },
+                    { id: 'shot', label: 'Shot' },
+                    { id: 'distance', label: 'Distance' },
+                  ].map((option) => (
+                    <Button
+                      key={option.id}
+                      type="button"
+                      size="sm"
+                      variant={matrixSort === option.id ? 'default' : 'outline'}
+                      className="gap-2"
+                      onClick={() => setMatrixSort(option.id as MatrixSortKey)}
+                    >
+                      <ArrowDownUp className="h-4 w-4" />
+                      {option.label}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </div>
+
+              <div className="grid gap-3 md:hidden">
+                {wedgeMatrix.map((row) => (
+                  <MatrixMobileCard
+                    key={`${row.clubId}-${row.shotType}`}
+                    row={row}
+                  />
                 ))}
               </div>
-              <div className="overflow-x-auto rounded-md border">
+
+              <div className="hidden overflow-x-auto rounded-md border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[110px]">Club</TableHead>
-                      <TableHead className="min-w-[140px]">Shot</TableHead>
+                      <TableHead className="w-[96px]">Club</TableHead>
+                      <TableHead className="w-[88px]">Shot</TableHead>
                       {MATRIX_POWER_COLUMNS.map((column) => (
-                        <TableHead key={column.id} className="min-w-[180px] text-center">
+                        <TableHead key={column.id} className="min-w-[150px] text-center">
                           {column.label}
                         </TableHead>
                       ))}
@@ -999,7 +1015,10 @@ export function ClubSelectorTab({
                         <TableCell>{getShotTypeLabel(row.shotType)}</TableCell>
                         {MATRIX_POWER_COLUMNS.map((column) => (
                           <TableCell key={column.id} className="align-top">
-                            <MatrixCell cell={row.cells[column.id]} shotType={row.shotType} />
+                            <MatrixCell
+                              cell={row.cells[column.id]}
+                              shotType={row.shotType}
+                            />
                           </TableCell>
                         ))}
                       </TableRow>
@@ -1289,6 +1308,61 @@ function ConfidenceMetric({ label, value }: { label: string; value: number | nul
   );
 }
 
+function MatrixMobileCard({ row }: { row: WedgeMatrixRow }) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-semibold">{row.clubName}</div>
+          <div className="text-sm text-muted-foreground">{getShotTypeLabel(row.shotType)}</div>
+        </div>
+        <Badge variant="outline" className="shrink-0">{getShotTypeLabel(row.shotType)}</Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {MATRIX_POWER_COLUMNS.map((column) => (
+          <MatrixMobileCell key={column.id} label={column.label} cell={row.cells[column.id]} shotType={row.shotType} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MatrixMobileCell({ label, cell, shotType }: { label: string; cell?: WedgeMatrixCell; shotType: string }) {
+  if (!cell) {
+    return (
+      <div className="rounded-md border bg-muted/20 p-3 text-center text-sm text-muted-foreground">
+        <div className="font-medium text-foreground">{label}</div>
+        <div className="mt-2">-</div>
+      </div>
+    );
+  }
+
+  const primaryLabel = shotType === 'pitch' ? 'Carry' : 'Distance';
+  const primaryValue = getMatrixCellPrimaryDistance(cell, shotType);
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold leading-none">{formatDistance(primaryValue)}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{primaryLabel}</div>
+      <div className="mt-3 grid gap-1 text-xs">
+        <div className="flex justify-between gap-2">
+          <span className="text-muted-foreground">Distance</span>
+          <span className="font-medium">{formatDistance(cell.total)}</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-muted-foreground">Carry</span>
+          <span className="font-medium">{formatDistance(cell.carry)}</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-muted-foreground">L20 T</span>
+          <span className="font-medium">{fmtPct(cell.last20TargetPct)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MatrixCell({ cell, shotType }: { cell?: WedgeMatrixCell; shotType: string }) {
   if (!cell) {
     return <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">-</div>;
@@ -1299,18 +1373,14 @@ function MatrixCell({ cell, shotType }: { cell?: WedgeMatrixCell; shotType: stri
   const primaryMetricClass = 'rounded-md border border-emerald-300 bg-emerald-100 px-2 py-1 text-emerald-950';
 
   return (
-    <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/20 p-2 text-xs">
+    <div className="grid grid-cols-3 gap-2 rounded-md border bg-muted/20 p-2 text-xs">
       <div className={`min-w-0 ${highlightTotal ? primaryMetricClass : ''}`}>
-        <div className="text-muted-foreground">Total</div>
+        <div className="text-muted-foreground">Distance</div>
         <div className="font-semibold">{formatDistance(cell.total)}</div>
       </div>
       <div className={`min-w-0 ${highlightCarry ? primaryMetricClass : ''}`}>
         <div className="text-muted-foreground">Carry</div>
         <div className="font-semibold">{formatDistance(cell.carry)}</div>
-      </div>
-      <div className="min-w-0">
-        <div className="text-muted-foreground">Bias</div>
-        <div className="font-semibold">{fmtSigned(cell.bias)}</div>
       </div>
       <div className="min-w-0">
         <div className="text-muted-foreground">L20 T</div>
