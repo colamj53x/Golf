@@ -9,6 +9,8 @@ export function getClubConfigId(clubCode: string): string {
 // Bad miss End Lie values - penalty situations or recovery required
 const BAD_MISS_END_LIES = [
   'recovery',
+  'bunker',
+  'sand',
   'penalty',
   'water',
   'ob',
@@ -66,8 +68,8 @@ export function processShot(shot: Shot, config: ClubConfig | undefined, distance
   const endLieLower = shot.endLie?.toLowerCase().trim() || '';
   const isPenaltyLie = BAD_MISS_END_LIES.some(badLie => endLieLower.includes(badLie));
   
-  // Also check notes for recovery/punch indicators
-  const isRecoveryFromNotes = notesLower.includes('recovery') || notesLower.includes('punch');
+  // Also check notes for explicit recovery indicators.
+  const isRecoveryFromNotes = notesLower.includes('recovery');
   
   const isBadMiss = isPenaltyLie || isRecoveryFromNotes;
 

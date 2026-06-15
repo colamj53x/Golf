@@ -46,33 +46,53 @@ describe('parseCSV', () => {
 });
 
 describe('calculateMetrics', () => {
+  const driver = DEFAULT_CLUB_CONFIGS.find((club) => club.id === 'dr');
+  const baseShot: Shot = {
+    id: 'driver-1',
+    club: 'Dr',
+    type: 'round',
+    shotFamily: 'full',
+    swingEffort: 'full',
+    targetIntent: 'fairway',
+    holeNumber: null,
+    shotNumber: null,
+    target: 220,
+    total: 220,
+    side: 0,
+    shotQuality: '5 Handicap',
+    date: new Date('2026-05-31T10:00:00'),
+    startLie: 'Tee',
+    endLie: 'Fairway',
+    strikeQuality: 'Centre',
+    endDistanceFromTarget: 0,
+    notes: '',
+  };
+
   it('calculates the shot quality index from rated shots', () => {
-    const driver = DEFAULT_CLUB_CONFIGS.find((club) => club.id === 'dr');
-    const baseShot: Shot = {
-      id: 'driver-1',
-      club: 'Dr',
-      type: 'round',
-      shotFamily: 'full',
-      swingEffort: 'full',
-      targetIntent: 'fairway',
-      holeNumber: null,
-      shotNumber: null,
-      target: 220,
-      total: 220,
-      side: 0,
-      shotQuality: '5 Handicap',
-      date: new Date('2026-05-31T10:00:00'),
-      startLie: 'Tee',
-      endLie: 'Fairway',
-      strikeQuality: 'Centre',
-      endDistanceFromTarget: 0,
-      notes: '',
-    };
     const shots = [
       processShot(baseShot, driver),
       processShot({ ...baseShot, id: 'driver-2', shotQuality: '15 Handicap' }, driver),
     ];
 
     expect(calculateMetrics(shots, driver).shotQualityIndex).toBe(70);
+  });
+
+  it('counts bunker and sand finishes as bad misses', () => {
+    const shots = [
+      processShot({ ...baseShot, id: 'fairway', endLie: 'Fairway' }, driver),
+      processShot({ ...baseShot, id: 'bunker', endLie: 'Bunker' }, driver),
+      processShot({ ...baseShot, id: 'sand', endLie: 'Greenside sand' }, driver),
+    ];
+
+    const metrics = calculateMetrics(shots, driver);
+
+    expect(shots.map(shot => shot.isBadMiss)).toEqual([false, true, true]);
+    expect(metrics.badMissPct).toBeCloseTo(66.67, 1);
+  });
+
+  it('does not count an intentional punch note as a bad miss by itself', () => {
+    const processed = processShot({ ...baseShot, notes: 'punch back to fairway' }, driver);
+
+    expect(processed.isBadMiss).toBe(false);
   });
 });
