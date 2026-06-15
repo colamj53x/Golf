@@ -7,6 +7,7 @@ import { SHOT_TYPES } from '@/types/practiceClubs';
 export interface RoundReviewRow {
   key: string;
   label: string;
+  shotIds: string[];
   clubLabel?: string;
   clubSortIndex?: number;
   shotTypeLabel?: string;
@@ -173,6 +174,7 @@ function makeRows(
       return {
         key: group.key,
         label: group.label,
+        shotIds: roundShots.map(shot => shot.id),
         clubLabel: group.clubLabel,
         clubSortIndex: group.clubSortIndex,
         shotTypeLabel: group.shotTypeLabel,

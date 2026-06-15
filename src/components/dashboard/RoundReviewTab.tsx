@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Download, Target, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Download, Pencil, Target, TrendingDown, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ interface RoundReviewTabProps {
   scope?: RoundReviewScope;
   thoughts?: RoundThoughts;
   onEditThoughts?: () => void;
+  onReviewClubShot?: (row: RoundReviewRow) => void;
 }
 
 type ClubSortKey = 'club' | 'shot-type' | 'power' | 'target' | 'shots' | 'quality' | 'bad-miss' | 'target-success';
@@ -284,7 +285,7 @@ function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditTho
   );
 }
 
-export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, onEditThoughts }: RoundReviewTabProps) {
+export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, onEditThoughts, onReviewClubShot }: RoundReviewTabProps) {
   const { gappingHcpTarget } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
@@ -545,13 +546,13 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
             <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Biggest regression vs Last 5</div><div className="mt-1 font-semibold">{biggestRegression?.label ?? 'Not enough data'}</div><div className="text-sm">{biggestRegression ? `${Math.round((biggestRegression.round.shotQualityIndex ?? 0) - (biggestRegression.last5.shotQualityIndex ?? 0))} quality` : 'Build more rounds'}</div></CardContent></Card>
           </div>
           <Card><CardContent className="pt-5">
-            <div className="hidden grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-              <SortableHeader label="Club / Shot Type" sortKey="club" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Shots" sortKey="shots" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Quality" sortKey="quality" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Target Success" sortKey="target-success" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Safe Shot Rate</div><SortableHeader label="Bad Miss Rate" sortKey="bad-miss" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} />
+            <div className="hidden grid-cols-[1.6fr_.55fr_.65fr_.75fr_.75fr_.75fr_.55fr] gap-3 border-b px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+              <SortableHeader label="Club / Shot Type" sortKey="club" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Shots" sortKey="shots" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Quality" sortKey="quality" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><SortableHeader label="Target Success" sortKey="target-success" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Safe Shot Rate</div><SortableHeader label="Bad Miss Rate" sortKey="bad-miss" activeSort={clubSort} direction={clubSortDirection} onSort={handleClubSort} /><div>Edit</div>
             </div>
             <div className="divide-y">
               {displayedClubRows.map(row => {
                 const status = getMetricStatus(row.round.shotQualityIndex, benchmark.shotQuality, 3);
-                return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.5fr_.6fr_.7fr_.8fr_.8fr_.8fr] md:items-center"><div><div className="font-semibold">{row.clubLabel} · {row.shotTypeLabel}</div><div className="text-xs text-muted-foreground">{row.powerLabel} · {row.targetLabel}{row.round.shotCount < 3 ? ' · small sample' : ''}</div></div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className={`text-sm font-semibold ${statusTextClass(status)}`}><span className="mr-1 text-xs font-normal text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Bad Miss</span>{formatPercent(row.round.badMissPct)}</div></div>;
+                return <div key={row.key} className="grid gap-3 px-3 py-4 md:grid-cols-[1.6fr_.55fr_.65fr_.75fr_.75fr_.75fr_.55fr] md:items-center"><div><div className="font-semibold">{row.clubLabel} · {row.shotTypeLabel}</div><div className="text-xs text-muted-foreground">{row.powerLabel} · {row.targetLabel}{row.round.shotCount < 3 ? ' · small sample' : ''}</div></div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Shots</span>{row.round.shotCount}</div><div className={`text-sm font-semibold ${statusTextClass(status)}`}><span className="mr-1 text-xs font-normal text-muted-foreground md:hidden">Quality</span>{formatNumber(row.round.shotQualityIndex)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Target</span>{formatPercent(row.round.targetSuccessPct)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Safe</span>{formatPercent(row.round.safeShotRate)}</div><div className="text-sm"><span className="mr-1 text-xs text-muted-foreground md:hidden">Bad Miss</span>{formatPercent(row.round.badMissPct)}</div><div><Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => onReviewClubShot?.(row)} disabled={!onReviewClubShot || row.shotIds.length === 0}><Pencil className="h-3.5 w-3.5" />Edit</Button></div></div>;
               })}
             </div>
           </CardContent></Card>

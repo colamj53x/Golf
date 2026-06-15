@@ -24,7 +24,7 @@ import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/dist
 import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
 import { RoundShotReviewDialog } from '@/components/dashboard/RoundShotReviewDialog';
 import { createEmptyRoundReflectionDraft, hasRoundReflectionContent, RoundReflectionEditor } from '@/components/RoundReflectionEditor';
-import { isPuttingShot, RoundReviewScope } from '@/lib/roundReview';
+import { isPuttingShot, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
 import {
   clearRoundReflectionLocalDraft,
   loadRoundReflectionLocalDraft,
@@ -87,6 +87,8 @@ export function DashboardTab({
   const [roundReflectionStatus, setRoundReflectionStatus] = useState<string | null>(null);
   const [roundReflectionStatusTone, setRoundReflectionStatusTone] = useState<'default' | 'destructive' | 'muted'>('muted');
   const [reviewShotsOpen, setReviewShotsOpen] = useState(false);
+  const [reviewShotIds, setReviewShotIds] = useState<string[] | null>(null);
+  const [reviewShotTitle, setReviewShotTitle] = useState<string | null>(null);
   const [roundThoughtsEditRequest, setRoundThoughtsEditRequest] = useState(0);
   const userId = user?.id ?? null;
 
@@ -351,6 +353,21 @@ export function DashboardTab({
       : []
     : shots.filter(shot => !isPuttingShot(shot) && activeRoundReviewDates.has(getShotDateKey(shot.date)));
   const activeRoundShotCount = activeReviewShots.length;
+  const reviewDialogShots = reviewShotIds
+    ? activeReviewShots.filter(shot => reviewShotIds.includes(shot.id))
+    : activeReviewShots;
+
+  const openAllReviewShots = () => {
+    setReviewShotIds(null);
+    setReviewShotTitle(null);
+    setReviewShotsOpen(true);
+  };
+
+  const openClubShotReview = (row: RoundReviewRow) => {
+    setReviewShotIds(row.shotIds);
+    setReviewShotTitle(row.label);
+    setReviewShotsOpen(true);
+  };
 
   const handleSaveRoundReflection = async () => {
     if (!activeRoundDateKey) return false;
@@ -476,7 +493,7 @@ export function DashboardTab({
           </div>}
           {showOverview ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
             <span className="font-medium text-foreground">{showOverview ? overall.shotCount : activeRoundShotCount}</span> shots analyzed
-          </div> : <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary lg:text-right">
+          </div> : <button type="button" onClick={openAllReviewShots} className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary lg:text-right">
             <span className="font-medium text-foreground">{activeRoundShotCount}</span> shots analyzed
           </button>}
         </CardContent>
@@ -484,10 +501,20 @@ export function DashboardTab({
       {!showOverview && (
         <RoundShotReviewDialog
           open={reviewShotsOpen}
-          onOpenChange={setReviewShotsOpen}
-          shots={activeReviewShots}
+          onOpenChange={(open) => {
+            setReviewShotsOpen(open);
+            if (!open) {
+              setReviewShotIds(null);
+              setReviewShotTitle(null);
+            }
+          }}
+          shots={reviewDialogShots}
           onSave={updateRoundShotClassifications}
-          title={roundReviewScope === 'round' ? 'Review Round Shots' : `Review Shots · ${roundReviewScope === 'all' ? 'All rounds' : reviewScopeLabel(roundReviewScope)}`}
+          title={reviewShotTitle
+            ? `Review Shots · ${reviewShotTitle}`
+            : roundReviewScope === 'round'
+              ? 'Review Round Shots'
+              : `Review Shots · ${roundReviewScope === 'all' ? 'All rounds' : reviewScopeLabel(roundReviewScope)}`}
           description={roundReviewScope === 'round'
             ? 'Same review format as upload. Shots are shown in the exact order played: Hole, then Shot.'
             : 'Review historical shots by club with the context needed to classify them: date, lie from, lie to, distance to green, shot family, effort, and target intent.'}
@@ -522,6 +549,7 @@ export function DashboardTab({
                 setRoundThoughtsEditRequest(request => request + 1);
                 requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
               }}
+              onReviewClubShot={!showOverview ? openClubShotReview : undefined}
             />
             {activeRoundDateKey && roundReviewScope === 'round' && (
               <div id="round-thoughts-editor" className="scroll-mt-6">
