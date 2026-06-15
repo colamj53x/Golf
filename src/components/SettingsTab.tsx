@@ -103,6 +103,10 @@ export function SettingsTab() {
     setLowTargetExclusionThreshold,
     gappingReliablePercent,
     setGappingReliablePercent,
+    gappingGreenThreshold,
+    setGappingGreenThreshold,
+    gappingAmberThreshold,
+    setGappingAmberThreshold,
     shotPickerDistanceTolerancePct,
     setShotPickerDistanceTolerancePct,
     practiceDistanceTolerancePct,
@@ -117,6 +121,8 @@ export function SettingsTab() {
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
   const [editingGappingReliablePercent, setEditingGappingReliablePercent] = useState(gappingReliablePercent);
+  const [editingGappingGreenThreshold, setEditingGappingGreenThreshold] = useState(gappingGreenThreshold);
+  const [editingGappingAmberThreshold, setEditingGappingAmberThreshold] = useState(gappingAmberThreshold);
   const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
   const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
   const [editingPracticeBallFlightTolerancePct, setEditingPracticeBallFlightTolerancePct] = useState(practiceBallFlightTolerancePct);
@@ -128,6 +134,10 @@ export function SettingsTab() {
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
     setGappingReliablePercent(Math.max(10, Math.min(100, Math.round(editingGappingReliablePercent))));
+    const nextAmber = Math.max(0, Math.min(100, Math.round(editingGappingAmberThreshold)));
+    const nextGreen = Math.max(nextAmber, Math.min(100, Math.round(editingGappingGreenThreshold)));
+    setGappingAmberThreshold(nextAmber);
+    setGappingGreenThreshold(nextGreen);
     setShotPickerDistanceTolerancePct(editingShotPickerDistanceTolerancePct);
     setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
     setPracticeBallFlightTolerancePct(editingPracticeBallFlightTolerancePct);
@@ -141,6 +151,8 @@ export function SettingsTab() {
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
     setEditingGappingReliablePercent(gappingReliablePercent);
+    setEditingGappingGreenThreshold(gappingGreenThreshold);
+    setEditingGappingAmberThreshold(gappingAmberThreshold);
     setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
     setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
     setEditingPracticeBallFlightTolerancePct(practiceBallFlightTolerancePct);
@@ -246,6 +258,44 @@ export function SettingsTab() {
             />
             <span className="text-sm text-muted-foreground">
               Sets how many rated shots must be covered when choosing each club's predictable distance
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="gappingGreenThreshold" className="whitespace-nowrap min-w-[200px]">
+              Gapping Green (%)
+            </Label>
+            <Input
+              id="gappingGreenThreshold"
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              value={editingGappingGreenThreshold}
+              onChange={(e) => setEditingGappingGreenThreshold(Math.max(0, Math.min(100, Math.round(parseFloat(e.target.value) || 65))))}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Green dot threshold for Last 20 T, Last 20 Safe, and Range %
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="gappingAmberThreshold" className="whitespace-nowrap min-w-[200px]">
+              Gapping Amber (%)
+            </Label>
+            <Input
+              id="gappingAmberThreshold"
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              value={editingGappingAmberThreshold}
+              onChange={(e) => setEditingGappingAmberThreshold(Math.max(0, Math.min(100, Math.round(parseFloat(e.target.value) || 40))))}
+              disabled={!isEditing}
+              className="h-8 w-24 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Amber dot threshold; lower values show red
             </span>
           </div>
           <div className="flex items-center gap-4">

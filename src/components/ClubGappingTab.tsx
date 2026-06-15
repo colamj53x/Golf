@@ -28,7 +28,7 @@ import { useShotProfiles } from '@/lib/shotProfiles';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 
 export function ClubGappingTab() {
-  const { shots, gappingReliablePercent } = useGolfData();
+  const { shots, gappingReliablePercent, gappingGreenThreshold, gappingAmberThreshold } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -151,13 +151,13 @@ export function ClubGappingTab() {
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct)}`} title={`Last 20 at ${row.qualityCutoff} hcp or better ${fmt(row.recentTargetPct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Last 20 at ${row.qualityCutoff} hcp or better ${fmt(row.recentTargetPct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct)}`} title={`Last 20 safe outcomes ${fmt(row.recentSafePct, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Last 20 safe outcomes ${fmt(row.recentSafePct, '%')}`} />
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
+                        <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap" title={`${gappingReliablePercent}% of shots are ${fmtReliableHcp(row.reliableHcpLevel)} or better. Actual coverage: ${fmt(row.reliableCoveragePct, '%')}`}>
                         {fmtReliableHcp(row.reliableHcpLevel)}

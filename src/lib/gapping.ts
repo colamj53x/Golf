@@ -383,19 +383,14 @@ export function fmtSideRange(left: number | null, right: number | null): string 
   return `${left.toFixed(0)}L - ${right.toFixed(0)}R`;
 }
 
-export function percentDotTone(value: number | null): string {
+export function percentDotTone(value: number | null, greenThreshold = 65, amberThreshold = 40): string {
   if (value === null) return 'border-muted bg-background';
-  if (value >= 65) return 'border-green-600 bg-green-600';
-  if (value >= 40) return 'border-amber-500 bg-amber-500';
+  if (value >= greenThreshold) return 'border-green-600 bg-green-600';
+  if (value >= amberThreshold) return 'border-amber-500 bg-amber-500';
   return 'border-red-600 bg-red-600';
 }
 
-export function rangeDotTone(value: number | null): string {
-  if (value === null) return 'border-muted bg-background';
-  if (value > 50) return 'border-green-600 bg-green-600';
-  if (value >= 20) return 'border-amber-500 bg-amber-500';
-  return 'border-red-600 bg-red-600';
-}
+export const rangeDotTone = percentDotTone;
 
 export function shotCountTone(count: number): string {
   if (count >= 50) return 'text-green-600';
