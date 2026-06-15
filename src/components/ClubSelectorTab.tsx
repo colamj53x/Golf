@@ -593,6 +593,20 @@ function getPercentDotClass(value: number | null): string {
   return 'border-red-600 bg-red-600';
 }
 
+function getComfortTileClass(value: number | null): string {
+  if (value === null) return 'border-slate-200 bg-slate-50 text-slate-950';
+  if (value >= 65) return 'border-emerald-300 bg-emerald-50 text-emerald-950';
+  if (value >= 40) return 'border-amber-300 bg-amber-50 text-amber-950';
+  return 'border-red-300 bg-red-50 text-red-950';
+}
+
+function getComfortLabel(value: number | null): string {
+  if (value === null) return 'No read';
+  if (value >= 65) return 'Comfort';
+  if (value >= 40) return 'Workable';
+  return 'Avoid';
+}
+
 function getSampleBadge(confidence: DataConfidence, count: number) {
   const label = `${count} ${count === 1 ? 'shot' : 'shots'}`;
   if (confidence === 'high') return <Badge className="bg-green-600">{label}</Badge>;
@@ -1339,23 +1353,29 @@ function MatrixMobileCell({ label, cell, shotType }: { label: string; cell?: Wed
 
   const primaryLabel = shotType === 'pitch' ? 'Carry' : 'Distance';
   const primaryValue = getMatrixCellPrimaryDistance(cell, shotType);
+  const comfortClass = getComfortTileClass(cell.last20TargetPct);
 
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+    <div className={`rounded-md border p-3 ${comfortClass}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</div>
+        <span className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+          {getComfortLabel(cell.last20TargetPct)}
+        </span>
+      </div>
       <div className="mt-1 text-2xl font-semibold leading-none">{formatDistance(primaryValue)}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{primaryLabel}</div>
+      <div className="mt-1 text-xs opacity-70">{primaryLabel}</div>
       <div className="mt-3 grid gap-1 text-xs">
         <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground">Distance</span>
+          <span className="opacity-70">Distance</span>
           <span className="font-medium">{formatDistance(cell.total)}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground">Carry</span>
+          <span className="opacity-70">Carry</span>
           <span className="font-medium">{formatDistance(cell.carry)}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground">L20 T</span>
+          <span className="opacity-70">L20 T</span>
           <span className="font-medium">{fmtPct(cell.last20TargetPct)}</span>
         </div>
       </div>
