@@ -324,14 +324,14 @@ export function PracticeTargetsMatrixTab() {
             <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
               <thead>
                 <tr className="bg-muted/80 text-muted-foreground">
-                  <th className="sticky left-0 top-0 z-30 min-w-36 border-b bg-muted px-3 py-2 text-left">Club</th>
-                  <th className="sticky left-36 top-0 z-30 min-w-28 border-b bg-muted px-3 py-2 text-left">Shot</th>
-                  <th className="sticky left-64 top-0 z-30 min-w-24 border-b bg-muted px-3 py-2 text-left">Power</th>
-                  <th className="sticky left-[22rem] top-0 z-30 min-w-20 border-b bg-muted px-3 py-2 text-left print:hidden">Latest</th>
+                  <th className="sticky left-0 top-0 z-30 w-28 min-w-28 border-b bg-muted px-2 py-2 text-left">Club</th>
+                  <th className="sticky left-28 top-0 z-30 w-24 min-w-24 border-b bg-muted px-2 py-2 text-left">Shot</th>
+                  <th className="sticky left-52 top-0 z-30 w-20 min-w-20 border-b bg-muted px-2 py-2 text-left">Power</th>
+                  <th className="sticky left-72 top-0 z-30 w-14 min-w-14 border-b bg-muted px-1.5 py-2 text-left print:hidden">Latest</th>
                   {metricColumns.map(metric => (
-                    <th key={metric.id} className="sticky top-0 z-20 min-w-44 border-b bg-muted px-3 py-2 text-left">
-                      <div className="font-semibold text-foreground">{metric.metricName}</div>
-                      <div className="text-[11px]">{CATEGORY_LABELS[metric.category]}{metric.unit ? ` · ${metric.unit}` : ''}</div>
+                    <th key={metric.id} className="sticky top-0 z-20 w-32 min-w-32 border-b bg-muted px-2 py-2 text-left">
+                      <div className="font-semibold leading-tight text-foreground">{metric.metricName}</div>
+                      <div className="text-[10px] leading-tight">{CATEGORY_LABELS[metric.category]}{metric.unit ? ` · ${metric.unit}` : ''}</div>
                     </th>
                   ))}
                 </tr>
@@ -341,13 +341,12 @@ export function PracticeTargetsMatrixTab() {
                   const labels = shortConfigLabel(config.clubId);
                   return (
                     <tr key={config.clubId} className="group hover:bg-muted/40">
-                      <td className="sticky left-0 z-10 border-b bg-background px-3 py-2 font-medium group-hover:bg-muted/40">{labels.club}</td>
-                      <td className="sticky left-36 z-10 border-b bg-background px-3 py-2 group-hover:bg-muted/40">{labels.shot}</td>
-                      <td className="sticky left-64 z-10 border-b bg-background px-3 py-2 group-hover:bg-muted/40">{labels.power}</td>
-                      <td className="sticky left-[22rem] z-10 border-b bg-background px-3 py-2 group-hover:bg-muted/40 print:hidden">
-                        <Button type="button" variant="ghost" size="sm" className="h-7 gap-1" onClick={() => copyLatestForRow(config)}>
+                      <td className="sticky left-0 z-10 border-b bg-background px-2 py-1.5 font-medium group-hover:bg-muted/40">{labels.club}</td>
+                      <td className="sticky left-28 z-10 border-b bg-background px-2 py-1.5 group-hover:bg-muted/40">{labels.shot}</td>
+                      <td className="sticky left-52 z-10 border-b bg-background px-2 py-1.5 group-hover:bg-muted/40">{labels.power}</td>
+                      <td className="sticky left-72 z-10 border-b bg-background px-1.5 py-1.5 group-hover:bg-muted/40 print:hidden">
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Use latest logged values for this row" onClick={() => copyLatestForRow(config)}>
                           <Copy className="h-3.5 w-3.5" />
-                          Row
                         </Button>
                       </td>
                       {metricColumns.map((metric) => {
@@ -356,8 +355,8 @@ export function PracticeTargetsMatrixTab() {
                         const hasLatest = latest.min !== null || latest.max !== null;
                         const isSmashFactor = metric.id === 'smash_factor';
                         return (
-                          <td key={metric.id} className="border-b px-2 py-2 align-top">
-                            <div className="grid grid-cols-[1fr_1fr_28px] gap-1">
+                          <td key={metric.id} className="border-b px-1.5 py-1.5 align-top">
+                            <div className="grid grid-cols-[44px_44px_24px] gap-1">
                               <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-min`}>{metric.metricName} min</Label>
                               <Input
                                 id={`${config.clubId}-${metric.id}-min`}
@@ -365,7 +364,7 @@ export function PracticeTargetsMatrixTab() {
                                 onChange={(event) => setCell(config.clubId, metric.id, 'min', event.target.value)}
                                 placeholder="Min"
                                 disabled={isSmashFactor}
-                                className="h-8 min-w-16 px-2 text-xs"
+                                className="h-7 px-1.5 text-center text-xs tabular-nums"
                               />
                               <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-max`}>{metric.metricName} max</Label>
                               <Input
@@ -374,13 +373,13 @@ export function PracticeTargetsMatrixTab() {
                                 onChange={(event) => setCell(config.clubId, metric.id, 'max', event.target.value)}
                                 placeholder="Max"
                                 disabled={isSmashFactor}
-                                className="h-8 min-w-16 px-2 text-xs"
+                                className="h-7 px-1.5 text-center text-xs tabular-nums"
                               />
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-7 print:hidden"
+                                className="h-7 w-6 print:hidden"
                                 disabled={!hasLatest || isSmashFactor}
                                 title={isSmashFactor ? 'Auto-calculated from ball speed and swing speed' : hasLatest ? 'Use latest logged value' : 'No logged value'}
                                 onClick={() => copyLatestMetric(config, metric)}
