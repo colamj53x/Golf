@@ -23,6 +23,7 @@ const CATEGORY_LABELS: Record<PracticeMetricTarget['category'], string> = {
 };
 
 const CATEGORY_ORDER: PracticeMetricTarget['category'][] = ['distance', 'ball_flight', 'dispersion', 'swing', 'tempo'];
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
 
 type TargetDraft = Record<string, Record<string, { min: string; max: string }>>;
 
@@ -129,6 +130,15 @@ function buildUpdatedMetrics(config: ClubPracticeConfig, values: Record<string, 
   const swingSpeedMax = parseTargetValue('swing_speed', values.swing_speed?.max ?? '');
 
   return config.metrics.map((metric) => {
+    if (NON_TARGET_METRIC_IDS.has(metric.id)) {
+      return {
+        ...metric,
+        targetMin: null,
+        targetMax: null,
+        targetDisplay: '-',
+      };
+    }
+
     if (metric.id === 'smash_factor') {
       const targetMin = ballSpeedMin !== null && swingSpeedMax !== null && swingSpeedMax > 0
         ? Number((ballSpeedMin / swingSpeedMax).toFixed(2))
@@ -216,7 +226,7 @@ export function PracticeTargetsMatrixTab() {
     const byId = new Map<string, PracticeMetricTarget>();
     for (const config of practiceConfigs) {
       for (const metric of config.metrics) {
-        if (!byId.has(metric.id)) byId.set(metric.id, metric);
+        if (!NON_TARGET_METRIC_IDS.has(metric.id) && !byId.has(metric.id)) byId.set(metric.id, metric);
       }
     }
     return [...byId.values()].filter(metric => visibleCategories[metric.category]);

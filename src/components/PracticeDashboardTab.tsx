@@ -85,6 +85,8 @@ const BEST_SHOT_METRIC_IDS = new Set([
   'tempo_ratio',
 ]);
 
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
+
 const formatTargetEditValue = (metricId: string, value: number | null): string => {
   if (value === null) return '';
   return metricId === 'launch_direction' ? formatDirectionTargetValue(value) : String(value);
@@ -329,6 +331,13 @@ export function PracticeDashboardTab() {
     acc[metric.category].push(metric);
     return acc;
   }, {} as Record<string, typeof config.metrics>);
+  const groupedTargetMetrics = config.metrics
+    .filter(metric => !NON_TARGET_METRIC_IDS.has(metric.id))
+    .reduce((acc, metric) => {
+      if (!acc[metric.category]) acc[metric.category] = [];
+      acc[metric.category].push(metric);
+      return acc;
+    }, {} as Record<string, typeof config.metrics>);
 
   const toleranceForMetric = (category: string) => getMetricTolerancePct(
     category,
@@ -521,6 +530,15 @@ export function PracticeDashboardTab() {
     }
     
     const updatedMetrics = config.metrics.map(m => {
+      if (NON_TARGET_METRIC_IDS.has(m.id)) {
+        return {
+          ...m,
+          targetMin: null,
+          targetMax: null,
+          targetDisplay: '–',
+        };
+      }
+
       // For Smash Factor, use calculated values
       if (m.id === 'smash_factor') {
         let targetDisplay = '–';
@@ -821,7 +839,7 @@ export function PracticeDashboardTab() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                {Object.entries(groupedMetrics).map(([category, metrics]) => (
+                {Object.entries(groupedTargetMetrics).map(([category, metrics]) => (
                   <div key={category} className="space-y-2">
                     <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                       {CATEGORY_LABELS[category]}
