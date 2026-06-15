@@ -85,8 +85,8 @@ const BEST_SHOT_METRIC_IDS = new Set([
   'tempo_ratio',
 ]);
 
-const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
-const VARIATION_METRIC_IDS = new Set(['carry_variation', 'total_variation']);
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'bias_direction']);
+const MAX_ONLY_TARGET_METRIC_IDS = new Set(['carry_variation', 'total_variation', 'avg_lateral_miss']);
 
 const formatTargetEditValue = (metricId: string, value: number | null): string => {
   if (value === null) return '';
@@ -98,7 +98,7 @@ const formatTargetDisplay = (metricId: string, min: number | null, max: number |
     ? formatDirectionTargetValue(value)
     : String(value);
 
-  if (VARIATION_METRIC_IDS.has(metricId)) {
+  if (MAX_ONLY_TARGET_METRIC_IDS.has(metricId)) {
     return max !== null ? `≤${formatValue(max)}` : '–';
   }
   if (min !== null && max !== null) return `${formatValue(min)}–${formatValue(max)}`;
@@ -564,12 +564,12 @@ export function PracticeDashboardTab() {
       const target = editTargets[m.id];
       const parsedTargetMin = target?.min ? parseDirectionalNumber(target.min) : null;
       const parsedTargetMax = target?.max ? parseDirectionalNumber(target.max) : null;
-      const targetMin = VARIATION_METRIC_IDS.has(m.id)
+      const targetMin = MAX_ONLY_TARGET_METRIC_IDS.has(m.id)
         ? null
         : parsedTargetMin !== null && parsedTargetMax !== null
         ? Math.min(parsedTargetMin, parsedTargetMax)
         : parsedTargetMin;
-      const targetMax = VARIATION_METRIC_IDS.has(m.id)
+      const targetMax = MAX_ONLY_TARGET_METRIC_IDS.has(m.id)
         ? parsedTargetMax
         : parsedTargetMin !== null && parsedTargetMax !== null
         ? Math.max(parsedTargetMin, parsedTargetMax)
@@ -863,8 +863,8 @@ export function PracticeDashboardTab() {
                         
                         const handleUseCurrent = () => {
                           if (!hasCurrentValue) return;
-                          const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
-                          const minVal = !isVariationMetric && currentValueMin !== null ? formatTargetEditValue(metric.id, currentValueMin) : '';
+                          const isMaxOnlyMetric = MAX_ONLY_TARGET_METRIC_IDS.has(metric.id);
+                          const minVal = !isMaxOnlyMetric && currentValueMin !== null ? formatTargetEditValue(metric.id, currentValueMin) : '';
                           const maxVal = currentValueMax !== null
                             ? formatTargetEditValue(metric.id, currentValueMax)
                             : currentValueMin !== null
@@ -878,7 +878,7 @@ export function PracticeDashboardTab() {
 
                         // Auto-calculate Smash Factor from Ball Speed and Swing Speed targets
                         const isSmashFactor = metric.id === 'smash_factor';
-                        const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
+                        const isMaxOnlyMetric = MAX_ONLY_TARGET_METRIC_IDS.has(metric.id);
                         let calculatedSmashMin = '';
                         let calculatedSmashMax = '';
                         if (isSmashFactor) {
@@ -927,7 +927,7 @@ export function PracticeDashboardTab() {
                                 title="Auto-calculated from Ball Speed / Swing Speed"
                               />
                             </>
-                          ) : isVariationMetric ? (
+                          ) : isMaxOnlyMetric ? (
                             <>
                               <Input
                                 placeholder="Max"

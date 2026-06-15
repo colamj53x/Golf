@@ -23,8 +23,8 @@ const CATEGORY_LABELS: Record<PracticeMetricTarget['category'], string> = {
 };
 
 const CATEGORY_ORDER: PracticeMetricTarget['category'][] = ['distance', 'ball_flight', 'dispersion', 'swing', 'tempo'];
-const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
-const VARIATION_METRIC_IDS = new Set(['carry_variation', 'total_variation']);
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'bias_direction']);
+const MAX_ONLY_TARGET_METRIC_IDS = new Set(['carry_variation', 'total_variation', 'avg_lateral_miss']);
 
 type TargetDraft = Record<string, Record<string, { min: string; max: string }>>;
 
@@ -38,7 +38,7 @@ function formatTargetDisplay(metricId: string, min: number | null, max: number |
     ? formatDirectionTargetValue(value)
     : String(value);
 
-  if (VARIATION_METRIC_IDS.has(metricId)) {
+  if (MAX_ONLY_TARGET_METRIC_IDS.has(metricId)) {
     return max !== null ? `<=${formatValue(max)}` : '-';
   }
   if (min !== null && max !== null) return `${formatValue(min)}-${formatValue(max)}`;
@@ -161,10 +161,10 @@ function buildUpdatedMetrics(config: ClubPracticeConfig, values: Record<string, 
     const target = values[metric.id];
     const parsedMin = parseTargetValue(metric.id, target?.min ?? '');
     const parsedMax = parseTargetValue(metric.id, target?.max ?? '');
-    const targetMin = VARIATION_METRIC_IDS.has(metric.id)
+    const targetMin = MAX_ONLY_TARGET_METRIC_IDS.has(metric.id)
       ? null
       : parsedMin !== null && parsedMax !== null ? Math.min(parsedMin, parsedMax) : parsedMin;
-    const targetMax = VARIATION_METRIC_IDS.has(metric.id)
+    const targetMax = MAX_ONLY_TARGET_METRIC_IDS.has(metric.id)
       ? parsedMax
       : parsedMin !== null && parsedMax !== null ? Math.max(parsedMin, parsedMax) : parsedMax;
     return {
@@ -262,7 +262,7 @@ export function PracticeTargetsMatrixTab() {
       [config.clubId]: {
         ...prev[config.clubId],
         [metric.id]: {
-          min: VARIATION_METRIC_IDS.has(metric.id) ? '' : formatTargetEditValue(metric.id, range.min ?? avg),
+          min: MAX_ONLY_TARGET_METRIC_IDS.has(metric.id) ? '' : formatTargetEditValue(metric.id, range.min ?? avg),
           max: formatTargetEditValue(metric.id, range.max ?? avg),
         },
       },
@@ -334,12 +334,13 @@ export function PracticeTargetsMatrixTab() {
         <CardHeader className="print:pb-2">
           <CardTitle>Target Table</CardTitle>
           <CardDescription className="print:hidden">
-            Each metric has min and max inputs. The copy button uses the latest logged practice value for that row.
+            Each metric shows the target inputs it needs. The copy button uses the latest logged practice value for that row.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[72vh] overflow-auto rounded-md border print:max-h-none print:overflow-visible">
-            <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
+          <div className="rounded-md border">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
               <thead>
                 <tr className="bg-muted/80 text-muted-foreground">
                   <th className="sticky left-0 top-0 z-30 w-28 min-w-28 border-b bg-muted px-2 py-2 text-left">Club</th>
@@ -372,11 +373,11 @@ export function PracticeTargetsMatrixTab() {
                         const latest = latestMetricRange(config.clubId, metric, practiceSessions, shotsBySession);
                         const hasLatest = latest.min !== null || latest.max !== null;
                         const isSmashFactor = metric.id === 'smash_factor';
-                        const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
+                        const isMaxOnlyMetric = MAX_ONLY_TARGET_METRIC_IDS.has(metric.id);
                         return (
                           <td key={metric.id} className="border-b px-1.5 py-1.5 align-top">
-                            <div className={isVariationMetric ? 'grid grid-cols-[92px_24px] gap-1' : 'grid grid-cols-[44px_44px_24px] gap-1'}>
-                              {!isVariationMetric && (
+                            <div className={isMaxOnlyMetric ? 'grid grid-cols-[92px_24px] gap-1' : 'grid grid-cols-[44px_44px_24px] gap-1'}>
+                              {!isMaxOnlyMetric && (
                                 <>
                                   <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-min`}>{metric.metricName} min</Label>
                                   <Input
@@ -394,7 +395,7 @@ export function PracticeTargetsMatrixTab() {
                                 id={`${config.clubId}-${metric.id}-max`}
                                 value={rowDraft.max}
                                 onChange={(event) => {
-                                  if (isVariationMetric) setCell(config.clubId, metric.id, 'min', '');
+                                  if (isMaxOnlyMetric) setCell(config.clubId, metric.id, 'min', '');
                                   setCell(config.clubId, metric.id, 'max', event.target.value);
                                 }}
                                 placeholder="Max"
@@ -420,7 +421,8 @@ export function PracticeTargetsMatrixTab() {
                   );
                 })}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </CardContent>
       </Card>
