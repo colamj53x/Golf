@@ -86,6 +86,7 @@ const BEST_SHOT_METRIC_IDS = new Set([
 ]);
 
 const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
+const VARIATION_METRIC_IDS = new Set(['carry_variation', 'total_variation']);
 
 const formatTargetEditValue = (metricId: string, value: number | null): string => {
   if (value === null) return '';
@@ -97,6 +98,9 @@ const formatTargetDisplay = (metricId: string, min: number | null, max: number |
     ? formatDirectionTargetValue(value)
     : String(value);
 
+  if (VARIATION_METRIC_IDS.has(metricId)) {
+    return max !== null ? `≤${formatValue(max)}` : '–';
+  }
   if (min !== null && max !== null) return `${formatValue(min)}–${formatValue(max)}`;
   if (min !== null) return `≥${formatValue(min)}`;
   if (max !== null) return `≤${formatValue(max)}`;
@@ -560,10 +564,14 @@ export function PracticeDashboardTab() {
       const target = editTargets[m.id];
       const parsedTargetMin = target?.min ? parseDirectionalNumber(target.min) : null;
       const parsedTargetMax = target?.max ? parseDirectionalNumber(target.max) : null;
-      const targetMin = parsedTargetMin !== null && parsedTargetMax !== null
+      const targetMin = VARIATION_METRIC_IDS.has(m.id)
+        ? null
+        : parsedTargetMin !== null && parsedTargetMax !== null
         ? Math.min(parsedTargetMin, parsedTargetMax)
         : parsedTargetMin;
-      const targetMax = parsedTargetMin !== null && parsedTargetMax !== null
+      const targetMax = VARIATION_METRIC_IDS.has(m.id)
+        ? parsedTargetMax
+        : parsedTargetMin !== null && parsedTargetMax !== null
         ? Math.max(parsedTargetMin, parsedTargetMax)
         : parsedTargetMax;
       
@@ -855,8 +863,13 @@ export function PracticeDashboardTab() {
                         
                         const handleUseCurrent = () => {
                           if (!hasCurrentValue) return;
-                          const minVal = currentValueMin !== null ? formatTargetEditValue(metric.id, currentValueMin) : '';
-                          const maxVal = currentValueMax !== null ? formatTargetEditValue(metric.id, currentValueMax) : minVal;
+                          const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
+                          const minVal = !isVariationMetric && currentValueMin !== null ? formatTargetEditValue(metric.id, currentValueMin) : '';
+                          const maxVal = currentValueMax !== null
+                            ? formatTargetEditValue(metric.id, currentValueMax)
+                            : currentValueMin !== null
+                              ? formatTargetEditValue(metric.id, currentValueMin)
+                              : '';
                           setEditTargets(prev => ({
                             ...prev,
                             [metric.id]: { min: minVal, max: maxVal }
@@ -865,6 +878,7 @@ export function PracticeDashboardTab() {
 
                         // Auto-calculate Smash Factor from Ball Speed and Swing Speed targets
                         const isSmashFactor = metric.id === 'smash_factor';
+                        const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
                         let calculatedSmashMin = '';
                         let calculatedSmashMax = '';
                         if (isSmashFactor) {
@@ -911,6 +925,18 @@ export function PracticeDashboardTab() {
                                 readOnly
                                 className="h-8 text-sm bg-muted"
                                 title="Auto-calculated from Ball Speed / Swing Speed"
+                              />
+                            </>
+                          ) : isVariationMetric ? (
+                            <>
+                              <Input
+                                placeholder="Max"
+                                value={editTargets[metric.id]?.max || ''}
+                                onChange={(e) => setEditTargets(prev => ({
+                                  ...prev,
+                                  [metric.id]: { min: '', max: e.target.value }
+                                }))}
+                                className="h-8 text-sm col-span-2"
                               />
                             </>
                           ) : (

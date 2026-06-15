@@ -24,6 +24,7 @@ const CATEGORY_LABELS: Record<PracticeMetricTarget['category'], string> = {
 
 const CATEGORY_ORDER: PracticeMetricTarget['category'][] = ['distance', 'ball_flight', 'dispersion', 'swing', 'tempo'];
 const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total']);
+const VARIATION_METRIC_IDS = new Set(['carry_variation', 'total_variation']);
 
 type TargetDraft = Record<string, Record<string, { min: string; max: string }>>;
 
@@ -37,6 +38,9 @@ function formatTargetDisplay(metricId: string, min: number | null, max: number |
     ? formatDirectionTargetValue(value)
     : String(value);
 
+  if (VARIATION_METRIC_IDS.has(metricId)) {
+    return max !== null ? `<=${formatValue(max)}` : '-';
+  }
   if (min !== null && max !== null) return `${formatValue(min)}-${formatValue(max)}`;
   if (min !== null) return `>=${formatValue(min)}`;
   if (max !== null) return `<=${formatValue(max)}`;
@@ -157,8 +161,12 @@ function buildUpdatedMetrics(config: ClubPracticeConfig, values: Record<string, 
     const target = values[metric.id];
     const parsedMin = parseTargetValue(metric.id, target?.min ?? '');
     const parsedMax = parseTargetValue(metric.id, target?.max ?? '');
-    const targetMin = parsedMin !== null && parsedMax !== null ? Math.min(parsedMin, parsedMax) : parsedMin;
-    const targetMax = parsedMin !== null && parsedMax !== null ? Math.max(parsedMin, parsedMax) : parsedMax;
+    const targetMin = VARIATION_METRIC_IDS.has(metric.id)
+      ? null
+      : parsedMin !== null && parsedMax !== null ? Math.min(parsedMin, parsedMax) : parsedMin;
+    const targetMax = VARIATION_METRIC_IDS.has(metric.id)
+      ? parsedMax
+      : parsedMin !== null && parsedMax !== null ? Math.max(parsedMin, parsedMax) : parsedMax;
     return {
       ...metric,
       targetMin,
@@ -254,7 +262,7 @@ export function PracticeTargetsMatrixTab() {
       [config.clubId]: {
         ...prev[config.clubId],
         [metric.id]: {
-          min: formatTargetEditValue(metric.id, range.min ?? avg),
+          min: VARIATION_METRIC_IDS.has(metric.id) ? '' : formatTargetEditValue(metric.id, range.min ?? avg),
           max: formatTargetEditValue(metric.id, range.max ?? avg),
         },
       },
@@ -364,23 +372,31 @@ export function PracticeTargetsMatrixTab() {
                         const latest = latestMetricRange(config.clubId, metric, practiceSessions, shotsBySession);
                         const hasLatest = latest.min !== null || latest.max !== null;
                         const isSmashFactor = metric.id === 'smash_factor';
+                        const isVariationMetric = VARIATION_METRIC_IDS.has(metric.id);
                         return (
                           <td key={metric.id} className="border-b px-1.5 py-1.5 align-top">
-                            <div className="grid grid-cols-[44px_44px_24px] gap-1">
-                              <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-min`}>{metric.metricName} min</Label>
-                              <Input
-                                id={`${config.clubId}-${metric.id}-min`}
-                                value={rowDraft.min}
-                                onChange={(event) => setCell(config.clubId, metric.id, 'min', event.target.value)}
-                                placeholder="Min"
-                                disabled={isSmashFactor}
-                                className="h-7 px-1.5 text-center text-xs tabular-nums"
-                              />
+                            <div className={isVariationMetric ? 'grid grid-cols-[92px_24px] gap-1' : 'grid grid-cols-[44px_44px_24px] gap-1'}>
+                              {!isVariationMetric && (
+                                <>
+                                  <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-min`}>{metric.metricName} min</Label>
+                                  <Input
+                                    id={`${config.clubId}-${metric.id}-min`}
+                                    value={rowDraft.min}
+                                    onChange={(event) => setCell(config.clubId, metric.id, 'min', event.target.value)}
+                                    placeholder="Min"
+                                    disabled={isSmashFactor}
+                                    className="h-7 px-1.5 text-center text-xs tabular-nums"
+                                  />
+                                </>
+                              )}
                               <Label className="sr-only" htmlFor={`${config.clubId}-${metric.id}-max`}>{metric.metricName} max</Label>
                               <Input
                                 id={`${config.clubId}-${metric.id}-max`}
                                 value={rowDraft.max}
-                                onChange={(event) => setCell(config.clubId, metric.id, 'max', event.target.value)}
+                                onChange={(event) => {
+                                  if (isVariationMetric) setCell(config.clubId, metric.id, 'min', '');
+                                  setCell(config.clubId, metric.id, 'max', event.target.value);
+                                }}
                                 placeholder="Max"
                                 disabled={isSmashFactor}
                                 className="h-7 px-1.5 text-center text-xs tabular-nums"
