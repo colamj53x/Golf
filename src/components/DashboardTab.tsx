@@ -45,6 +45,14 @@ const ROUND_REVIEW_LAST10 = 'aggregate:last10';
 const ROUND_REVIEW_LAST5 = 'aggregate:last5';
 const ROUND_REVIEW_ALL = 'aggregate:all';
 
+function reviewScopeLabel(scope: RoundReviewScope): string {
+  if (scope === 'last20') return 'Last 20 rounds';
+  if (scope === 'last10') return 'Last 10 rounds';
+  if (scope === 'last5') return 'Last 5 rounds';
+  if (scope === 'all') return 'All rounds';
+  return 'Selected round';
+}
+
 export function DashboardTab({
   onOpenUpload,
   initialView = 'latest-round',
@@ -337,14 +345,12 @@ export function DashboardTab({
         : roundReviewScope === 'last5'
           ? new Set(shotRoundReviewDateKeys.slice(0, 5))
           : new Set(activeRoundDateKey ? [activeRoundDateKey] : []);
-  const activeRoundShotCount = showOverview
+  const activeReviewShots = showOverview
     ? activeRoundDateKey
-      ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey).length
-      : 0
-    : shots.filter(shot => !isPuttingShot(shot) && activeRoundReviewDates.has(getShotDateKey(shot.date))).length;
-  const activeRoundShots = activeRoundDateKey && roundReviewScope === 'round'
-    ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
-    : [];
+      ? shots.filter(shot => !isPuttingShot(shot) && getShotDateKey(shot.date) === activeRoundDateKey)
+      : []
+    : shots.filter(shot => !isPuttingShot(shot) && activeRoundReviewDates.has(getShotDateKey(shot.date)));
+  const activeRoundShotCount = activeReviewShots.length;
 
   const handleSaveRoundReflection = async () => {
     if (!activeRoundDateKey) return false;
@@ -468,14 +474,26 @@ export function DashboardTab({
               </SelectContent>
             </Select>
           </div>}
-          {showOverview || roundReviewScope !== 'round' ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
+          {showOverview ? <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground lg:text-right">
             <span className="font-medium text-foreground">{showOverview ? overall.shotCount : activeRoundShotCount}</span> shots analyzed
           </div> : <button type="button" onClick={() => setReviewShotsOpen(true)} className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary lg:text-right">
             <span className="font-medium text-foreground">{activeRoundShotCount}</span> shots analyzed
           </button>}
         </CardContent>
       </Card>
-      {!showOverview && roundReviewScope === 'round' && <RoundShotReviewDialog open={reviewShotsOpen} onOpenChange={setReviewShotsOpen} shots={activeRoundShots} onSave={updateRoundShotClassifications} />}
+      {!showOverview && (
+        <RoundShotReviewDialog
+          open={reviewShotsOpen}
+          onOpenChange={setReviewShotsOpen}
+          shots={activeReviewShots}
+          onSave={updateRoundShotClassifications}
+          title={roundReviewScope === 'round' ? 'Review Round Shots' : `Review Shots · ${roundReviewScope === 'all' ? 'All rounds' : reviewScopeLabel(roundReviewScope)}`}
+          description={roundReviewScope === 'round'
+            ? 'Same review format as upload. Shots are shown in the exact order played: Hole, then Shot.'
+            : 'Review historical shots by club with the context needed to classify them: date, lie from, lie to, distance to green, shot family, effort, and target intent.'}
+          requireCompleteSequence={roundReviewScope === 'round'}
+        />
+      )}
 
       {/* Dashboard Sub-Tabs */}
       <Tabs value={dashboardView} onValueChange={setDashboardView}>
