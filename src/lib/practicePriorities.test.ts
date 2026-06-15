@@ -76,7 +76,7 @@ describe('practice priorities', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
     });
 
@@ -121,7 +121,7 @@ describe('practice priorities', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
     });
 
@@ -150,7 +150,7 @@ describe('practice priorities', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
     });
 

@@ -286,24 +286,22 @@ function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditTho
 }
 
 export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, onEditThoughts, onReviewClubShot }: RoundReviewTabProps) {
-  const { gappingHcpTarget } = useGolfData();
+  const { gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map(session => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
-  const [benchmarkHcp, setBenchmarkHcp] = useState(gappingHcpTarget);
+  const [benchmarkHcp, setBenchmarkHcp] = useState(10);
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
   const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
   const [progressMode, setProgressMode] = useState<ProgressMode>('overall');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setBenchmarkHcp(gappingHcpTarget), [gappingHcpTarget]);
-
   const gappingAssignments = useMemo(() => buildCourseShotGappingAssignments({
-    profiles, shots, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotClassificationRules,
-  }).shotToAssignment, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+    profiles, shots, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotClassificationRules,
+  }).shotToAssignment, [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
   const review = useMemo(
     () => buildRoundReview(shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope),
     [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope]
@@ -352,7 +350,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const biggestRegression = [...trendRows].sort((a, b) => ((a.round.shotQualityIndex ?? 0) - (a.last5.shotQualityIndex ?? 0)) - ((b.round.shotQualityIndex ?? 0) - (b.last5.shotQualityIndex ?? 0)))[0];
   const bestDistance = [...review.greenDistanceRows].filter(row => row.round.targetSuccessPct !== null).sort((a, b) => (b.round.targetSuccessPct ?? 0) - (a.round.targetSuccessPct ?? 0))[0];
   const weakDistance = [...review.greenDistanceRows].filter(row => row.round.targetSuccessPct !== null).sort((a, b) => (a.round.targetSuccessPct ?? 0) - (b.round.targetSuccessPct ?? 0))[0];
-  const benchmarkOptions = [...new Set([gappingHcpTarget, ...Object.keys(HCP_BENCHMARKS).map(Number)])].sort((a, b) => b - a);
+  const benchmarkOptions = Object.keys(HCP_BENCHMARKS).map(Number).sort((a, b) => b - a);
   const progressLines = progressMode === 'tee'
     ? [
         { key: 'teeShotQuality', label: 'Tee Shot Quality', color: 'hsl(var(--primary))' },
@@ -469,7 +467,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
               <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Benchmark against</label>
               <Select value={benchmarkHcp.toString()} onValueChange={value => setBenchmarkHcp(Number(value))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{benchmarkOptions.map(hcp => <SelectItem key={hcp} value={hcp.toString()}>{hcp === gappingHcpTarget ? `Settings target · ${hcp} HCP` : `Target ${hcp} HCP`}</SelectItem>)}</SelectContent>
+                <SelectContent>{benchmarkOptions.map(hcp => <SelectItem key={hcp} value={hcp.toString()}>{`Target ${hcp} HCP`}</SelectItem>)}</SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Status colours are relative to your selected handicap benchmark.</p>
               <Button className="w-full gap-2" onClick={() => void exportToPDF()} disabled={isExportingPdf}>

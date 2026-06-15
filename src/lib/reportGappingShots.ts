@@ -6,7 +6,6 @@ import {
   clubSortIndex,
   getClubName,
   getShotLabel,
-  loadShotCategoryOverrides,
   powerStrength,
   visibleGappingConfigKey,
   type CourseShotGappingAssignment,
@@ -361,7 +360,7 @@ export function buildReportGappingAnalysis({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
+  gappingReliablePercent,
   distanceToTargetTolerance,
   shotClassificationRules = loadShotClassificationRules(),
 }: {
@@ -371,7 +370,7 @@ export function buildReportGappingAnalysis({
   practiceSessions: PracticeSession[];
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
-  gappingHcpTarget: number;
+  gappingReliablePercent: number;
   distanceToTargetTolerance: number;
   shotClassificationRules?: ShotClassificationRules;
 }): ReportGappingAnalysis {
@@ -381,8 +380,8 @@ export function buildReportGappingAnalysis({
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
-    shotCategoryOverrides: loadShotCategoryOverrides(),
+    gappingReliablePercent,
+    shotCategoryOverrides: {},
     shotClassificationRules,
   });
   const groupedShots = new Map<string, { assignment: CourseShotGappingAssignment; shots: Shot[] }>();

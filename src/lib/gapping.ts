@@ -46,6 +46,8 @@ const SHOT_QUALITY_HANDICAP: Record<string, number> = {
 };
 
 const DEFAULT_QUALITY_CUTOFF = 10;
+const DEFAULT_RELIABLE_PERCENT = 60;
+const QUALITY_HANDICAP_LEVELS = [-10, -5, 0, 5, 10, 15, 20, 25];
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
 export const SHOT_CATEGORY_OVERRIDES_KEY = 'golf_gapping_shot_category_overrides_v1';
 export const SHOT_CATEGORY_OVERRIDES_EVENT = 'golf-gapping-shot-category-overrides-change';
@@ -92,6 +94,8 @@ export interface GappingRow {
   intentShotCount: number;
   rangeShotCount: number;
   qualityCutoff: number;
+  reliableHcpLevel: number | null;
+  reliableCoveragePct: number | null;
   savedTarget: Partial<ShotProfileTargetValues>;
 }
 
@@ -155,6 +159,45 @@ function selectGappingQualityShots(shots: Shot[], cutoff: number): Shot[] {
   return cutoffShots;
 }
 
+function selectReliableGappingShots(shots: Shot[], reliablePercent: number): {
+  shots: Shot[];
+  reliableHcpLevel: number | null;
+  reliableCoveragePct: number | null;
+} {
+  if (shots.length === 0) {
+    return { shots: [], reliableHcpLevel: null, reliableCoveragePct: null };
+  }
+
+  const ratedShots = sortByQuality(shots).filter((shot) => Number.isFinite(shotHandicap(shot)));
+  if (ratedShots.length === 0) {
+    return {
+      shots: selectGappingQualityShots(shots, DEFAULT_QUALITY_CUTOFF),
+      reliableHcpLevel: null,
+      reliableCoveragePct: null,
+    };
+  }
+
+  const targetPercent = Math.max(10, Math.min(100, reliablePercent || DEFAULT_RELIABLE_PERCENT));
+  const targetCount = Math.max(1, Math.ceil(ratedShots.length * (targetPercent / 100)));
+
+  for (const level of QUALITY_HANDICAP_LEVELS) {
+    const included = ratedShots.filter((shot) => shotHandicap(shot) <= level);
+    if (included.length >= targetCount) {
+      return {
+        shots: included,
+        reliableHcpLevel: level,
+        reliableCoveragePct: (included.length / ratedShots.length) * 100,
+      };
+    }
+  }
+
+  return {
+    shots: ratedShots,
+    reliableHcpLevel: QUALITY_HANDICAP_LEVELS.at(-1) ?? 25,
+    reliableCoveragePct: 100,
+  };
+}
+
 export function sortShots(shots: Shot[], sortKey: ShotSortKey): Shot[] {
   return [...shots].sort((a, b) => {
     if (sortKey === 'distance') return b.total - a.total;
@@ -163,19 +206,6 @@ export function sortShots(shots: Shot[], sortKey: ShotSortKey): Shot[] {
     if (qualityDelta !== 0) return qualityDelta;
     return b.total - a.total;
   });
-}
-
-function getTargetSettings(profile: ShotProfile, target: ProfileTarget): Partial<ShotProfileTargetValues> {
-  const targetOverride = profile.targetOverrides[target] ?? {};
-  const useLegacyTargets = profile.targets.length <= 1;
-  return {
-    targetTotal: targetOverride.targetTotal ?? (useLegacyTargets ? profile.targetTotal : null),
-    targetCarry: targetOverride.targetCarry ?? (useLegacyTargets ? profile.targetCarry : null),
-    targetVariationPct: targetOverride.targetVariationPct ?? (useLegacyTargets ? profile.targetVariationPct : null),
-    targetSideLeft: targetOverride.targetSideLeft ?? (useLegacyTargets ? profile.targetSideLeft : null),
-    targetSideRight: targetOverride.targetSideRight ?? (useLegacyTargets ? profile.targetSideRight : null),
-    targetQualityCutoff: targetOverride.targetQualityCutoff ?? profile.targetQualityCutoff,
-  };
 }
 
 function getProfileTargetTotal(profile: ShotProfile | undefined): number | null {
@@ -236,6 +266,46 @@ export function fmtSigned(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '-';
   if (Math.abs(value) < 0.5) return 'Neutral';
   return `${Math.abs(value).toFixed(0)}m ${value > 0 ? 'R' : 'L'}`;
+}
+
+export function fmtReliableHcp(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return '-';
+  if (value === -10) return 'Pro';
+  if (value === -5) return 'Elite';
+  if (value === 0) return '0 HCP';
+  return `${value} HCP`;
+}
+
+export function getSidePattern(row: Pick<GappingRow, 'displaySideLeft' | 'displaySideRight' | 'sideBias'>): {
+  label: string;
+  className: string;
+} {
+  const left = row.displaySideLeft ?? 0;
+  const right = row.displaySideRight ?? 0;
+  const bias = row.sideBias ?? 0;
+  const spread = Math.max(left, right);
+  const absBias = Math.abs(bias);
+  const direction = bias > 0 ? 'R' : 'L';
+
+  if (row.displaySideLeft === null && row.displaySideRight === null && row.sideBias === null) {
+    return { label: '-', className: 'text-muted-foreground' };
+  }
+  if (absBias >= 8) {
+    return { label: `${Math.round(absBias)}m ${direction} bias`, className: 'text-red-600 font-medium' };
+  }
+  if (spread >= 22) {
+    return { label: 'Wide both', className: 'text-red-600 font-medium' };
+  }
+  if (left >= 15 && left >= right * 1.35) {
+    return { label: 'Left heavy', className: 'text-amber-600 font-medium' };
+  }
+  if (right >= 15 && right >= left * 1.35) {
+    return { label: 'Right heavy', className: 'text-amber-600 font-medium' };
+  }
+  if (absBias >= 4) {
+    return { label: `${Math.round(absBias)}m ${direction}`, className: 'text-amber-600 font-medium' };
+  }
+  return { label: 'Neutral', className: 'text-emerald-600 font-medium' };
 }
 
 export function parseOptionalNumber(value: string): number | null {
@@ -847,14 +917,13 @@ function buildRow(
   practiceConfigs: ClubPracticeConfig[],
   shotsBySession: ShotsBySession,
   profiles: ShotProfileMap,
-  globalQualityCutoff: number,
+  reliablePercent: number,
   shotCategoryOverrides: ShotCategoryOverrides,
   shotClassificationRules: ShotClassificationRules,
 ): GappingRow {
   const fullTargetMax = getFullShotTargetMax(profile.clubId, profiles, practiceConfigs);
   const fullTargetTotal = getFullShotTargetTotal(profile.clubId, profiles, practiceConfigs, courseShots);
-  const savedTarget = getTargetSettings(profile, target);
-  const qualityCutoff = globalQualityCutoff || savedTarget.targetQualityCutoff || DEFAULT_QUALITY_CUTOFF;
+  const savedTarget: Partial<ShotProfileTargetValues> = {};
   const sessions = practiceSessions
     .filter((session) => matchesPracticeProfile(session, profile))
     .sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -907,16 +976,18 @@ function buildRow(
         return override ? override.target === target : matchesTargetIntent(shot, target, intentWindow);
       }))
     : cleanedClubShots;
-  const referenceShots = selectGappingQualityShots(targetReferenceShots, qualityCutoff);
+  const reliableSelection = selectReliableGappingShots(targetReferenceShots, reliablePercent);
+  const referenceShots = reliableSelection.shots;
+  const qualityCutoff = reliableSelection.reliableHcpLevel ?? DEFAULT_QUALITY_CUTOFF;
   const top = referenceShots;
   const totals = top.map((shot) => shot.total);
   const variationTotals = referenceShots.map((shot) => shot.total);
   const sides = top.map((shot) => shot.side);
   const liveTotal = mean(totals);
   const rangeShotCount = getRangeShotCount(sessions, shotsBySession);
-  const displayTotal = savedTarget.targetTotal ?? liveTotal ?? rangeTotal;
+  const displayTotal = liveTotal ?? rangeTotal;
   const liveVariationPct = variationPct(variationTotals, liveTotal);
-  const displayVariationPct = savedTarget.targetVariationPct ?? liveVariationPct ?? rangeLiveVariationPct;
+  const displayVariationPct = liveVariationPct ?? rangeLiveVariationPct;
   const usesLiveTotal = displayTotal !== null && liveTotal !== null && Math.abs(displayTotal - liveTotal) < 0.5;
   const variationWindow = displayTotal !== null && displayVariationPct !== null
     ? {
@@ -949,15 +1020,15 @@ function buildRow(
     rangeTargetSide,
     displayVariationPct,
     displayTotal,
-    displayCarry: savedTarget.targetCarry ?? (usesLiveTotal ? liveCarry : null) ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? rangeCarry,
+    displayCarry: (usesLiveTotal ? liveCarry : null) ?? getRangeCarryEstimate(displayTotal, practiceConfig) ?? rangeCarry,
     displayCarryMin: displayCarryWindow.min,
     displayCarryMax: displayCarryWindow.max,
     totalMin: variationWindow?.min ?? (rangeOnly ? rangeTotalWindow.min : estimatedVerticalWindow.min),
     totalMax: variationWindow?.max ?? (rangeOnly ? rangeTotalWindow.max : estimatedVerticalWindow.max),
     sideLeft: sides.length ? Math.abs(Math.min(0, ...sides)) : null,
     sideRight: sides.length ? Math.max(0, ...sides) : null,
-    displaySideLeft: savedTarget.targetSideLeft ?? (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
-    displaySideRight: savedTarget.targetSideRight ?? (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
+    displaySideLeft: (sides.length ? Math.abs(Math.min(0, ...sides)) : null) ?? rangeSideStats.left,
+    displaySideRight: (sides.length ? Math.max(0, ...sides) : null) ?? rangeSideStats.right,
     sideBias: mean(sides) ?? rangeSideStats.mean,
     recentTargetPct: recentIntentShots.length ? (recentIntentShots.filter((shot) => shotHandicap(shot) <= qualityCutoff).length / recentIntentShots.length) * 100 : null,
     recentSafePct: recentIntentShots.length ? (recentIntentShots.filter(isSafeOutcome).length / recentIntentShots.length) * 100 : null,
@@ -966,6 +1037,8 @@ function buildRow(
     intentShotCount: targetReferenceShots.length,
     rangeShotCount,
     qualityCutoff,
+    reliableHcpLevel: reliableSelection.reliableHcpLevel,
+    reliableCoveragePct: reliableSelection.reliableCoveragePct,
     savedTarget,
   };
 }
@@ -995,7 +1068,7 @@ export function buildClubGappingRows({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
+  gappingReliablePercent = DEFAULT_RELIABLE_PERCENT,
   shotCategoryOverrides,
   shotClassificationRules = loadShotClassificationRules(),
 }: {
@@ -1005,7 +1078,7 @@ export function buildClubGappingRows({
   practiceSessions: PracticeSession[];
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
-  gappingHcpTarget: number;
+  gappingReliablePercent?: number;
   shotCategoryOverrides: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
 }): GappingRow[] {
@@ -1048,7 +1121,7 @@ export function buildClubGappingRows({
       practiceConfigs,
       shotsBySession,
       profiles,
-      gappingHcpTarget,
+      gappingReliablePercent,
       shotCategoryOverrides,
       shotClassificationRules,
     )))
@@ -1067,8 +1140,8 @@ export function buildCourseShotGappingAssignments({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
-  shotCategoryOverrides = loadShotCategoryOverrides(),
+  gappingReliablePercent = DEFAULT_RELIABLE_PERCENT,
+  shotCategoryOverrides = {},
   shotClassificationRules = loadShotClassificationRules(),
 }: {
   profiles: ShotProfileMap;
@@ -1076,7 +1149,7 @@ export function buildCourseShotGappingAssignments({
   practiceSessions: PracticeSession[];
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
-  gappingHcpTarget: number;
+  gappingReliablePercent?: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
 }): {
@@ -1095,7 +1168,7 @@ export function buildCourseShotGappingAssignments({
       practiceSessions,
       practiceConfigs,
       shotsBySession,
-      gappingHcpTarget,
+      gappingReliablePercent,
       shotCategoryOverrides,
       shotClassificationRules,
     });

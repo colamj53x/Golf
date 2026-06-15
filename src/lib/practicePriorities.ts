@@ -1,6 +1,6 @@
 import type { ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
 import { calculateShotDamage, describeHandicapEquivalent, shotConfidence, shotQualityScore, type AnalysisConfidence } from '@/lib/analysisSynthesis';
-import { buildClubGappingRows, getShotLabel, loadShotCategoryOverrides, visibleProfileId, type ShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
+import { buildClubGappingRows, getShotLabel, visibleProfileId, type ShotCategoryOverrides, type ShotContext } from '@/lib/gapping';
 import { getClubConfigId, getShotDateKey } from '@/lib/golfCalculations';
 import type { ShotClassificationRules } from '@/lib/shotClassificationRules';
 import type { ShotProfile, ShotProfileMap } from '@/lib/shotProfiles';
@@ -59,7 +59,7 @@ interface BuildPracticePrioritiesInput {
   practiceSessions: PracticeSession[];
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
-  gappingHcpTarget: number;
+  gappingReliablePercent: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
   perConfigShotLimit?: number | null;
@@ -111,8 +111,8 @@ function mapShotsToConfigs({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
-  shotCategoryOverrides = loadShotCategoryOverrides(),
+  gappingReliablePercent,
+  shotCategoryOverrides = {},
   shotClassificationRules,
 }: BuildPracticePrioritiesInput): Map<string, string> {
   const shotToConfig = new Map<string, string>();
@@ -126,7 +126,7 @@ function mapShotsToConfigs({
       practiceSessions,
       practiceConfigs,
       shotsBySession,
-      gappingHcpTarget,
+      gappingReliablePercent,
       shotCategoryOverrides,
       shotClassificationRules,
     });
@@ -146,13 +146,13 @@ export function buildPracticePriorities({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
-  shotCategoryOverrides = loadShotCategoryOverrides(),
+  gappingReliablePercent,
+  shotCategoryOverrides = {},
   shotClassificationRules,
   perConfigShotLimit = 20,
 }: BuildPracticePrioritiesInput): PracticePriority[] {
   const shotToConfig = mapShotsToConfigs({
-    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules,
+    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotCategoryOverrides, shotClassificationRules,
   });
 
   const grouped = new Map<string, Shot[]>();
@@ -252,12 +252,12 @@ export function buildDistancePriorities({
   practiceSessions,
   practiceConfigs,
   shotsBySession,
-  gappingHcpTarget,
-  shotCategoryOverrides = loadShotCategoryOverrides(),
+  gappingReliablePercent,
+  shotCategoryOverrides = {},
   shotClassificationRules,
 }: BuildPracticePrioritiesInput): DistancePriority[] {
   const shotToConfig = mapShotsToConfigs({
-    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules,
+    shots, profiles, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotCategoryOverrides, shotClassificationRules,
   });
 
   const grouped = new Map<string, { band: { key: string; label: string }; shots: Shot[] }>();

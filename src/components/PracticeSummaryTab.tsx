@@ -15,7 +15,6 @@ import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import {
   buildClubGappingRows,
   buildCourseShotGappingAssignments,
-  loadShotCategoryOverrides,
   visibleGappingConfigKey,
   type ShotContext,
 } from '@/lib/gapping';
@@ -227,7 +226,7 @@ export function PracticeSummaryTab({
 }: {
   onOpenLog?: (configKey: string) => void;
 } = {}) {
-  const { shots, gappingHcpTarget } = useGolfData();
+  const { shots, gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -241,9 +240,9 @@ export function PracticeSummaryTab({
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     shotClassificationRules,
-  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+  }), [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
   const prioritiesByConfig = useMemo(() => new Map(
     buildPracticePriorities({
       shots,
@@ -251,15 +250,14 @@ export function PracticeSummaryTab({
       practiceSessions,
       practiceConfigs,
       shotsBySession,
-      gappingHcpTarget,
+      gappingReliablePercent,
       shotClassificationRules,
     }).map((priority) => [visibleGappingConfigKey(priority.configKey), priority]),
-  ), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+  ), [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
 
   const actualTotalsByConfig = useMemo(() => {
     const totals = new Map<string, { weightedTotal: number; count: number }>();
     const contexts: ShotContext[] = ['tee', 'fairway', 'roughRecovery'];
-    const shotCategoryOverrides = loadShotCategoryOverrides();
 
     for (const shotContext of contexts) {
       const gappingRows = buildClubGappingRows({
@@ -269,8 +267,8 @@ export function PracticeSummaryTab({
         practiceSessions,
         practiceConfigs,
         shotsBySession,
-        gappingHcpTarget,
-        shotCategoryOverrides,
+        gappingReliablePercent,
+        shotCategoryOverrides: {},
         shotClassificationRules,
       });
 
@@ -293,7 +291,7 @@ export function PracticeSummaryTab({
         },
       ]),
     );
-  }, [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
+  }, [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, shots, shotsBySession, shotClassificationRules]);
 
   const courseSignals = useMemo(() => {
     const shotsByConfig = new Map<string, Shot[]>();

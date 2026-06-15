@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildClubGappingRows, GappingRow, loadShotCategoryOverrides, SHOT_CATEGORY_OVERRIDES_EVENT, ShotContext } from '@/lib/gapping';
+import { buildClubGappingRows, GappingRow, ShotContext } from '@/lib/gapping';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { getClubConfigId } from '@/lib/golfCalculations';
 import { ProfileTarget, ShotProfile, ShotProfileTargetValues, useShotProfiles } from '@/lib/shotProfiles';
@@ -836,7 +836,7 @@ export function ClubSelectorTab({
   defaultView?: 'club-selector' | 'wedge-matrix';
   singleView?: boolean;
 } = {}) {
-  const { shots, clubs, isLoading, gappingHcpTarget, shotPickerDistanceTolerancePct, shotPickerAdjustments } = useGolfData();
+  const { shots, clubs, isLoading, gappingReliablePercent, shotPickerDistanceTolerancePct, shotPickerAdjustments } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -852,18 +852,6 @@ export function ClubSelectorTab({
   const [mustCarry, setMustCarry] = useState(false);
   const [matrixSort, setMatrixSort] = useState<MatrixSortKey>('club');
   const [matrixLieContext, setMatrixLieContext] = useState<MatrixLieContext>('fairway');
-  const [shotCategoryOverrides, setShotCategoryOverrides] = useState(() => loadShotCategoryOverrides());
-
-  useEffect(() => {
-    const refreshOverrides = () => setShotCategoryOverrides(loadShotCategoryOverrides());
-    window.addEventListener('storage', refreshOverrides);
-    window.addEventListener(SHOT_CATEGORY_OVERRIDES_EVENT, refreshOverrides);
-    return () => {
-      window.removeEventListener('storage', refreshOverrides);
-      window.removeEventListener(SHOT_CATEGORY_OVERRIDES_EVENT, refreshOverrides);
-    };
-  }, []);
-
   const numericTarget = Number(targetDistance);
   const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
   const numericDistanceTolerancePct = shotPickerDistanceTolerancePct > 0 ? shotPickerDistanceTolerancePct : 5;
@@ -882,10 +870,10 @@ export function ClubSelectorTab({
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
-    shotCategoryOverrides,
+    gappingReliablePercent,
+    shotCategoryOverrides: {},
     shotClassificationRules,
-  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules]);
+  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotClassificationRules]);
   const recommendations = useMemo(
     () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry),
     [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry],
@@ -899,8 +887,8 @@ export function ClubSelectorTab({
       practiceSessions,
       practiceConfigs,
       shotsBySession,
-      gappingHcpTarget,
-      shotCategoryOverrides,
+      gappingReliablePercent,
+      shotCategoryOverrides: {},
       shotClassificationRules,
     })
       .filter((row) => row.target === 'green')
@@ -945,7 +933,7 @@ export function ClubSelectorTab({
     }
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
-  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingHcpTarget, shotCategoryOverrides, shotClassificationRules, matrixLieContext, matrixSort]);
+  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingReliablePercent, shotClassificationRules, matrixLieContext, matrixSort]);
 
   if (isLoading) {
     return (

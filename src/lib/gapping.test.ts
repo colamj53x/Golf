@@ -94,7 +94,7 @@ describe('buildClubGappingRows', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
     });
 
@@ -132,7 +132,7 @@ describe('buildClubGappingRows', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
     });
 
@@ -162,7 +162,7 @@ describe('buildClubGappingRows', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {
         [reviewedShot.id]: { profileId: pitchFull.id, target: 'green' },
       },
@@ -194,7 +194,7 @@ describe('buildClubGappingRows', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {},
       shotClassificationRules: {
         '6i_full': { fullMinTarget: 120 },
@@ -227,7 +227,7 @@ describe('buildClubGappingRows', () => {
       practiceSessions: [],
       practiceConfigs: [],
       shotsBySession: {},
-      gappingHcpTarget: 10,
+      gappingReliablePercent: 60,
       shotCategoryOverrides: {
         [shot.id]: { profileId: full.id, target: 'green' },
       },

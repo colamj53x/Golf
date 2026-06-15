@@ -101,8 +101,6 @@ export function SettingsTab() {
     setDistanceToTargetTolerance,
     lowTargetExclusionThreshold,
     setLowTargetExclusionThreshold,
-    gappingHcpTarget,
-    setGappingHcpTarget,
     gappingReliablePercent,
     setGappingReliablePercent,
     shotPickerDistanceTolerancePct,
@@ -118,7 +116,6 @@ export function SettingsTab() {
   } = useGolfData();
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
-  const [editingGappingHcpTarget, setEditingGappingHcpTarget] = useState(gappingHcpTarget);
   const [editingGappingReliablePercent, setEditingGappingReliablePercent] = useState(gappingReliablePercent);
   const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
   const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
@@ -130,7 +127,6 @@ export function SettingsTab() {
   const handleSave = () => {
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
-    setGappingHcpTarget(editingGappingHcpTarget);
     setGappingReliablePercent(Math.max(10, Math.min(100, Math.round(editingGappingReliablePercent))));
     setShotPickerDistanceTolerancePct(editingShotPickerDistanceTolerancePct);
     setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
@@ -144,7 +140,6 @@ export function SettingsTab() {
   const handleReset = () => {
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
-    setEditingGappingHcpTarget(gappingHcpTarget);
     setEditingGappingReliablePercent(gappingReliablePercent);
     setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
     setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
@@ -235,30 +230,8 @@ export function SettingsTab() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Label htmlFor="gappingHcpTarget" className="whitespace-nowrap min-w-[200px]">
-              Club Gapping HCP Target
-            </Label>
-            <Select
-              value={editingGappingHcpTarget.toString()}
-              onValueChange={(value) => setEditingGappingHcpTarget(Number(value))}
-              disabled={!isEditing}
-            >
-              <SelectTrigger id="gappingHcpTarget" className="h-8 w-28 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[5, 10, 15, 20, 25].map(value => (
-                  <SelectItem key={value} value={value.toString()}>{value} HCP</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-sm text-muted-foreground">
-              Sets the quality target for Club Gapping samples and Last 20 T
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
             <Label htmlFor="gappingReliablePercent" className="whitespace-nowrap min-w-[200px]">
-              Gapping Predictable Shots (%)
+              Gapping Reliability (%)
             </Label>
             <Input
               id="gappingReliablePercent"
@@ -272,7 +245,7 @@ export function SettingsTab() {
               className="h-8 w-24 text-sm"
             />
             <span className="text-sm text-muted-foreground">
-              Sets the shot coverage target for the upcoming predictable gapping model
+              Sets how many rated shots must be covered when choosing each club's predictable distance
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -548,7 +521,7 @@ function AdjustmentGroup<K extends string>({
 }
 
 function ShotClassificationRulesCard() {
-  const { shots, gappingHcpTarget } = useGolfData();
+  const { shots, gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const rules = useShotClassificationRules();
@@ -563,9 +536,9 @@ function ShotClassificationRulesCard() {
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     shotClassificationRules: rules,
-  }), [profiles, shots, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, rules]);
+  }), [profiles, shots, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, rules]);
 
   useEffect(() => {
     setDraft(rulesToDraft(rules));

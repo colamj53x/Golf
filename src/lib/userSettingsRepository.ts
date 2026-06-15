@@ -10,7 +10,6 @@ export interface GolfUserSettings {
   clubs: ClubConfig[];
   distanceToTargetTolerance: number;
   lowTargetExclusionThreshold: number;
-  gappingHcpTarget: number;
   gappingReliablePercent: number;
   shotPickerDistanceTolerancePct: number;
   practiceDistanceTolerancePct: number;
@@ -80,7 +79,6 @@ export function parseGolfUserSettings(
     clubs: Array.isArray(value.clubs) && value.clubs.length > 0 ? value.clubs : fallback.clubs,
     distanceToTargetTolerance: numberOr(value.distanceToTargetTolerance, fallback.distanceToTargetTolerance),
     lowTargetExclusionThreshold: numberOr(value.lowTargetExclusionThreshold, fallback.lowTargetExclusionThreshold),
-    gappingHcpTarget: numberOr(value.gappingHcpTarget, fallback.gappingHcpTarget),
     gappingReliablePercent: numberOr(value.gappingReliablePercent, fallback.gappingReliablePercent),
     shotPickerDistanceTolerancePct: numberOr(value.shotPickerDistanceTolerancePct, fallback.shotPickerDistanceTolerancePct),
     practiceDistanceTolerancePct: numberOr(value.practiceDistanceTolerancePct, fallback.practiceDistanceTolerancePct),

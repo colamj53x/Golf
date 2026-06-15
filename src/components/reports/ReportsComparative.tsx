@@ -74,7 +74,7 @@ function metricBenchmarkText(data: {
 }
 
 export function ReportsComparative() {
-  const { clubs, shots, distanceToTargetTolerance, gappingHcpTarget } = useGolfData();
+  const { clubs, shots, distanceToTargetTolerance, gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -94,10 +94,10 @@ export function ReportsComparative() {
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     distanceToTargetTolerance,
     shotClassificationRules,
-  }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingHcpTarget, distanceToTargetTolerance, shotClassificationRules]);
+  }), [profiles, shots, clubs, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, distanceToTargetTolerance, shotClassificationRules]);
 
   const scopedShots = useMemo(() => analysis.shots.map((row) => buildScopedReportData(row, periodToRoundCount(period))), [analysis.shots, period]);
   const scopedClubRollups = useMemo(() => analysis.clubRollups.map((row) => buildScopedReportData(row, periodToRoundCount(period))), [analysis.clubRollups, period]);

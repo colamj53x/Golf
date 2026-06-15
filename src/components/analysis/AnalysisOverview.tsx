@@ -129,7 +129,7 @@ export function AnalysisOverview({
   onOpenLatestRound?: () => void;
   onOpenPractice?: () => void;
 } = {}) {
-  const { shots, clubs, roundReflections, gappingHcpTarget, todayRecentShotCount, isLoading: golfLoading } = useGolfData();
+  const { shots, clubs, roundReflections, gappingReliablePercent, todayRecentShotCount, isLoading: golfLoading } = useGolfData();
   const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
   const puttingSessions = useAnalysisPuttingSessions();
   const profiles = useShotProfiles();
@@ -154,28 +154,28 @@ export function AnalysisOverview({
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     shotClassificationRules,
     perConfigShotLimit: null,
-  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
+  }).slice(0, 3), [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
   const distancePriorities = useMemo(() => buildDistancePriorities({
     shots: recentShots,
     profiles,
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     shotClassificationRules,
-  }).slice(0, 3), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
+  }).slice(0, 3), [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
   const capability = useMemo(() => buildCapabilityIndex({
     shots: recentShots,
     profiles,
     practiceSessions,
     practiceConfigs,
     shotsBySession,
-    gappingHcpTarget,
+    gappingReliablePercent,
     shotClassificationRules,
-  }), [gappingHcpTarget, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
+  }), [gappingReliablePercent, practiceConfigs, practiceSessions, profiles, recentShots, shotsBySession, shotClassificationRules]);
 
   if (golfLoading || practiceLoading) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-32 w-full" /><Skeleton className="h-96 w-full" /></div>;
