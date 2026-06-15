@@ -81,8 +81,44 @@ describe('buildRoundReview', () => {
 
     expect(getRoundReviewShotLabel(pitch)).toBe('Pitch Half');
     expect(getRoundReviewShotLabel(bump)).toBe('Bump Half');
-    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['SW · Pitch · Half · Green', '8I · Bump · Half · Green']);
+    expect(review.clubAndTypeRows.map(row => row.label)).toEqual(['Sand Wedge · Pitch · Half · Green', '8 Iron · Bump · Half · Green']);
     expect(review.clubAndTypeRows.map(row => row.targetLabel)).toEqual(['Green', 'Green']);
+  });
+
+  it('merges gapping-assigned and fallback shots that display as the same club shot row', () => {
+    const fallback = shot('fallback', '2026-05-31', 220, '10 Handicap', {
+      club: 'Dr',
+      shotFamily: 'full',
+      swingEffort: 'full',
+      targetIntent: 'fairway',
+      startLie: 'Tee',
+      endLie: 'Fairway',
+    });
+    const assigned = shot('assigned', '2026-05-31', 220, '10 Handicap', {
+      club: 'Dr',
+      shotFamily: 'full',
+      swingEffort: 'full',
+      targetIntent: 'fairway',
+      startLie: 'Tee',
+      endLie: 'Fairway',
+    });
+    const review = buildRoundReview([fallback, assigned], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31', new Map([
+      ['assigned', {
+        configKey: 'dr_full_full',
+        target: 'fairway',
+        profile: {
+          id: 'dr_full_full',
+          clubId: 'dr',
+          shotType: 'full',
+          power: 'full',
+        },
+      } as never],
+    ]));
+
+    expect(review.clubAndTypeRows).toHaveLength(1);
+    expect(review.clubAndTypeRows[0].label).toBe('Driver · Full · Full · Fairway');
+    expect(review.clubAndTypeRows[0].round.shotCount).toBe(2);
+    expect(review.clubAndTypeRows[0].shotIds).toEqual(['fallback', 'assigned']);
   });
 
   it('infers unspecified targets for club and shot type rows', () => {
@@ -96,12 +132,12 @@ describe('buildRoundReview', () => {
     ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
 
     expect(review.clubAndTypeRows.map(row => [row.clubLabel, row.shotTypeLabel, row.targetLabel])).toEqual([
-      ['Dr', 'Full', 'Fairway'],
-      ['5W', 'Full', 'Fairway'],
-      ['4H', 'Full', 'Fairway'],
-      ['5H', 'Full', 'Green'],
-      ['7I', 'Punch', 'Fairway'],
-      ['9I', 'Full', 'Green'],
+      ['Driver', 'Full', 'Fairway'],
+      ['5 Wood', 'Full', 'Fairway'],
+      ['4 Hybrid', 'Full', 'Fairway'],
+      ['5 Hybrid', 'Full', 'Green'],
+      ['7 Iron', 'Punch', 'Fairway'],
+      ['9 Iron', 'Full', 'Green'],
     ]);
   });
 
@@ -114,7 +150,7 @@ describe('buildRoundReview', () => {
     ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
 
     const distanceRow = review.greenDistanceRows.find(row => row.key === '100-150');
-    expect(distanceRow?.dominantClubShotLabel).toBe('9I / Full');
+    expect(distanceRow?.dominantClubShotLabel).toBe('9 Iron / Full');
     expect(distanceRow?.dominantClubShotPct).toBeCloseTo(66.67, 1);
     expect(review.lieRows.map(row => [row.label, row.shareOfTotalPct])).toEqual([
       ['Tee', 25],

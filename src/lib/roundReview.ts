@@ -182,6 +182,15 @@ function inferUnspecifiedTarget(clubId: string, shotTypeLabel: string): 'fairway
   return 'green';
 }
 
+function getRoundReviewGroupKey(clubId: string, shotTypeLabel: string, powerLabel: string, targetLabel: string): string {
+  return [
+    clubId.trim().toLowerCase(),
+    shotTypeLabel.trim().toLowerCase(),
+    powerLabel.trim().toLowerCase(),
+    targetLabel.trim().toLowerCase(),
+  ].join('|');
+}
+
 function makeRows(
   selected: ProcessedShot[],
   last5: ProcessedShot[],
@@ -312,7 +321,7 @@ export function buildRoundReview(
     const savedTarget = assignment?.target ?? shot.targetIntent.trim().toLowerCase();
     const target = isUnspecifiedTarget(savedTarget) ? inferUnspecifiedTarget(clubId, shotTypeLabel) : savedTarget;
     const inferredTargetLabel = target === 'fairway' ? 'Fairway' : target === 'green' ? 'Green' : 'Unspecified';
-    const key = `${assignment?.configKey ?? `${clubLabel}|${shotTypeLabel}|${powerLabel}`}|${inferredTargetLabel}`;
+    const key = getRoundReviewGroupKey(clubId, shotTypeLabel, powerLabel, inferredTargetLabel);
     return {
       key,
       label: `${clubLabel} · ${shotTypeLabel} · ${powerLabel} · ${inferredTargetLabel}`,
