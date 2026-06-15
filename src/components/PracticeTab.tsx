@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PracticeDashboardTab } from '@/components/PracticeDashboardTab';
 import { PracticeSummaryTab } from '@/components/PracticeSummaryTab';
 import { PracticePlanTab } from '@/components/PracticePlanTab';
+import { PracticeTargetsMatrixTab } from '@/components/PracticeTargetsMatrixTab';
 import { PuttingHome, PuttingSection } from '@/components/putting/PuttingHome';
 import { PuttingIndoor } from '@/components/putting/PuttingIndoor';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -14,6 +15,7 @@ type PuttingView = 'home' | 'indoor';
 const secondaryNavItems = [
   { value: 'summary', label: 'Next Session' },
   { value: 'logs', label: 'Logs' },
+  { value: 'targets', label: 'Targets' },
   { value: 'plan', label: 'Plan' },
 ];
 
@@ -100,6 +102,7 @@ export function PracticeTab() {
           />
         )}
         {fullSwingTab === 'logs' && <PracticeDashboardTab />}
+        {fullSwingTab === 'targets' && <PracticeTargetsMatrixTab />}
         {fullSwingTab === 'plan' && <PracticePlanTab />}
       </TabsContent>
 
