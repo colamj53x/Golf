@@ -41,6 +41,8 @@ interface GolfDataContextType {
   setLowTargetExclusionThreshold: React.Dispatch<React.SetStateAction<number>>;
   gappingHcpTarget: number;
   setGappingHcpTarget: React.Dispatch<React.SetStateAction<number>>;
+  gappingReliablePercent: number;
+  setGappingReliablePercent: React.Dispatch<React.SetStateAction<number>>;
   shotPickerDistanceTolerancePct: number;
   setShotPickerDistanceTolerancePct: React.Dispatch<React.SetStateAction<number>>;
   practiceDistanceTolerancePct: number;
@@ -164,6 +166,11 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     return saved ? parseFloat(saved) : 10;
   });
 
+  const [gappingReliablePercent, setGappingReliablePercent] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-gapping-reliable-percent');
+    return saved ? parseFloat(saved) : 60;
+  });
+
   const [shotPickerDistanceTolerancePct, setShotPickerDistanceTolerancePct] = useState<number>(() => {
     const saved = localStorage.getItem('golf-shot-picker-distance-tolerance-pct');
     return saved ? parseFloat(saved) : 5;
@@ -231,6 +238,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   }, [gappingHcpTarget]);
 
   useEffect(() => {
+    localStorage.setItem('golf-gapping-reliable-percent', gappingReliablePercent.toString());
+  }, [gappingReliablePercent]);
+
+  useEffect(() => {
     localStorage.setItem('golf-shot-picker-distance-tolerance-pct', shotPickerDistanceTolerancePct.toString());
   }, [shotPickerDistanceTolerancePct]);
 
@@ -263,6 +274,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     distanceToTargetTolerance,
     lowTargetExclusionThreshold,
     gappingHcpTarget,
+    gappingReliablePercent,
     shotPickerDistanceTolerancePct,
     practiceDistanceTolerancePct,
     practiceBallFlightTolerancePct,
@@ -291,6 +303,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           setDistanceToTargetTolerance(next.distanceToTargetTolerance);
           setLowTargetExclusionThreshold(next.lowTargetExclusionThreshold);
           setGappingHcpTarget(next.gappingHcpTarget);
+          setGappingReliablePercent(next.gappingReliablePercent);
           setShotPickerDistanceTolerancePct(next.shotPickerDistanceTolerancePct);
           setPracticeDistanceTolerancePct(next.practiceDistanceTolerancePct);
           setPracticeBallFlightTolerancePct(next.practiceBallFlightTolerancePct);
@@ -331,6 +344,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     clubs,
     distanceToTargetTolerance,
     gappingHcpTarget,
+    gappingReliablePercent,
     lowTargetExclusionThreshold,
     practiceBallFlightTolerancePct,
     practiceDistanceTolerancePct,
@@ -615,6 +629,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setLowTargetExclusionThreshold,
       gappingHcpTarget,
       setGappingHcpTarget,
+      gappingReliablePercent,
+      setGappingReliablePercent,
       shotPickerDistanceTolerancePct,
       setShotPickerDistanceTolerancePct,
       practiceDistanceTolerancePct,
