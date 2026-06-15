@@ -586,24 +586,24 @@ function getConfidenceClass(score: number): string {
   return 'border-red-500 text-red-700';
 }
 
-function getPercentDotClass(value: number | null): string {
+function getPercentDotClass(value: number | null, greenThreshold = 65, amberThreshold = 40): string {
   if (value === null) return 'border-muted bg-background';
-  if (value >= 65) return 'border-green-600 bg-green-600';
-  if (value >= 40) return 'border-amber-500 bg-amber-500';
+  if (value >= greenThreshold) return 'border-green-600 bg-green-600';
+  if (value >= amberThreshold) return 'border-amber-500 bg-amber-500';
   return 'border-red-600 bg-red-600';
 }
 
-function getComfortTileClass(value: number | null): string {
+function getComfortTileClass(value: number | null, greenThreshold = 65, amberThreshold = 40): string {
   if (value === null) return 'border-slate-200 bg-slate-50 text-slate-950';
-  if (value >= 65) return 'border-emerald-300 bg-emerald-50 text-emerald-950';
-  if (value >= 40) return 'border-amber-300 bg-amber-50 text-amber-950';
+  if (value >= greenThreshold) return 'border-emerald-300 bg-emerald-50 text-emerald-950';
+  if (value >= amberThreshold) return 'border-amber-300 bg-amber-50 text-amber-950';
   return 'border-red-300 bg-red-50 text-red-950';
 }
 
-function getComfortLabel(value: number | null): string {
+function getComfortLabel(value: number | null, greenThreshold = 65, amberThreshold = 40): string {
   if (value === null) return 'No read';
-  if (value >= 65) return 'Comfort';
-  if (value >= 40) return 'Workable';
+  if (value >= greenThreshold) return 'Comfort';
+  if (value >= amberThreshold) return 'Workable';
   return 'Avoid';
 }
 
@@ -836,7 +836,16 @@ export function ClubSelectorTab({
   defaultView?: 'club-selector' | 'wedge-matrix';
   singleView?: boolean;
 } = {}) {
-  const { shots, clubs, isLoading, gappingReliablePercent, shotPickerDistanceTolerancePct, shotPickerAdjustments } = useGolfData();
+  const {
+    shots,
+    clubs,
+    isLoading,
+    gappingReliablePercent,
+    gappingGreenThreshold,
+    gappingAmberThreshold,
+    shotPickerDistanceTolerancePct,
+    shotPickerAdjustments,
+  } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const shotProfiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -993,6 +1002,8 @@ export function ClubSelectorTab({
                   <MatrixMobileCard
                     key={`${row.clubId}-${row.shotType}`}
                     row={row}
+                    greenThreshold={gappingGreenThreshold}
+                    amberThreshold={gappingAmberThreshold}
                   />
                 ))}
               </div>
@@ -1020,6 +1031,8 @@ export function ClubSelectorTab({
                             <MatrixCell
                               cell={row.cells[column.id]}
                               shotType={row.shotType}
+                              greenThreshold={gappingGreenThreshold}
+                              amberThreshold={gappingAmberThreshold}
                             />
                           </TableCell>
                         ))}
@@ -1310,7 +1323,15 @@ function ConfidenceMetric({ label, value }: { label: string; value: number | nul
   );
 }
 
-function MatrixMobileCard({ row }: { row: WedgeMatrixRow }) {
+function MatrixMobileCard({
+  row,
+  greenThreshold,
+  amberThreshold,
+}: {
+  row: WedgeMatrixRow;
+  greenThreshold: number;
+  amberThreshold: number;
+}) {
   return (
     <div className="rounded-md border bg-background p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -1322,14 +1343,33 @@ function MatrixMobileCard({ row }: { row: WedgeMatrixRow }) {
       </div>
       <div className="grid grid-cols-2 gap-2">
         {MATRIX_POWER_COLUMNS.map((column) => (
-          <MatrixMobileCell key={column.id} label={column.label} cell={row.cells[column.id]} shotType={row.shotType} />
+          <MatrixMobileCell
+            key={column.id}
+            label={column.label}
+            cell={row.cells[column.id]}
+            shotType={row.shotType}
+            greenThreshold={greenThreshold}
+            amberThreshold={amberThreshold}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function MatrixMobileCell({ label, cell, shotType }: { label: string; cell?: WedgeMatrixCell; shotType: string }) {
+function MatrixMobileCell({
+  label,
+  cell,
+  shotType,
+  greenThreshold,
+  amberThreshold,
+}: {
+  label: string;
+  cell?: WedgeMatrixCell;
+  shotType: string;
+  greenThreshold: number;
+  amberThreshold: number;
+}) {
   if (!cell) {
     return (
       <div className="rounded-md border bg-muted/20 p-3 text-center text-sm text-muted-foreground">
@@ -1341,14 +1381,14 @@ function MatrixMobileCell({ label, cell, shotType }: { label: string; cell?: Wed
 
   const primaryLabel = shotType === 'pitch' ? 'Carry' : 'Distance';
   const primaryValue = getMatrixCellPrimaryDistance(cell, shotType);
-  const comfortClass = getComfortTileClass(cell.last20TargetPct);
+  const comfortClass = getComfortTileClass(cell.last20TargetPct, greenThreshold, amberThreshold);
 
   return (
     <div className={`rounded-md border p-3 ${comfortClass}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</div>
         <span className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-          {getComfortLabel(cell.last20TargetPct)}
+          {getComfortLabel(cell.last20TargetPct, greenThreshold, amberThreshold)}
         </span>
       </div>
       <div className="mt-1 text-2xl font-semibold leading-none">{formatDistance(primaryValue)}</div>
@@ -1371,7 +1411,17 @@ function MatrixMobileCell({ label, cell, shotType }: { label: string; cell?: Wed
   );
 }
 
-function MatrixCell({ cell, shotType }: { cell?: WedgeMatrixCell; shotType: string }) {
+function MatrixCell({
+  cell,
+  shotType,
+  greenThreshold,
+  amberThreshold,
+}: {
+  cell?: WedgeMatrixCell;
+  shotType: string;
+  greenThreshold: number;
+  amberThreshold: number;
+}) {
   if (!cell) {
     return <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">-</div>;
   }
@@ -1394,7 +1444,7 @@ function MatrixCell({ cell, shotType }: { cell?: WedgeMatrixCell; shotType: stri
         <div className="text-muted-foreground">L20 T</div>
         <div className="flex items-center gap-1.5">
           <span
-            className={`block h-3.5 w-3.5 shrink-0 rounded-full border ${getPercentDotClass(cell.last20TargetPct)}`}
+            className={`block h-3.5 w-3.5 shrink-0 rounded-full border ${getPercentDotClass(cell.last20TargetPct, greenThreshold, amberThreshold)}`}
             title={`Last 20 target ${fmtPct(cell.last20TargetPct)}`}
           />
           <span className="font-semibold">{fmtPct(cell.last20TargetPct)}</span>
