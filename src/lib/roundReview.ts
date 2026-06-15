@@ -4,6 +4,23 @@ import { clubSortIndex, CourseShotGappingAssignment, getClubName, getExpandedGap
 import { ClubConfig, ProcessedShot, Shot } from '@/types/golf';
 import { SHOT_TYPES } from '@/types/practiceClubs';
 
+const CLUB_DISPLAY_NAMES: Record<string, string> = {
+  dr: 'Driver',
+  '3w': '3 Wood',
+  '5w': '5 Wood',
+  '4h': '4 Hybrid',
+  '5h': '5 Hybrid',
+  '5i': '5 Iron',
+  '6i': '6 Iron',
+  '7i': '7 Iron',
+  '8i': '8 Iron',
+  '9i': '9 Iron',
+  pw: 'Pitching Wedge',
+  gw: 'Gap Wedge',
+  sw: 'Sand Wedge',
+  lw: 'Lob Wedge',
+};
+
 export interface RoundReviewRow {
   key: string;
   label: string;
@@ -109,6 +126,13 @@ function processShots(shots: Shot[], clubs: ClubConfig[], distanceToTargetTolera
     clubs.find(club => club.id === getClubConfigId(shot.club)),
     distanceToTargetTolerance
   ));
+}
+
+function getRoundReviewClubLabel(shot: Shot, clubs: ClubConfig[]): string {
+  const clubId = getClubConfigId(shot.club);
+  const configuredName = clubs.find(club => club.id === clubId)?.clubName;
+  if (configuredName && configuredName.trim().length > 2) return configuredName;
+  return CLUB_DISPLAY_NAMES[clubId] ?? configuredName ?? shot.club ?? 'Unknown club';
 }
 
 function metrics(shots: ProcessedShot[]): MetricsResult {
@@ -271,7 +295,7 @@ export function buildRoundReview(
 
   const getClubAndTypeGroup = (shot: ProcessedShot) => {
     const assignment = gappingAssignments.get(shot.id);
-    const clubLabel = assignment ? getClubName(assignment.profile) : shot.club || 'Unknown club';
+    const clubLabel = assignment ? getClubName(assignment.profile) : getRoundReviewClubLabel(shot, clubs);
     const clubOrder = clubSortIndex(assignment?.profile.clubId ?? getClubConfigId(shot.club));
     const expandedShotLabel = assignment ? getExpandedGappingShotLabel(assignment.profile) : getRoundReviewShotLabel({
       ...shot,
