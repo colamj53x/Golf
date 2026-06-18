@@ -195,6 +195,13 @@ function getStatusEmoji(status: MetricStatus): string {
   }
 }
 
+function getTargetPctColor(score: number | null): string {
+  if (score === null) return 'text-muted-foreground';
+  if (score >= 80) return 'text-green-600 font-medium';
+  if (score >= 50) return 'text-amber-600';
+  return 'text-red-600';
+}
+
 function getTrendIcon(trend: TrendDirection) {
   switch (trend) {
     case 'improving': return <TrendingUp className="h-4 w-4 text-green-500" />;
@@ -738,14 +745,14 @@ export function PracticeDashboardTab() {
   const getScoreColor = (score: number | null) => {
     if (score === null) return 'text-muted-foreground';
     if (score >= 80) return 'text-green-500';
-    if (score >= 60) return 'text-amber-500';
+    if (score >= 50) return 'text-amber-500';
     return 'text-red-500';
   };
 
   const getScoreBg = (score: number | null) => {
     if (score === null) return 'bg-muted/50';
     if (score >= 80) return 'bg-green-500/10 border-green-500/20';
-    if (score >= 60) return 'bg-amber-500/10 border-amber-500/20';
+    if (score >= 50) return 'bg-amber-500/10 border-amber-500/20';
     return 'bg-red-500/10 border-red-500/20';
   };
 
@@ -1125,7 +1132,7 @@ export function PracticeDashboardTab() {
                     <div className="grid grid-cols-4 gap-2 text-center text-sm">
                       <div>
                         <p className="text-xs text-muted-foreground">Distance</p>
-                        <p className={`font-bold ${calculatedData.consistency.distancePct >= 80 ? 'text-green-500' : calculatedData.consistency.distancePct >= 60 ? 'text-amber-500' : 'text-red-500'}`}>
+                        <p className={`font-bold ${getTargetPctColor(calculatedData.consistency.distancePct)}`}>
                           {calculatedData.consistency.distancePct}%
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -1134,7 +1141,7 @@ export function PracticeDashboardTab() {
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Lateral</p>
-                        <p className={`font-bold ${calculatedData.consistency.lateralPct >= 80 ? 'text-green-500' : calculatedData.consistency.lateralPct >= 60 ? 'text-amber-500' : 'text-red-500'}`}>
+                        <p className={`font-bold ${getTargetPctColor(calculatedData.consistency.lateralPct)}`}>
                           {calculatedData.consistency.lateralPct}%
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -1143,7 +1150,7 @@ export function PracticeDashboardTab() {
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Best Shots</p>
-                        <p className={`font-bold ${calculatedData.consistency.bestPct >= 80 ? 'text-green-500' : calculatedData.consistency.bestPct >= 60 ? 'text-amber-500' : 'text-red-500'}`}>
+                        <p className={`font-bold ${getTargetPctColor(calculatedData.consistency.bestPct)}`}>
                           {calculatedData.consistency.bestPct}%
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -1152,7 +1159,7 @@ export function PracticeDashboardTab() {
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Overall</p>
-                        <p className={`font-bold text-lg ${calculatedData.consistency.overallScore >= 80 ? 'text-green-500' : calculatedData.consistency.overallScore >= 60 ? 'text-amber-500' : 'text-red-500'}`}>
+                        <p className={`font-bold text-lg ${getTargetPctColor(calculatedData.consistency.overallScore)}`}>
                           {calculatedData.consistency.overallScore}%
                         </p>
                       </div>
@@ -1505,11 +1512,7 @@ export function PracticeDashboardTab() {
                                 {withinTarget === null ? (
                                   <span className="text-muted-foreground">–</span>
                                 ) : (
-                                  <span className={
-                                    withinTarget >= 70 ? 'text-green-600 font-medium'
-                                    : withinTarget >= 40 ? 'text-amber-600'
-                                    : 'text-red-600'
-                                  }>{withinTarget}%</span>
+                                  <span className={getTargetPctColor(withinTarget)}>{withinTarget}%</span>
                                 )}
                               </td>
                               <td className="text-center text-sm">{renderDelta(withinTarget, prev2Avg)}</td>
@@ -1566,11 +1569,21 @@ export function PracticeDashboardTab() {
                         </Button>
                         {/* Status summary badges */}
                         {(() => {
-                          const statuses = session.metrics.map(m => {
-                            const target = config.metrics.find(t => t.id === m.metricId);
-                            if (!target) return null;
-                            return calculateStatus(m, target.targetMin, target.targetMax, target.higherIsBetter, toleranceForMetric(target.category));
-                          }).filter(Boolean);
+                          const sessionShots = (shotsBySession[session.id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>;
+                          const targetMetrics = Object.values(groupedTargetMetrics).flat();
+                          const statuses = targetMetrics
+                            .map((target) => {
+                              const withinTarget = pctWithinTarget(target.id, sessionShots, target.targetMin, target.targetMax, config.clubId);
+                              return statusFromWithinTarget(withinTarget)
+                                ?? calculateStatus(
+                                  getSessionMetricValue(session, target.id),
+                                  target.targetMin,
+                                  target.targetMax,
+                                  target.higherIsBetter,
+                                  toleranceForMetric(target.category),
+                                );
+                            })
+                            .filter((status): status is MetricStatus => status !== null);
                           
                           const greenCount = statuses.filter(s => s === 'green').length;
                           const amberCount = statuses.filter(s => s === 'amber').length;
