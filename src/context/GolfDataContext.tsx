@@ -59,6 +59,7 @@ interface GolfDataContextType {
   setShotPickerAdjustments: React.Dispatch<React.SetStateAction<ShotPickerAdjustmentSettings>>;
   playingPartners: PlayingPartner[];
   setPlayingPartners: React.Dispatch<React.SetStateAction<PlayingPartner[]>>;
+  saveUserSettingsNow: (overrides?: Partial<GolfUserSettings>) => Promise<void>;
   roundReflections: RoundReflection[];
   roundReflectionsAvailable: boolean;
   upsertRoundReflection: (roundDate: string, updates: RoundReflectionInput) => Promise<void>;
@@ -370,6 +371,16 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     user,
   ]);
 
+  const saveUserSettingsNow = useCallback(async (overrides: Partial<GolfUserSettings> = {}) => {
+    if (!user) throw new Error('You must be signed in to save settings.');
+    const nextSettings = {
+      ...currentSettingsRef.current,
+      ...overrides,
+    };
+    await saveGolfUserSettings(user.id, nextSettings);
+    currentSettingsRef.current = nextSettings;
+  }, [user]);
+
   const loadShots = useCallback(async () => {
     if (!user) {
       setShots([]);
@@ -661,6 +672,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setShotPickerAdjustments,
       playingPartners,
       setPlayingPartners,
+      saveUserSettingsNow,
       roundReflections,
       roundReflectionsAvailable,
       upsertRoundReflection,

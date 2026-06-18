@@ -27,12 +27,13 @@ function latestPlayedDate(partner: PlayingPartner): string | null {
 }
 
 export function PlayingPartnersTab() {
-  const { playingPartners, setPlayingPartners } = useGolfData();
+  const { playingPartners, setPlayingPartners, saveUserSettingsNow } = useGolfData();
   const [newPartnerName, setNewPartnerName] = useState('');
   const [partnerDrafts, setPartnerDrafts] = useState<PlayingPartner[]>(playingPartners.map(normalizePlayingPartner));
   const [expandedPartnerIds, setExpandedPartnerIds] = useState<Set<string>>(new Set());
   const [partnerDateDrafts, setPartnerDateDrafts] = useState<Record<string, string>>({});
   const [hasPartnerChanges, setHasPartnerChanges] = useState(false);
+  const [isSavingPartners, setIsSavingPartners] = useState(false);
 
   useEffect(() => {
     if (hasPartnerChanges) return;
@@ -61,7 +62,7 @@ export function PlayingPartnersTab() {
     updatePartnerDraft(partnerId, { playedDates: (partner?.playedDates ?? []).filter((item) => item !== date) });
   };
 
-  const savePlayingPartners = () => {
+  const savePlayingPartners = async () => {
     const seen = new Set<string>();
     const cleaned = partnerDrafts
       .map(normalizePlayingPartner)
@@ -71,11 +72,19 @@ export function PlayingPartnersTab() {
         seen.add(nameKey);
         return true;
       });
-    setPlayingPartners(cleaned);
-    setPartnerDrafts(cleaned);
-    setExpandedPartnerIds(new Set());
-    setHasPartnerChanges(false);
-    toast.success('Playing partners saved');
+    setIsSavingPartners(true);
+    try {
+      setPlayingPartners(cleaned);
+      await saveUserSettingsNow({ playingPartners: cleaned });
+      setPartnerDrafts(cleaned);
+      setExpandedPartnerIds(new Set());
+      setHasPartnerChanges(false);
+      toast.success('Playing partners saved to database');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save playing partners');
+    } finally {
+      setIsSavingPartners(false);
+    }
   };
 
   return (
@@ -118,9 +127,9 @@ export function PlayingPartnersTab() {
             <Plus className="h-4 w-4" />
             Add
           </Button>
-          <Button type="button" variant="outline" className="gap-2" onClick={savePlayingPartners} disabled={!hasPartnerChanges}>
+          <Button type="button" variant="outline" className="gap-2" onClick={savePlayingPartners} disabled={!hasPartnerChanges || isSavingPartners}>
             <Save className="h-4 w-4" />
-            Save Partners
+            {isSavingPartners ? 'Saving...' : 'Save Partners'}
           </Button>
         </form>
 
@@ -232,9 +241,9 @@ export function PlayingPartnersTab() {
                               <Trash2 className="h-4 w-4" />
                               Remove
                             </Button>
-                            <Button type="button" size="sm" className="gap-2" onClick={savePlayingPartners}>
+                            <Button type="button" size="sm" className="gap-2" onClick={savePlayingPartners} disabled={isSavingPartners}>
                               <Save className="h-4 w-4" />
-                              Save
+                              {isSavingPartners ? 'Saving...' : 'Save'}
                             </Button>
                           </div>
                         </div>
