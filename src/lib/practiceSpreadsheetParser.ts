@@ -329,18 +329,6 @@ export function calculateMetricsFromShots(
       valueMax: min(totals),
       valueDisplay: String(min(totals)),
     },
-    carry_variation: {
-      metricId: 'carry_variation',
-      valueMin: max(carries) - min(carries),
-      valueMax: max(carries) - min(carries),
-      valueDisplay: String(max(carries) - min(carries)),
-    },
-    total_variation: {
-      metricId: 'total_variation',
-      valueMin: max(totals) - min(totals),
-      valueMax: max(totals) - min(totals),
-      valueDisplay: String(max(totals) - min(totals)),
-    },
     ball_speed: {
       metricId: 'ball_speed',
       valueMin: min(ballSpeeds),

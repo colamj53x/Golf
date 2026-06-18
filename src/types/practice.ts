@@ -118,26 +118,6 @@ export const DEFAULT_4H_PRACTICE_METRICS: PracticeMetricTarget[] = [
     higherIsBetter: false,
     category: 'distance',
   },
-  {
-    id: 'carry_variation',
-    metricName: 'Carry Variation',
-    targetMin: null,
-    targetMax: 10,
-    targetDisplay: '≤10',
-    unit: 'm',
-    higherIsBetter: false,
-    category: 'distance',
-  },
-  {
-    id: 'total_variation',
-    metricName: 'Total Variation',
-    targetMin: null,
-    targetMax: 15,
-    targetDisplay: '≤15',
-    unit: 'm',
-    higherIsBetter: false,
-    category: 'distance',
-  },
   // Ball flight metrics (range-based: store min-max)
   {
     id: 'ball_speed',

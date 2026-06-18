@@ -517,7 +517,7 @@ function getRangeTargetPct(
     .map((session) => {
       const sessionShots = shotsBySession[session.id] ?? [];
       const metricScores = config.metrics
-        .map((metric) => pctWithinTarget(metric.id, sessionShots, metric.targetMin, metric.targetMax))
+        .map((metric) => pctWithinTarget(metric.id, sessionShots, metric.targetMin, metric.targetMax, config.clubId))
         .filter((score): score is number => score !== null);
       return mean(metricScores);
     })

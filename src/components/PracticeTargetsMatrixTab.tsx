@@ -23,8 +23,8 @@ const CATEGORY_LABELS: Record<PracticeMetricTarget['category'], string> = {
 };
 
 const CATEGORY_ORDER: PracticeMetricTarget['category'][] = ['distance', 'ball_flight', 'dispersion', 'swing', 'tempo'];
-const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'bias_direction']);
-const MAX_ONLY_TARGET_METRIC_IDS = new Set(['carry_variation', 'total_variation', 'avg_lateral_miss']);
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'carry_variation', 'total_variation', 'bias_direction']);
+const MAX_ONLY_TARGET_METRIC_IDS = new Set(['avg_lateral_miss']);
 
 type TargetDraft = Record<string, Record<string, { min: string; max: string }>>;
 
@@ -68,8 +68,6 @@ function getShotMetricRange(
     total_distance: 'total',
     peak_height: 'height',
     avg_lateral_miss: 'carrySide',
-    carry_variation: 'carry',
-    total_variation: 'total',
   };
   const key = metricKey[metricId] ?? metricId;
   const values = (shots ?? [])
@@ -83,10 +81,6 @@ function getShotMetricRange(
     .filter((value): value is number => value !== null);
 
   if (values.length === 0) return { min: null, max: null };
-  if (metricId === 'carry_variation' || metricId === 'total_variation') {
-    const variation = Math.max(...values) - Math.min(...values);
-    return { min: null, max: variation };
-  }
   if (metricId === 'avg_lateral_miss') {
     const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
     return { min: null, max: Number(avg.toFixed(1)) };

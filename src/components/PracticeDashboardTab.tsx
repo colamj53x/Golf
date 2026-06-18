@@ -32,7 +32,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { parseSpreadsheet, calculateMetricsFromShots, CalculatedMetrics, PracticeShot } from '@/lib/practiceSpreadsheetParser';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { useGolfData } from '@/context/GolfDataContext';
-import { getShotMetricValue, pctWithinTarget } from '@/lib/practiceConsistency';
+import { getShotMetricValue, pctWithinTarget, usesLengthModeDistanceMetric } from '@/lib/practiceConsistency';
 import {
   calculateStatus,
   calculateTrend,
@@ -85,8 +85,9 @@ const BEST_SHOT_METRIC_IDS = new Set([
   'tempo_ratio',
 ]);
 
-const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'bias_direction']);
-const MAX_ONLY_TARGET_METRIC_IDS = new Set(['carry_variation', 'total_variation', 'avg_lateral_miss']);
+const NON_TARGET_METRIC_IDS = new Set(['furthest_total', 'shortest_total', 'carry_variation', 'total_variation', 'bias_direction']);
+const REMOVED_LOG_METRIC_IDS = new Set(['carry_variation', 'total_variation']);
+const MAX_ONLY_TARGET_METRIC_IDS = new Set(['avg_lateral_miss']);
 
 const formatTargetEditValue = (metricId: string, value: number | null): string => {
   if (value === null) return '';
@@ -330,7 +331,7 @@ export function PracticeDashboardTab() {
     });
   };
 
-  const groupedMetrics = config.metrics.reduce((acc, metric) => {
+  const groupedMetrics = config.metrics.filter(metric => !REMOVED_LOG_METRIC_IDS.has(metric.id)).reduce((acc, metric) => {
     if (!acc[metric.category]) acc[metric.category] = [];
     acc[metric.category].push(metric);
     return acc;
@@ -617,19 +618,17 @@ export function PracticeDashboardTab() {
     const bestShotConditions = config.bestShotDefinition?.conditions?.length
       ? config.bestShotDefinition.conditions
       : getDefaultBestShotDefinition(selectedShotType).conditions;
-    const distanceTolerancePct = distanceTarget ? toleranceForMetric(distanceTarget.category) : 0;
-    const lateralTolerancePct = lateralTarget ? toleranceForMetric(lateralTarget.category) : 0;
     const distanceShotPct = shots.length
-      ? pctWithinTarget('total_distance', shots, distanceTarget?.targetMin ?? null, distanceTarget?.targetMax ?? null, distanceTolerancePct)
+      ? pctWithinTarget('total_distance', shots, distanceTarget?.targetMin ?? null, distanceTarget?.targetMax ?? null, config.clubId)
       : null;
     const lateralShotPct = shots.length
-      ? pctWithinTarget('avg_lateral_miss', shots, lateralTarget?.targetMin ?? null, lateralTarget?.targetMax ?? null, lateralTolerancePct)
+      ? pctWithinTarget('avg_lateral_miss', shots, lateralTarget?.targetMin ?? null, lateralTarget?.targetMax ?? null, config.clubId)
       : null;
     const bestShotStats = getBestShotStats(shots, config.metrics, bestShotConditions);
 
     // Distance Consistency: % of shots in target distance range
     let distanceConsistency: number | null = distanceShotPct;
-    if (totalDistanceValue.min !== null && distanceTarget?.targetMin !== null && distanceTarget?.targetMax !== null) {
+    if (totalDistanceValue.min !== null && distanceTarget && (distanceTarget.targetMin !== null || distanceTarget.targetMax !== null)) {
       const targetMin = distanceTarget.targetMin;
       const targetMax = distanceTarget.targetMax;
       
@@ -637,17 +636,22 @@ export function PracticeDashboardTab() {
       const userMax = totalDistanceValue.max ?? totalDistanceValue.min;
       
       if (userMin !== null && userMax !== null) {
-        const overlapMin = Math.max(userMin, targetMin);
-        const overlapMax = Math.min(userMax, targetMax);
-        const userRange = userMax - userMin;
-        
-        if (userRange === 0) {
-          distanceConsistency = distanceConsistency ?? ((userMin >= targetMin && userMin <= targetMax) ? 100 : 0);
-        } else if (overlapMax >= overlapMin) {
-          const overlapRange = overlapMax - overlapMin;
-          distanceConsistency = distanceConsistency ?? Math.min(100, Math.round((overlapRange / userRange) * 100));
-        } else {
-          distanceConsistency = distanceConsistency ?? 0;
+        if (usesLengthModeDistanceMetric('total_distance', config.clubId)) {
+          const floor = targetMin ?? targetMax;
+          distanceConsistency = distanceConsistency ?? (floor !== null && userMax >= floor ? 100 : 0);
+        } else if (targetMin !== null && targetMax !== null) {
+          const overlapMin = Math.max(userMin, targetMin);
+          const overlapMax = Math.min(userMax, targetMax);
+          const userRange = userMax - userMin;
+
+          if (userRange === 0) {
+            distanceConsistency = distanceConsistency ?? ((userMin >= targetMin && userMin <= targetMax) ? 100 : 0);
+          } else if (overlapMax >= overlapMin) {
+            const overlapRange = overlapMax - overlapMin;
+            distanceConsistency = distanceConsistency ?? Math.min(100, Math.round((overlapRange / userRange) * 100));
+          } else {
+            distanceConsistency = distanceConsistency ?? 0;
+          }
         }
       }
     }
@@ -1445,20 +1449,20 @@ export function PracticeDashboardTab() {
                           const tolerancePct = toleranceForMetric(metric.category);
 
                           const trend = calculateTrend(currentValue, [previousValue, ...olderValues], metric.higherIsBetter);
-                          const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct);
+                          const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, config.clubId);
                           const currentStatus = statusFromWithinTarget(withinTarget)
                             ?? calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
 
                           // Average within-5% across the previous 2 sessions
                           const prev2Values = prev2SessionIds
-                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
+                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, config.clubId))
                             .filter((v): v is number => v !== null);
                           const prev2Avg = prev2Values.length ? prev2Values.reduce((a, b) => a + b, 0) / prev2Values.length : null;
 
                           // Average within-5% across ALL sessions except current
                           const allOtherValues = allSessionIds
                             .filter(id => id !== currentSession?.id)
-                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, tolerancePct))
+                            .map(id => pctWithinTarget(metric.id, (shotsBySession[id] ?? []) as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, config.clubId))
                             .filter((v): v is number => v !== null);
                           const allAvg = allOtherValues.length ? allOtherValues.reduce((a, b) => a + b, 0) / allOtherValues.length : null;
 

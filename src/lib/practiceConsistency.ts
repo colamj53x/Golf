@@ -2,6 +2,18 @@
 
 export type ShotLike = { metrics: Record<string, unknown> };
 
+const LENGTH_MODE_CLUB_IDS = new Set(['dr', '5w', '4h', '5h']);
+const DISTANCE_METRIC_IDS = new Set(['carry', 'total_distance']);
+
+function practiceClubFromConfigKey(configKey?: string | null): string | null {
+  return configKey?.split('_')[0] ?? null;
+}
+
+export function usesLengthModeDistanceMetric(metricId: string, configKey?: string | null): boolean {
+  const club = practiceClubFromConfigKey(configKey);
+  return DISTANCE_METRIC_IDS.has(metricId) && club !== null && LENGTH_MODE_CLUB_IDS.has(club);
+}
+
 export function getShotMetricValue(metricId: string, shot: ShotLike): number | null {
   const m = shot.metrics as Record<string, number | string | undefined>;
   const num = (v: unknown) => (typeof v === 'number' && !Number.isNaN(v) ? v : null);
@@ -45,33 +57,20 @@ export function pctWithinTarget(
   shots: ShotLike[],
   targetMin: number | null,
   targetMax: number | null,
-  tolerancePct = 5,
+  configKey?: string | null,
 ): number | null {
   if (!shots || shots.length === 0) return null;
   if (targetMin === null && targetMax === null) return null;
 
-  if (metricId === 'carry_variation' || metricId === 'total_variation') {
-    const band = Math.max(Math.abs(targetMin ?? 0), Math.abs(targetMax ?? 0));
-    if (!band || band <= 0) return null;
-    const underlyingId = metricId === 'carry_variation' ? 'carry' : 'total_distance';
-    const vals: number[] = [];
-    for (const s of shots) {
-      const v = getShotMetricValue(underlyingId, s);
-      if (v !== null) vals.push(v);
-    }
-    if (vals.length === 0) return null;
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const half = band / 2;
-    const hits = vals.filter(v => Math.abs(v - mean) <= half).length;
-    return Math.round((hits / vals.length) * 100);
-  }
-
-  const reference = Math.max(Math.abs(targetMin ?? 0), Math.abs(targetMax ?? 0), 1);
-  const tol = reference * (tolerancePct / 100);
-  const lo = targetMin === null ? -Infinity : targetMin - tol;
-  const hi = targetMax === null ? Infinity : targetMax + tol;
-  const lowerBound = Math.min(lo, hi);
-  const upperBound = Math.max(lo, hi);
+  const lengthMode = usesLengthModeDistanceMetric(metricId, configKey);
+  const floor = targetMin ?? targetMax;
+  const lowerBound = lengthMode
+    ? floor
+    : targetMin === null ? -Infinity : targetMin;
+  const upperBound = lengthMode
+    ? Infinity
+    : targetMax === null ? Infinity : targetMax;
+  if (lowerBound === null || upperBound === null) return null;
 
   let considered = 0;
   let hits = 0;
@@ -99,20 +98,6 @@ export const METRIC_DRILLS: Record<string, { focus: string; drills: string[] }> 
     drills: [
       'Strike spray (foot powder) — 10 balls focused on centred contact.',
       'Stock-shot block: 10 balls at one fixed target distance, log total each shot.',
-    ],
-  },
-  carry_variation: {
-    focus: 'Carry spread too wide — strike quality',
-    drills: [
-      'Coin / tee-gate strike drill: 15 balls, ball must be flushed cleanly.',
-      'Half-swing pump drill to groove a repeatable low-point.',
-    ],
-  },
-  total_variation: {
-    focus: 'Total distance spread too wide — roll out & strike',
-    drills: [
-      'Pick a 5m landing window; 10 balls, count how many land inside.',
-      'Smash-factor focus: 10 balls aiming for centred contact, log ball/swing speed.',
     ],
   },
   ball_speed: {
