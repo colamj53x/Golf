@@ -292,6 +292,9 @@ export function PracticeDashboardTab() {
   const { shotsBySession } = usePracticeShotsBySessions(allSessionIds);
   const currentSessionShots = currentSession ? (shotsBySession[currentSession.id] ?? []) : [];
   const prev2SessionIds = allSessions.slice(1, 3).map(s => s.id);
+  const recentStatusShots = allSessions
+    .flatMap(session => shotsBySession[session.id] ?? [])
+    .slice(0, 18) as Array<{ metrics: Record<string, unknown> }>;
 
   // Inline notes editor state (Practice Report card at the bottom)
   const [reportNotes, setReportNotes] = useState<string>(currentSession?.notes ?? '');
@@ -1434,9 +1437,9 @@ export function PracticeDashboardTab() {
                           <th className="min-w-[100px]">Current</th>
                           <th className="min-w-[100px]">Previous</th>
                           <th className="min-w-[100px]">Target</th>
-                          <th className="min-w-[60px]">Status</th>
+                          <th className="min-w-[60px]" title="Latest 18 shots: green 80%+, amber 50-79%, red below 50%">Status</th>
                           <th className="min-w-[60px]">Trend</th>
-                          <th className="min-w-[90px]" title="Current session shots inside the metric tolerance window">In Target</th>
+                          <th className="min-w-[90px]" title="Current session shots inside the metric target rule">In Target</th>
                           <th className="min-w-[110px]" title="Change in In Target vs the average of the previous 2 sessions">vs Last 2</th>
                           <th className="min-w-[110px]" title="Change in In Target vs the average across all sessions">vs All</th>
                         </tr>
@@ -1450,7 +1453,8 @@ export function PracticeDashboardTab() {
 
                           const trend = calculateTrend(currentValue, [previousValue, ...olderValues], metric.higherIsBetter);
                           const withinTarget = pctWithinTarget(metric.id, currentSessionShots as unknown as Array<{ metrics: Record<string, unknown> }>, metric.targetMin, metric.targetMax, config.clubId);
-                          const currentStatus = statusFromWithinTarget(withinTarget)
+                          const recentWithinTarget = pctWithinTarget(metric.id, recentStatusShots, metric.targetMin, metric.targetMax, config.clubId);
+                          const currentStatus = statusFromWithinTarget(recentWithinTarget)
                             ?? calculateStatus(currentValue, metric.targetMin, metric.targetMax, metric.higherIsBetter, tolerancePct);
 
                           // Average within-5% across the previous 2 sessions
@@ -1488,7 +1492,9 @@ export function PracticeDashboardTab() {
                                 )}
                               </td>
                               <td className="text-center">
-                                <span className="text-lg" title={`${tolerancePct}% tolerance`}>{getStatusEmoji(currentStatus)}</span>
+                                <span className="text-lg" title={recentWithinTarget === null ? 'Aggregate status fallback' : `${recentWithinTarget}% in target over latest ${recentStatusShots.length} shots`}>
+                                  {getStatusEmoji(currentStatus)}
+                                </span>
                               </td>
                               <td className="text-center">
                                 <div className="flex items-center justify-center" title={`Trend: ${trend}`}>

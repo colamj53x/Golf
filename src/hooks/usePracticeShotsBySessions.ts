@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 
 export interface ShotsBySession {
-  [sessionId: string]: Array<{ metrics: Record<string, unknown>; excluded: boolean }>;
+  [sessionId: string]: Array<{ metrics: Record<string, unknown>; excluded: boolean; shotNumber: number | null }>;
 }
 
 /**
@@ -26,7 +26,7 @@ export function usePracticeShotsBySessions(sessionIds: string[]) {
     (async () => {
       const { data, error } = await supabase
         .from('practice_shots')
-        .select('session_id, excluded, metrics')
+        .select('session_id, shot_number, excluded, metrics')
         .in('session_id', sessionIds)
         .eq('user_id', user.id);
 
@@ -41,7 +41,11 @@ export function usePracticeShotsBySessions(sessionIds: string[]) {
           (grouped[row.session_id] ??= []).push({
             metrics: (row.metrics ?? {}) as Record<string, unknown>,
             excluded: row.excluded,
+            shotNumber: row.shot_number,
           });
+        }
+        for (const shots of Object.values(grouped)) {
+          shots.sort((a, b) => (b.shotNumber ?? 0) - (a.shotNumber ?? 0));
         }
         setShotsBySession(grouped);
       }

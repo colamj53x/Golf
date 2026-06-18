@@ -35,8 +35,8 @@ export function getDefaultBestShotDefinition(shotType: string): BestShotDefiniti
 
 export function statusFromWithinTarget(withinTarget: number | null): MetricStatus | null {
   if (withinTarget === null) return null;
-  if (withinTarget >= 100) return 'green';
-  if (withinTarget > 0) return 'amber';
+  if (withinTarget >= 80) return 'green';
+  if (withinTarget >= 50) return 'amber';
   return 'red';
 }
 

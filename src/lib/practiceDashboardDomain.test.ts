@@ -66,7 +66,10 @@ describe('practice dashboard domain', () => {
 
   it('maps shot-level in-target percentages to status dots', () => {
     expect(statusFromWithinTarget(100)).toBe('green');
-    expect(statusFromWithinTarget(83)).toBe('amber');
+    expect(statusFromWithinTarget(80)).toBe('green');
+    expect(statusFromWithinTarget(79)).toBe('amber');
+    expect(statusFromWithinTarget(50)).toBe('amber');
+    expect(statusFromWithinTarget(49)).toBe('red');
     expect(statusFromWithinTarget(0)).toBe('red');
     expect(statusFromWithinTarget(null)).toBeNull();
   });
