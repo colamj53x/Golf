@@ -10,7 +10,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { getEnabledShotFamilyOptions, getEnabledSwingEffortOptions } from '@/lib/shotOptions';
 import { useShotProfiles } from '@/lib/shotProfiles';
-import { buildRangeReferenceRows, getPrimaryRangeFocus, type RangeReferenceRow } from '@/lib/rangeFocus';
+import { buildRangeReferenceRows, type RangeReferenceRow } from '@/lib/rangeFocus';
 import { PRACTICE_CLUBS, getConfigDisplayName } from '@/types/practiceClubs';
 import type { MetricStatus } from '@/types/practice';
 
@@ -165,7 +165,6 @@ export function PracticePlanTab() {
     () => config ? buildRangeReferenceRows(config.metrics, recentShots, currentConfigKey) : [],
     [config, currentConfigKey, recentShots],
   );
-  const primaryFocus = useMemo(() => getPrimaryRangeFocus(rows), [rows]);
   const swingRows = rows.filter(row => row.section === 'swing');
   const outcomeRows = rows.filter(row => row.section === 'outcome');
 
@@ -280,26 +279,12 @@ export function PracticePlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6 pt-5 print:px-0 print:pt-4">
-          {primaryFocus && (
-            <div className={`rounded-lg border p-4 ${statusClasses(primaryFocus.status)}`}>
-              <div className="text-xs font-semibold uppercase tracking-wide">Current reference focus</div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-lg font-bold">{primaryFocus.metricName}</span>
-                <span className="font-semibold">Target: {primaryFocus.target}</span>
-                <span className="text-sm">{statusText(primaryFocus)}</span>
-              </div>
-              <p className="mt-2 text-sm">
-                Use the low/left or high/right correction below only when the shot finishes on that side of the target.
-              </p>
-            </div>
-          )}
-
+          <OutcomeTable rows={outcomeRows} />
           <ReferenceTable
             title="Swing and flight checks"
             description="Inputs first. Check these before using distance or dispersion to judge the shot."
             rows={swingRows}
           />
-          <OutcomeTable rows={outcomeRows} />
 
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground print:text-foreground">
             One result, one correction. Keep the same intention for the next shot instead of changing several things at once.

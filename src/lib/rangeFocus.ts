@@ -178,19 +178,3 @@ export function buildRangeReferenceRows(
     ...OUTCOME_METRIC_IDS.map(metricId => build(metricId, 'outcome')),
   ].filter((row): row is RangeReferenceRow => row !== null);
 }
-
-export function getPrimaryRangeFocus(rows: RangeReferenceRow[]): RangeReferenceRow | null {
-  const measurable = rows.filter(row => row.latest18Pct !== null);
-  if (measurable.length === 0) return rows.find(row => row.section === 'swing') ?? rows[0] ?? null;
-
-  const weakest = (items: RangeReferenceRow[]) => (
-    [...items].sort((a, b) => (a.latest18Pct ?? 101) - (b.latest18Pct ?? 101))[0] ?? null
-  );
-  const swingNeedsWork = measurable.filter(row => row.section === 'swing' && (row.latest18Pct ?? 100) < 80);
-  if (swingNeedsWork.length > 0) return weakest(swingNeedsWork);
-
-  const outcomeNeedsWork = measurable.filter(row => row.section === 'outcome' && (row.latest18Pct ?? 100) < 80);
-  if (outcomeNeedsWork.length > 0) return weakest(outcomeNeedsWork);
-
-  return weakest(measurable);
-}

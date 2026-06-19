@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRangeReferenceRows, getPrimaryRangeFocus } from '@/lib/rangeFocus';
+import { buildRangeReferenceRows } from '@/lib/rangeFocus';
 import type { PracticeMetricTarget } from '@/types/practice';
 
 function target(
@@ -37,37 +37,4 @@ describe('range reference card', () => {
     expect(rows.every(row => Boolean(row.lowTip) && Boolean(row.highTip))).toBe(true);
   });
 
-  it('highlights the weakest measured swing input before outcome metrics', () => {
-    const shots = Array.from({ length: 10 }, (_, index) => ({
-      metrics: {
-        backswingTime: index < 8 ? 0.86 : 1.1,
-        downswingTime: 0.28,
-        attackAngle: index < 4 ? 3 : -3,
-        launchDirection: index < 7 ? 0 : 6,
-        launchAngle: 14,
-        ballSpeed: 165,
-        carrySide: 30,
-      },
-    }));
-    const rows = buildRangeReferenceRows(metrics, shots, 'dr_full_full');
-
-    expect(getPrimaryRangeFocus(rows)?.metricId).toBe('attack_angle');
-  });
-
-  it('moves to an outcome focus when all measured swing inputs are strong', () => {
-    const shots = Array.from({ length: 10 }, () => ({
-      metrics: {
-        backswingTime: 0.86,
-        downswingTime: 0.28,
-        attackAngle: 3,
-        launchDirection: 0,
-        launchAngle: 14,
-        ballSpeed: 165,
-        carrySide: 30,
-      },
-    }));
-    const rows = buildRangeReferenceRows(metrics, shots, 'dr_full_full');
-
-    expect(getPrimaryRangeFocus(rows)?.metricId).toBe('avg_lateral_miss');
-  });
 });
