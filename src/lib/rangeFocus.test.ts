@@ -31,10 +31,23 @@ describe('range reference card', () => {
     expect(rows.map(row => row.metricId)).not.toContain('smash_factor');
     expect(rows.find(row => row.metricId === 'attack_angle')).toMatchObject({
       target: '1–5',
-      lowLabel: 'Too negative',
-      highLabel: 'Too positive',
+      lowLabel: 'Too downward',
+      highLabel: 'Too upward',
     });
     expect(rows.every(row => Boolean(row.lowTip) && Boolean(row.highTip))).toBe(true);
+  });
+
+  it('uses shot-specific correction commentary without changing targets', () => {
+    const punchRows = buildRangeReferenceRows(metrics, [], '6i_punch_full');
+    const punchBackswing = punchRows.find(row => row.metricId === 'backswing_time');
+    const punchAttack = punchRows.find(row => row.metricId === 'attack_angle');
+
+    expect(punchBackswing).toMatchObject({
+      target: '0.8–0.92',
+      lowTip: expect.stringContaining('shorter, calmer backswing'),
+      highTip: expect.stringContaining('keep the motion compact'),
+    });
+    expect(punchAttack?.lowTip).toContain('weight forward and hands ahead');
   });
 
 });
