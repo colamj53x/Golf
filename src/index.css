@@ -170,6 +170,18 @@
   .input-editable {
     @apply bg-transparent border-transparent hover:border-input focus:border-primary focus:ring-1 focus:ring-primary transition-colors;
   }
+
+  .range-reference-card {
+    --card: 0 0% 100%;
+    --card-foreground: 150 25% 8%;
+    --foreground: 150 25% 8%;
+    --muted: 150 10% 94%;
+    --muted-foreground: 150 8% 38%;
+    --border: 150 10% 82%;
+    --primary: 152 50% 35%;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
 }
 
 @layer utilities {

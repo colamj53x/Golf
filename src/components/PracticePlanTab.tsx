@@ -1,5 +1,7 @@
-import { useEffect, useMemo } from 'react';
-import { BookOpen, Printer, Target } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, Download, Loader2, Target } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,7 +85,42 @@ function ReferenceTable({
   );
 }
 
+function OutcomeTable({ rows }: { rows: RangeReferenceRow[] }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="font-semibold">Outcome confirmation</h3>
+        <p className="text-xs text-muted-foreground">
+          Keep these visible so each shot can be compared with the profile outcome.
+        </p>
+      </div>
+      <div className="overflow-hidden rounded-lg border">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-muted/60">
+            <tr>
+              <th className="w-1/2 px-3 py-2 text-left font-semibold">Outcome</th>
+              <th className="w-1/2 px-3 py-2 text-left font-semibold">Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.metricId} className="border-t">
+                <td className="px-3 py-2.5 font-medium">{row.metricName}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-semibold tabular-nums">{row.target}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function PracticePlanTab() {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const shotProfiles = useShotProfiles();
   const {
     practiceConfigs,
@@ -132,6 +169,37 @@ export function PracticePlanTab() {
   const swingRows = rows.filter(row => row.section === 'swing');
   const outcomeRows = rows.filter(row => row.section === 'outcome');
 
+  const exportToPDF = async () => {
+    if (!contentRef.current) return;
+    setIsExporting(true);
+
+    try {
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const margin = 8;
+      const availableWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
+      const availableHeight = pdf.internal.pageSize.getHeight() - (margin * 2);
+      const ratio = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+      const renderedWidth = canvas.width * ratio;
+      const renderedHeight = canvas.height * ratio;
+      const x = (pdf.internal.pageSize.getWidth() - renderedWidth) / 2;
+      const y = (pdf.internal.pageSize.getHeight() - renderedHeight) / 2;
+
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderedWidth, renderedHeight);
+      const date = new Date().toISOString().split('T')[0];
+      pdf.save(`range-${currentConfigKey.replace(/_/g, '-')}-reference-${date}.pdf`);
+    } catch (error) {
+      console.error('Error exporting range reference PDF:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!config) {
     return (
       <Card>
@@ -153,9 +221,9 @@ export function PracticePlanTab() {
                 Choose the club and shot profile you are taking to the range.
               </CardDescription>
             </div>
-            <Button variant="outline" className="gap-2" onClick={() => window.print()}>
-              <Printer className="h-4 w-4" />
-              Print / Save PDF
+            <Button variant="outline" className="gap-2" onClick={exportToPDF} disabled={isExporting}>
+              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {isExporting ? 'Creating PDF...' : 'Save PDF'}
             </Button>
           </div>
         </CardHeader>
@@ -192,7 +260,7 @@ export function PracticePlanTab() {
         </CardContent>
       </Card>
 
-      <Card className="practice-reference-print mx-auto max-w-6xl shadow-sm print:max-w-none print:border-0 print:shadow-none">
+      <Card ref={contentRef} className="range-reference-card practice-reference-print mx-auto max-w-6xl shadow-sm print:max-w-none print:border-0 print:shadow-none">
         <CardHeader className="border-b pb-4 print:px-0 print:pt-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -231,11 +299,7 @@ export function PracticePlanTab() {
             description="Inputs first. Check these before using distance or dispersion to judge the shot."
             rows={swingRows}
           />
-          <ReferenceTable
-            title="Outcome confirmation"
-            description="Use these to confirm the swing produced a playable result; do not chase distance at the expense of the inputs."
-            rows={outcomeRows}
-          />
+          <OutcomeTable rows={outcomeRows} />
 
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground print:text-foreground">
             One result, one correction. Keep the same intention for the next shot instead of changing several things at once.

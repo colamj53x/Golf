@@ -17,7 +17,8 @@ export interface RangeReferenceRow {
 }
 
 const SWING_METRIC_IDS = [
-  'tempo_ratio',
+  'backswing_time',
+  'downswing_time',
   'attack_angle',
   'launch_direction',
   'launch_angle',
@@ -48,12 +49,19 @@ function tipsFor(metricId: string, configKey: string): Pick<RangeReferenceRow, '
   const isDriver = configKey.startsWith('dr_');
 
   switch (metricId) {
-    case 'tempo_ratio':
+    case 'backswing_time':
       return {
         lowLabel: 'Below target',
-        lowTip: 'Give the backswing time to finish before changing direction.',
+        lowTip: 'Slow the takeaway enough to complete the turn before changing direction.',
         highLabel: 'Above target',
-        highTip: 'Keep the backswing flowing; avoid a long pause or sudden hit from the top.',
+        highTip: 'Keep the club moving and finish the backswing when the shoulder turn is complete.',
+      };
+    case 'downswing_time':
+      return {
+        lowLabel: 'Below target',
+        lowTip: 'Soften the transition and let the lower body begin before the arms accelerate.',
+        highLabel: 'Above target',
+        highTip: 'Commit through the ball and rotate to a balanced finish instead of steering it.',
       };
     case 'attack_angle':
       return isDriver

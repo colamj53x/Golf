@@ -14,7 +14,8 @@ function target(
 }
 
 const metrics = [
-  target('tempo_ratio', 'Tempo Ratio', 2.8, 3.2, '2.8–3.2 : 1', 'tempo'),
+  target('backswing_time', 'Backswing Time', 0.8, 0.92, '0.8–0.92', 'tempo'),
+  target('downswing_time', 'Downswing Time', 0.26, 0.31, '0.26–0.31', 'tempo'),
   target('attack_angle', 'Attack Angle', 1, 5, '1–5', 'swing'),
   target('launch_direction', 'Launch Direction', -2, 2, '2L–2R', 'ball_flight'),
   target('launch_angle', 'Launch Angle', 12, 16, '12–16', 'ball_flight'),
@@ -39,7 +40,8 @@ describe('range reference card', () => {
   it('highlights the weakest measured swing input before outcome metrics', () => {
     const shots = Array.from({ length: 10 }, (_, index) => ({
       metrics: {
-        tempo: index < 8 ? 3 : 4,
+        backswingTime: index < 8 ? 0.86 : 1.1,
+        downswingTime: 0.28,
         attackAngle: index < 4 ? 3 : -3,
         launchDirection: index < 7 ? 0 : 6,
         launchAngle: 14,
@@ -55,7 +57,8 @@ describe('range reference card', () => {
   it('moves to an outcome focus when all measured swing inputs are strong', () => {
     const shots = Array.from({ length: 10 }, () => ({
       metrics: {
-        tempo: 3,
+        backswingTime: 0.86,
+        downswingTime: 0.28,
         attackAngle: 3,
         launchDirection: 0,
         launchAngle: 14,
