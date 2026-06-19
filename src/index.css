@@ -206,11 +206,14 @@
   }
 
   .practice-reference-print,
-  .practice-reference-print * {
+  .practice-reference-print *,
+  .targets-matrix-print,
+  .targets-matrix-print * {
     visibility: visible !important;
   }
 
-  .practice-reference-print {
+  .practice-reference-print,
+  .targets-matrix-print {
     position: absolute !important;
     inset: 0 auto auto 0 !important;
     width: 100% !important;
@@ -219,7 +222,21 @@
   }
 
   .practice-reference-print tr,
-  .practice-reference-print section {
+  .practice-reference-print section,
+  .targets-matrix-print tr {
     break-inside: avoid;
+  }
+
+  .targets-matrix-print table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .targets-matrix-print th,
+  .targets-matrix-print td {
+    position: static !important;
+    width: auto !important;
+    min-width: 0 !important;
   }
 }

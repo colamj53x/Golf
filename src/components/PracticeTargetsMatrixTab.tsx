@@ -324,7 +324,7 @@ export function PracticeTargetsMatrixTab() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="targets-matrix-print">
         <CardHeader className="print:pb-2">
           <CardTitle>Target Table</CardTitle>
           <CardDescription className="print:hidden">
@@ -334,7 +334,7 @@ export function PracticeTargetsMatrixTab() {
         <CardContent>
           <div className="rounded-md border">
             <div className="overflow-x-auto print:overflow-visible">
-              <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
+              <table className="w-max min-w-full border-separate border-spacing-0 text-xs print:w-full print:min-w-0 print:table-fixed">
               <thead>
                 <tr className="bg-muted/80 text-muted-foreground">
                   <th className="sticky left-0 top-0 z-30 w-28 min-w-28 border-b bg-muted px-2 py-2 text-left">Club</th>
