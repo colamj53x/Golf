@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { pctWithinTarget } from '@/lib/practiceConsistency';
+import { calculateShotConsistency, pctWithinTarget } from '@/lib/practiceConsistency';
+import type { PracticeMetricTarget } from '@/types/practice';
 
 const shots = [
   { metrics: { total: 154 } },
@@ -36,5 +37,53 @@ describe('pctWithinTarget', () => {
     ];
 
     expect(pctWithinTarget('avg_lateral_miss', lateralShots, null, 10)).toBe(67);
+  });
+});
+
+describe('calculateShotConsistency', () => {
+  it('calculates distance, lateral, best-shot and overall scores from the supplied shot window', () => {
+    const targets: PracticeMetricTarget[] = [
+      {
+        id: 'total_distance',
+        metricName: 'Total Distance',
+        targetMin: 150,
+        targetMax: 170,
+        targetDisplay: '150–170',
+        unit: 'm',
+        higherIsBetter: true,
+        category: 'distance',
+      },
+      {
+        id: 'avg_lateral_miss',
+        metricName: 'Avg Lateral Miss',
+        targetMin: null,
+        targetMax: 10,
+        targetDisplay: '≤10',
+        unit: 'm',
+        higherIsBetter: false,
+        category: 'dispersion',
+      },
+    ];
+    const window = [
+      { metrics: { total: 160, carrySide: 5 } },
+      { metrics: { total: 140, carrySide: 8 } },
+      { metrics: { total: 155, carrySide: 14 } },
+      { metrics: { total: 145, carrySide: 16 } },
+    ];
+
+    expect(calculateShotConsistency(
+      window,
+      targets,
+      [
+        { metricId: 'total_distance', mode: 'window' },
+        { metricId: 'avg_lateral_miss', mode: 'max' },
+      ],
+      '6i_full_full',
+    )).toEqual({
+      distance: 50,
+      lateral: 50,
+      best: 25,
+      overall: 50,
+    });
   });
 });

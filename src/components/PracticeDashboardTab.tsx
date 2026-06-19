@@ -1672,6 +1672,10 @@ export function PracticeDashboardTab() {
         configKey={currentConfigKey}
         metrics={config.metrics}
         sessions={allSessions}
+        shotsBySession={shotsBySession}
+        bestShotDefinition={config.bestShotDefinition?.conditions?.length
+          ? config.bestShotDefinition
+          : getDefaultBestShotDefinition(selectedShotType)}
       />
 
       {/* Practice Report at bottom — once notes have been saved for the latest session */}

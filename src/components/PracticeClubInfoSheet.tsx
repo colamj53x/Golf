@@ -3,19 +3,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  Zap, 
   Activity, 
   BarChart3,
-  AlertTriangle,
   Download,
   Loader2,
   Gauge
 } from 'lucide-react';
-import { PracticeSession, PracticeMetricTarget, PracticeMetricValue, ConsistencyData } from '@/types/practice';
+import { BestShotDefinition, MetricStatus, PracticeSession, PracticeMetricTarget } from '@/types/practice';
 import { getConfigDisplayName } from '@/types/practiceClubs';
+import type { ShotsBySession } from '@/hooks/usePracticeShotsBySessions';
+import { calculateShotConsistency, pctWithinTarget, type ShotConsistencyScores } from '@/lib/practiceConsistency';
+import { statusFromWithinTarget } from '@/lib/practiceDashboardDomain';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -26,6 +24,8 @@ interface PracticeClubInfoSheetProps {
   configKey: string;
   metrics: PracticeMetricTarget[];
   sessions: PracticeSession[];
+  shotsBySession: ShotsBySession;
+  bestShotDefinition: BestShotDefinition;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -36,48 +36,57 @@ const CATEGORY_LABELS: Record<string, string> = {
   tempo: 'Tempo',
 };
 
-function StatRow({ 
-  label, 
-  target,
-  current,
-  previous,
-  unit,
-  higherIsBetter
-}: { 
-  label: string; 
-  target: string;
+function StatusDot({ status, title }: { status: MetricStatus | null; title: string }) {
+  const color = status === 'green'
+    ? 'bg-green-500'
+    : status === 'amber'
+      ? 'bg-amber-500'
+      : status === 'red'
+        ? 'bg-red-500'
+        : 'bg-muted-foreground/40';
+
+  return <span className={`inline-block h-3 w-3 shrink-0 rounded-full ${color}`} title={title} />;
+}
+
+function improvementStatus(delta: number | null): MetricStatus | null {
+  if (delta === null) return null;
+  if (delta >= 5) return 'green';
+  if (delta <= -5) return 'red';
+  return 'amber';
+}
+
+function StatRow({ label, current, unit, latest18Pct, improvementDelta }: {
+  label: string;
   current: string | null;
-  previous: string | null;
   unit: string;
-  higherIsBetter: boolean;
+  latest18Pct: number | null;
+  improvementDelta: number | null;
 }) {
-  const getTrend = () => {
-    if (!current || !previous) return null;
-    const currVal = parseFloat(current.split('–')[0]);
-    const prevVal = parseFloat(previous.split('–')[0]);
-    if (isNaN(currVal) || isNaN(prevVal)) return null;
-    
-    const diff = currVal - prevVal;
-    if (Math.abs(diff) < 0.5) return 'stable';
-    const isImproving = higherIsBetter ? diff > 0 : diff < 0;
-    return isImproving ? 'improving' : 'declining';
-  };
-  
-  const trend = getTrend();
-  
+  const currentStatus = statusFromWithinTarget(latest18Pct);
+  const recentStatus = improvementStatus(improvementDelta);
+
   return (
     <div className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
       <span className="text-sm text-muted-foreground">{label}</span>
       <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground min-w-[60px] text-right">{target}</span>
-        <span className="text-sm font-medium min-w-[70px] text-right">
+        <span className="text-sm font-medium min-w-[86px] text-right">
           {current ?? '–'}{current && unit ? ` ${unit}` : ''}
         </span>
-        <div className="w-5">
-          {trend === 'improving' && <TrendingUp className="h-4 w-4 text-green-500" />}
-          {trend === 'declining' && <TrendingDown className="h-4 w-4 text-red-500" />}
-          {trend === 'stable' && <Minus className="h-4 w-4 text-muted-foreground" />}
-          {!trend && <span className="text-muted-foreground">–</span>}
+        <div className="flex min-w-[72px] items-center justify-end gap-1.5 text-xs">
+          <StatusDot
+            status={currentStatus}
+            title={latest18Pct === null ? 'No shot-level status' : `${latest18Pct}% in range over the latest 18 shots`}
+          />
+          <span>{latest18Pct === null ? '–' : `${latest18Pct}%`}</span>
+        </div>
+        <div className="flex min-w-[72px] items-center justify-end gap-1.5 text-xs">
+          <StatusDot
+            status={recentStatus}
+            title={improvementDelta === null ? 'No comparison available' : `Latest 9 vs all history: ${improvementDelta > 0 ? '+' : ''}${improvementDelta} percentage points`}
+          />
+          <span>
+            {improvementDelta === null ? '–' : `${improvementDelta > 0 ? '+' : ''}${improvementDelta}pp`}
+          </span>
         </div>
       </div>
     </div>
@@ -88,7 +97,7 @@ function ConsistencyBadge({ score, label }: { score: number | null; label: strin
   const getColor = () => {
     if (score === null) return 'text-muted-foreground';
     if (score >= 80) return 'text-green-500';
-    if (score >= 60) return 'text-amber-500';
+    if (score >= 50) return 'text-amber-500';
     return 'text-red-500';
   };
   
@@ -108,6 +117,8 @@ export function PracticeClubInfoSheet({
   configKey,
   metrics,
   sessions,
+  shotsBySession,
+  bestShotDefinition,
 }: PracticeClubInfoSheetProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -115,61 +126,74 @@ export function PracticeClubInfoSheet({
   const clubDisplayName = getConfigDisplayName(configKey);
   
   const currentSession = sessions[0] || null;
-  const previousSession = sessions[1] || null;
-  const allSessionsWithConsistency = sessions.filter(s => s.consistency !== undefined);
-  
-  // Calculate averages across all sessions
-  const averages = useMemo(() => {
-    if (sessions.length === 0) return null;
-    
-    const avgValues: Record<string, { sum: number; count: number }> = {};
-    
-    sessions.forEach(session => {
-      session.metrics.forEach(m => {
-        if (!avgValues[m.metricId]) {
-          avgValues[m.metricId] = { sum: 0, count: 0 };
-        }
-        const val = m.valueMax ?? m.valueMin;
-        if (val !== null) {
-          avgValues[m.metricId].sum += val;
-          avgValues[m.metricId].count += 1;
-        }
-      });
-    });
-    
-    const result: Record<string, number> = {};
-    Object.entries(avgValues).forEach(([id, { sum, count }]) => {
-      if (count > 0) {
-        result[id] = Math.round((sum / count) * 10) / 10;
-      }
-    });
-    
+
+  const allShots = useMemo(
+    () => sessions.flatMap(session => shotsBySession[session.id] ?? []),
+    [sessions, shotsBySession],
+  );
+  const latest18Shots = useMemo(() => allShots.slice(0, 18), [allShots]);
+  const latest9Shots = useMemo(() => allShots.slice(0, 9), [allShots]);
+  const consistencyScores = useMemo(
+    () => calculateShotConsistency(
+      latest18Shots,
+      metrics,
+      bestShotDefinition.conditions,
+      configKey,
+    ),
+    [bestShotDefinition.conditions, configKey, latest18Shots, metrics],
+  );
+
+  const metricShotSummary = useMemo(() => {
+    const result: Record<string, { latest18Pct: number | null; improvementDelta: number | null }> = {};
+    for (const metric of metrics) {
+      const latest18Pct = pctWithinTarget(
+        metric.id,
+        latest18Shots,
+        metric.targetMin,
+        metric.targetMax,
+        configKey,
+      );
+      const latest9Pct = pctWithinTarget(
+        metric.id,
+        latest9Shots,
+        metric.targetMin,
+        metric.targetMax,
+        configKey,
+      );
+      const historyPct = pctWithinTarget(
+        metric.id,
+        allShots,
+        metric.targetMin,
+        metric.targetMax,
+        configKey,
+      );
+      result[metric.id] = {
+        latest18Pct,
+        improvementDelta: latest9Pct === null || historyPct === null
+          ? null
+          : Math.round(latest9Pct - historyPct),
+      };
+    }
     return result;
-  }, [sessions]);
-  
-  // Calculate consistency averages
-  const consistencyAverages = useMemo(() => {
-    if (allSessionsWithConsistency.length === 0) return null;
-    
-    let distanceSum = 0, lateralSum = 0, bestSum = 0, overallSum = 0;
-    
-    allSessionsWithConsistency.forEach(s => {
-      if (s.consistency) {
-        distanceSum += s.consistency.distancePct;
-        lateralSum += s.consistency.lateralPct;
-        bestSum += s.consistency.bestPct;
-        overallSum += s.consistency.overallScore;
-      }
-    });
-    
-    const count = allSessionsWithConsistency.length;
+  }, [allShots, configKey, latest18Shots, latest9Shots, metrics]);
+
+  const getSessionConsistency = (session: PracticeSession): ShotConsistencyScores => {
+    const sessionShots = shotsBySession[session.id] ?? [];
+    if (sessionShots.length > 0) {
+      return calculateShotConsistency(
+        sessionShots,
+        metrics,
+        bestShotDefinition.conditions,
+        configKey,
+      );
+    }
     return {
-      distance: Math.round(distanceSum / count),
-      lateral: Math.round(lateralSum / count),
-      best: Math.round(bestSum / count),
-      overall: Math.round(overallSum / count),
+      distance: session.consistency?.distancePct ?? null,
+      lateral: session.consistency?.lateralPct ?? null,
+      best: session.consistency?.bestPct ?? null,
+      overall: session.consistency?.overallScore ?? null,
     };
-  }, [allSessionsWithConsistency]);
+  };
   
   const getMetricValue = (session: PracticeSession | null, metricId: string): string | null => {
     if (!session) return null;
@@ -313,47 +337,36 @@ export function PracticeClubInfoSheet({
           ) : (
             <>
               {/* Consistency Scores */}
-              {(currentSession?.consistency || consistencyAverages) && (
+              {latest18Shots.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Gauge className="h-5 w-5 text-primary" />
                       Consistency Scores
                     </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Based on the latest {latest18Shots.length} shot{latest18Shots.length !== 1 ? 's' : ''}
+                    </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-4 gap-4">
                       <ConsistencyBadge 
-                        score={currentSession?.consistency?.distancePct ?? null} 
+                        score={consistencyScores.distance}
                         label="Distance" 
                       />
                       <ConsistencyBadge 
-                        score={currentSession?.consistency?.lateralPct ?? null} 
+                        score={consistencyScores.lateral}
                         label="Lateral" 
                       />
                       <ConsistencyBadge 
-                        score={currentSession?.consistency?.bestPct ?? null} 
+                        score={consistencyScores.best}
                         label="Best Shots" 
                       />
                       <ConsistencyBadge 
-                        score={currentSession?.consistency?.overallScore ?? null} 
+                        score={consistencyScores.overall}
                         label="Overall" 
                       />
                     </div>
-                    
-                    {consistencyAverages && allSessionsWithConsistency.length >= 2 && (
-                      <div className="pt-3 border-t">
-                        <div className="text-xs text-muted-foreground mb-2">
-                          Average across {allSessionsWithConsistency.length} sessions:
-                        </div>
-                        <div className="grid grid-cols-4 gap-4 text-center">
-                          <div className="text-sm font-medium">{consistencyAverages.distance}%</div>
-                          <div className="text-sm font-medium">{consistencyAverages.lateral}%</div>
-                          <div className="text-sm font-medium">{consistencyAverages.best}%</div>
-                          <div className="text-sm font-medium">{consistencyAverages.overall}%</div>
-                        </div>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}
@@ -366,24 +379,27 @@ export function PracticeClubInfoSheet({
                       <CardTitle className="text-base">{CATEGORY_LABELS[category] || category}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground mb-2 pr-5">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-2">
                         <span>Metric</span>
                         <div className="flex gap-3">
-                          <span className="min-w-[60px] text-right">Target</span>
-                          <span className="min-w-[70px] text-right">Current</span>
+                          <span className="min-w-[86px] text-right">Current</span>
+                          <span className="min-w-[72px] text-right">Latest 18</span>
+                          <span className="min-w-[72px] text-right">Last 9 vs all</span>
                         </div>
                       </div>
-                      {categoryMetrics.map(metric => (
-                        <StatRow
-                          key={metric.id}
-                          label={metric.metricName}
-                          target={metric.targetDisplay}
-                          current={getMetricValue(currentSession, metric.id)}
-                          previous={getMetricValue(previousSession, metric.id)}
-                          unit={metric.unit}
-                          higherIsBetter={metric.higherIsBetter}
-                        />
-                      ))}
+                      {categoryMetrics.map(metric => {
+                        const summary = metricShotSummary[metric.id];
+                        return (
+                          <StatRow
+                            key={metric.id}
+                            label={metric.metricName}
+                            current={getMetricValue(currentSession, metric.id)}
+                            unit={metric.unit}
+                            latest18Pct={summary?.latest18Pct ?? null}
+                            improvementDelta={summary?.improvementDelta ?? null}
+                          />
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 ))}
@@ -399,15 +415,21 @@ export function PracticeClubInfoSheet({
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <div className="mb-2 grid grid-cols-[minmax(120px,1fr)_repeat(4,minmax(58px,auto))] gap-3 px-3 text-right text-xs text-muted-foreground">
+                      <span className="text-left">Session</span>
+                      <span>Distance</span>
+                      <span>Lateral</span>
+                      <span>Best</span>
+                      <span>Overall</span>
+                    </div>
                     <div className="space-y-2">
-                      {sessions.slice(0, 5).map((session, idx) => {
-                        const totalDist = session.metrics.find(m => m.metricId === 'total_distance');
-                        const lateralMiss = session.metrics.find(m => m.metricId === 'avg_lateral_miss');
-                        
+                      {sessions.slice(0, 8).map((session, idx) => {
+                        const scores = getSessionConsistency(session);
+
                         return (
                           <div 
                             key={session.id} 
-                            className={`flex items-center justify-between py-2 px-3 rounded-lg ${
+                            className={`grid grid-cols-[minmax(120px,1fr)_repeat(4,minmax(58px,auto))] items-center gap-3 py-2 px-3 rounded-lg ${
                               idx === 0 ? 'bg-primary/10 border border-primary/20' : 'bg-muted/50'
                             }`}
                           >
@@ -421,62 +443,25 @@ export function PracticeClubInfoSheet({
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-4 text-sm">
-                              {totalDist && (
-                                <span className="text-muted-foreground">
-                                  Distance: <span className="text-foreground font-medium">{totalDist.valueDisplay}m</span>
-                                </span>
-                              )}
-                              {lateralMiss && (
-                                <span className="text-muted-foreground">
-                                  Lateral: <span className="text-foreground font-medium">{lateralMiss.valueDisplay}m</span>
-                                </span>
-                              )}
-                              {session.consistency && (
-                                <span className={`font-medium ${
-                                  session.consistency.overallScore >= 80 ? 'text-green-500' :
-                                  session.consistency.overallScore >= 60 ? 'text-amber-500' : 'text-red-500'
-                                }`}>
-                                  {session.consistency.overallScore}%
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-right text-sm font-medium">{scores.distance === null ? '–' : `${scores.distance}%`}</span>
+                            <span className="text-right text-sm font-medium">{scores.lateral === null ? '–' : `${scores.lateral}%`}</span>
+                            <span className="text-right text-sm font-medium">{scores.best === null ? '–' : `${scores.best}%`}</span>
+                            <span className={`text-right text-sm font-semibold ${
+                              scores.overall === null ? 'text-muted-foreground' :
+                              scores.overall >= 80 ? 'text-green-500' :
+                              scores.overall >= 50 ? 'text-amber-500' : 'text-red-500'
+                            }`}>
+                              {scores.overall === null ? '–' : `${scores.overall}%`}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
-                    {sessions.length > 5 && (
+                    {sessions.length > 8 && (
                       <p className="text-xs text-muted-foreground mt-3 text-center">
-                        Showing last 5 of {sessions.length} sessions
+                        Showing last 8 of {sessions.length} sessions
                       </p>
                     )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Averages Table */}
-              {averages && Object.keys(averages).length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Zap className="h-5 w-5 text-primary" />
-                      All-Time Averages ({sessions.length} sessions)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {metrics.slice(0, 8).map(metric => {
-                        const avg = averages[metric.id];
-                        if (avg === undefined) return null;
-                        
-                        return (
-                          <div key={metric.id} className="text-center p-3 bg-muted/50 rounded-lg">
-                            <div className="text-lg font-bold">{avg}{metric.unit}</div>
-                            <div className="text-xs text-muted-foreground">{metric.metricName}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </CardContent>
                 </Card>
               )}

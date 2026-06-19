@@ -1,6 +1,15 @@
 // Shared helpers for computing per-shot consistency vs target bands.
 
+import type { BestShotCondition, PracticeMetricTarget } from '@/types/practice';
+
 export type ShotLike = { metrics: Record<string, unknown> };
+
+export interface ShotConsistencyScores {
+  distance: number | null;
+  lateral: number | null;
+  best: number | null;
+  overall: number | null;
+}
 
 const LENGTH_MODE_CLUB_IDS = new Set(['dr', '5w', '4h', '5h']);
 const DISTANCE_METRIC_IDS = new Set(['carry', 'total_distance']);
@@ -82,6 +91,87 @@ export function pctWithinTarget(
   }
   if (considered === 0) return null;
   return Math.round((hits / considered) * 100);
+}
+
+function isShotMetricInTarget(
+  shot: ShotLike,
+  condition: BestShotCondition,
+  target: PracticeMetricTarget | undefined,
+): boolean {
+  const value = getShotMetricValue(condition.metricId, shot);
+  if (value === null || !target || (target.targetMin === null && target.targetMax === null)) return false;
+
+  if (condition.mode === 'min') {
+    const min = target.targetMin ?? target.targetMax;
+    return min !== null && value >= min;
+  }
+
+  if (condition.mode === 'max') {
+    const max = target.targetMax ?? target.targetMin;
+    return max !== null && value <= max;
+  }
+
+  const min = target.targetMin ?? target.targetMax!;
+  const max = target.targetMax ?? target.targetMin!;
+  return value >= Math.min(min, max) && value <= Math.max(min, max);
+}
+
+export function pctBestShots(
+  shots: ShotLike[],
+  targets: PracticeMetricTarget[],
+  conditions: BestShotCondition[],
+): number | null {
+  if (shots.length === 0 || conditions.length === 0) return null;
+
+  let considered = 0;
+  let hits = 0;
+  for (const shot of shots) {
+    if (!conditions.every(condition => getShotMetricValue(condition.metricId, shot) !== null)) continue;
+
+    considered++;
+    if (conditions.every(condition => (
+      isShotMetricInTarget(
+        shot,
+        condition,
+        targets.find(metric => metric.id === condition.metricId),
+      )
+    ))) {
+      hits++;
+    }
+  }
+
+  return considered === 0 ? null : Math.round((hits / considered) * 100);
+}
+
+export function calculateShotConsistency(
+  shots: ShotLike[],
+  targets: PracticeMetricTarget[],
+  bestShotConditions: BestShotCondition[],
+  configKey?: string | null,
+): ShotConsistencyScores {
+  const distanceTarget = targets.find(metric => metric.id === 'total_distance');
+  const lateralTarget = targets.find(metric => metric.id === 'avg_lateral_miss');
+  const distance = pctWithinTarget(
+    'total_distance',
+    shots,
+    distanceTarget?.targetMin ?? null,
+    distanceTarget?.targetMax ?? null,
+    configKey,
+  );
+  const lateral = pctWithinTarget(
+    'avg_lateral_miss',
+    shots,
+    lateralTarget?.targetMin ?? null,
+    lateralTarget?.targetMax ?? null,
+    configKey,
+  );
+  const best = pctBestShots(shots, targets, bestShotConditions);
+  const validCoreScores = [distance, lateral].filter((score): score is number => score !== null);
+  const overall = validCoreScores.length === 0
+    ? null
+    : Math.round(validCoreScores.reduce((sum, score) => sum + score, 0) / validCoreScores.length);
+
+  return { distance, lateral, best, overall };
 }
 
 // Recommended drills per metric weakness. Keep terse and actionable.
