@@ -177,3 +177,37 @@
     text-wrap: balance;
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .practice-reference-print,
+  .practice-reference-print * {
+    visibility: visible !important;
+  }
+
+  .practice-reference-print {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .practice-reference-print tr,
+  .practice-reference-print section {
+    break-inside: avoid;
+  }
+}
