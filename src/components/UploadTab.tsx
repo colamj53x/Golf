@@ -7,10 +7,6 @@ import { getShotDateKey, parseCSV } from '@/lib/golfCalculations';
 import { getUserFriendlyError, validateShot } from '@/lib/errorHandler';
 import { getUploadShotFingerprint } from '@/lib/uploadReview';
 import { encodeRoundShotSequence } from '@/lib/roundShotSequence';
-import {
-  clearRoundReflectionLocalDraft,
-  saveRoundReflectionLocalDraft,
-} from '@/lib/roundReflectionDrafts';
 import { normalizeClubCode, Shot } from '@/types/golf';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import {
@@ -33,12 +29,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import {
-  createEmptyRoundReflectionDraft,
-  hasRoundReflectionContent,
-  RoundReflectionDraft,
-  RoundReflectionEditor,
-} from '@/components/RoundReflectionEditor';
 
 type UploadReviewRow = {
   id: string;
@@ -67,7 +57,6 @@ type PendingUploadDraft = {
   fileName: string;
   rows: UploadReviewRow[];
   skippedCount: number;
-  reflectionsByDate: Record<string, RoundReflectionDraft>;
 };
 
 type StoredPendingUploadDraft = PendingUploadDraft & {
@@ -200,12 +189,7 @@ export function UploadTab() {
   const shotProfiles = useShotProfiles();
   const {
     refreshShots,
-    refreshRoundReflections,
-    roundReflections,
-    upsertRoundReflection,
     shots,
-    playingPartners,
-    setPlayingPartners,
   } = useGolfData();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -241,7 +225,6 @@ export function UploadTab() {
         fileName: parsed.fileName,
         rows: parsed.rows,
         skippedCount: parsed.skippedCount,
-        reflectionsByDate: parsed.reflectionsByDate,
       });
       setReplaceAll(parsed.replaceAll);
       setReplaceMatchingRounds(parsed.replaceMatchingRounds ?? false);
@@ -340,26 +323,11 @@ export function UploadTab() {
 
       const validShots = parsedShots.filter((_, index) => !validationErrors.some((error) => error.row === index + 2));
       const rows = validShots.map((shot) => buildReviewRow(shot));
-      const roundDates = [...new Set(rows.map((row) => row.roundDate))];
-      const reflectionsByDate = Object.fromEntries(roundDates.map((roundDate) => {
-        const existing = roundReflections.find((reflection) => reflection.roundDate === roundDate);
-        return [roundDate, existing ? {
-          generalComments: existing.generalComments,
-          drivingNotes: existing.drivingNotes,
-          ironsNotes: existing.ironsNotes,
-          shortNotes: existing.shortNotes,
-          puttingNotes: existing.puttingNotes,
-          mentalNotes: existing.mentalNotes,
-          courseManagementNotes: existing.courseManagementNotes,
-          playingPartnerIds: existing.playingPartnerIds,
-        } : createEmptyRoundReflectionDraft()];
-      }));
 
       setPendingUpload({
         fileName: file.name,
         rows,
         skippedCount: parsedShots.length - validShots.length,
-        reflectionsByDate,
       });
       setUploadResult({
         success: true,
@@ -422,37 +390,6 @@ export function UploadTab() {
   const clearPendingUpload = () => {
     setPendingUpload(null);
     localStorage.removeItem(PENDING_UPLOAD_STORAGE_KEY);
-  };
-
-  const updateRoundReflection = (roundDate: string, next: RoundReflectionDraft) => {
-    if (user) {
-      if (hasRoundReflectionContent(next)) {
-        saveRoundReflectionLocalDraft(user.id, roundDate, next);
-      } else {
-        clearRoundReflectionLocalDraft(user.id, roundDate);
-      }
-    }
-
-    setPendingUpload((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        reflectionsByDate: {
-          ...current.reflectionsByDate,
-          [roundDate]: next,
-        },
-      };
-    });
-  };
-
-  const addPlayingPartner = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    const existing = playingPartners.find((partner) => partner.name.trim().toLowerCase() === trimmed.toLowerCase());
-    if (existing) return existing.id;
-    const id = crypto.randomUUID();
-    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '', hasMobileNumber: false, playedDates: [] }]);
-    return id;
   };
 
   const commitUpload = async () => {
@@ -588,20 +525,6 @@ export function UploadTab() {
         insertedCount += modernBatch.length;
       }
 
-      let skippedReflectionSave = false;
-      for (const [roundDate, reflection] of Object.entries(pendingUpload.reflectionsByDate)) {
-        if (!hasRoundReflectionContent(reflection)) continue;
-        saveRoundReflectionLocalDraft(user.id, roundDate, reflection);
-        try {
-          await upsertRoundReflection(roundDate, reflection);
-        } catch (error) {
-          skippedReflectionSave = true;
-          if (import.meta.env.DEV) {
-            console.error('Round reflection save skipped after shot upload:', error);
-          }
-        }
-      }
-
       const skippedMsg = pendingUpload.skippedCount > 0 ? ` (${pendingUpload.skippedCount} invalid shots skipped)` : '';
       const duplicateMsg = duplicateCount > 0 ? ` ${duplicateCount} duplicate shot${duplicateCount === 1 ? '' : 's'} already existed and were skipped.` : '';
       const legacyMsg = usedLegacyShotInsert
@@ -609,15 +532,12 @@ export function UploadTab() {
         : !usedSequenceShotInsert
           ? ' Saved classifications, but shots-to-green will need the sequence database update before it can be calculated.'
           : '';
-      const reflectionMsg = skippedReflectionSave
-        ? ' Round thoughts could not be saved yet, but the shot upload did complete.'
-        : '';
       setUploadResult({
         success: true,
-        message: `Successfully ${replaceAll ? 'replaced history with' : replaceMatchingRounds ? 'replaced matching rounds with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${duplicateMsg}${legacyMsg}${reflectionMsg}`,
+        message: `Successfully ${replaceAll ? 'replaced history with' : replaceMatchingRounds ? 'replaced matching rounds with' : 'added'} ${insertedCount} reviewed shots.${skippedMsg}${duplicateMsg}${legacyMsg}`,
       });
       clearPendingUpload();
-      await Promise.all([refreshShots(), refreshRoundReflections()]);
+      await refreshShots();
     } catch (error) {
       setUploadResult({
         success: false,
@@ -965,18 +885,6 @@ export function UploadTab() {
                 </tbody>
               </table>
             </div>
-
-            {Object.entries(pendingUpload.reflectionsByDate).map(([roundDate, reflection]) => (
-              <RoundReflectionEditor
-                key={roundDate}
-                title={`Round Thoughts · ${roundDate}`}
-                description="Add your round reflection now or leave it blank and fill it in later from the dashboard."
-                value={reflection}
-                onChange={(next) => updateRoundReflection(roundDate, next)}
-                playingPartners={playingPartners}
-                onAddPlayingPartner={addPlayingPartner}
-              />
-            ))}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <div className="text-sm text-muted-foreground sm:mr-auto sm:self-center">
