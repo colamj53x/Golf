@@ -12,6 +12,7 @@ import { getEnabledShotFamilyOptions, getEnabledSwingEffortOptions } from '@/lib
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { buildRangeReferenceRows, type RangeReferenceRow } from '@/lib/rangeFocus';
 import { resolveShotCue, useShotCues } from '@/lib/shotCues';
+import { SHOT_TECHNIQUE_INTRO } from '@/lib/shotTechniqueNotes';
 import { PRACTICE_CLUBS, getConfigDisplayName } from '@/types/practiceClubs';
 import type { MetricStatus } from '@/types/practice';
 
@@ -57,7 +58,7 @@ function ReferenceTable({
           </thead>
           <tbody>
             {rows.map(row => (
-              <tr key={row.metricId} className="border-t align-top">
+              <tr key={row.metricId} data-pdf-break className="border-t align-top">
                 <td className="px-3 py-3 font-medium print:py-2">{row.metricName}</td>
                 <td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums print:py-2">{row.target}</td>
                 <td className="px-3 py-3 print:py-2">
@@ -107,13 +108,40 @@ function OutcomeTable({ rows }: { rows: RangeReferenceRow[] }) {
           </thead>
           <tbody>
             {rows.map(row => (
-              <tr key={row.metricId} className="border-t">
+              <tr key={row.metricId} data-pdf-break className="border-t">
                 <td className="px-3 py-2.5 font-medium">{row.metricName}</td>
                 <td className="whitespace-nowrap px-3 py-2.5 font-semibold tabular-nums">{row.target}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function TechniqueNotes({ title, notes }: { title: string; notes: Array<{ label: string; text: string }> }) {
+  return (
+    <section className="space-y-4 border-t pt-6">
+      <div data-pdf-break-before>
+        <h3 className="text-xl font-semibold">Full shot technique - {title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">The complete practice card for this exact club, shot and power.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {SHOT_TECHNIQUE_INTRO.map(item => (
+          <div key={item.label} data-pdf-break className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-primary">{item.label}</div>
+            <p className="mt-1.5 text-sm leading-relaxed">{item.text}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-x-5 gap-y-3 md:grid-cols-2">
+        {notes.map(note => (
+          <div key={note.label} data-pdf-break className="rounded-lg border bg-card p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-primary">{note.label}</div>
+            <p className="mt-1.5 text-sm leading-relaxed text-foreground">{note.text}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -186,13 +214,38 @@ export function PracticePlanTab() {
       const margin = 8;
       const availableWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
       const availableHeight = pdf.internal.pageSize.getHeight() - (margin * 2);
-      const ratio = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
-      const renderedWidth = canvas.width * ratio;
-      const renderedHeight = canvas.height * ratio;
-      const x = (pdf.internal.pageSize.getWidth() - renderedWidth) / 2;
-      const y = (pdf.internal.pageSize.getHeight() - renderedHeight) / 2;
+      const maxSliceHeight = canvas.width * (availableHeight / availableWidth);
+      const contentRect = contentRef.current.getBoundingClientRect();
+      const canvasScale = canvas.width / contentRef.current.offsetWidth;
+      const breakAfter = Array.from(contentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break]'))
+        .map(element => (element.getBoundingClientRect().bottom - contentRect.top) * canvasScale)
+      const breakBefore = Array.from(contentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break-before]'))
+        .map(element => (element.getBoundingClientRect().top - contentRect.top) * canvasScale)
+      const breakpoints = [...breakAfter, ...breakBefore]
+        .filter(point => point > 0 && point < canvas.height)
+        .sort((a, b) => a - b);
+      let sliceStart = 0;
+      let pageIndex = 0;
 
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderedWidth, renderedHeight);
+      while (sliceStart < canvas.height - 1) {
+        const idealEnd = Math.min(sliceStart + maxSliceHeight, canvas.height);
+        const safeBreaks = breakpoints.filter(point => point > sliceStart + (maxSliceHeight * 0.55) && point <= idealEnd);
+        const sliceEnd = idealEnd === canvas.height ? canvas.height : (safeBreaks.at(-1) ?? idealEnd);
+        const sliceHeight = Math.max(1, Math.floor(sliceEnd - sliceStart));
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeight;
+        const context = pageCanvas.getContext('2d');
+        if (!context) throw new Error('Could not prepare PDF page');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        context.drawImage(canvas, 0, Math.floor(sliceStart), canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        if (pageIndex > 0) pdf.addPage('a4', 'landscape');
+        const renderedHeight = availableWidth * (sliceHeight / canvas.width);
+        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.88), 'JPEG', margin, margin, availableWidth, renderedHeight, undefined, 'FAST');
+        sliceStart = sliceEnd;
+        pageIndex += 1;
+      }
       const date = new Date().toISOString().split('T')[0];
       pdf.save(`range-${currentConfigKey.replace(/_/g, '-')}-reference-${date}.pdf`);
     } catch (error) {
@@ -282,20 +335,11 @@ export function PracticePlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6 pt-5 print:px-0 print:pt-4">
-          <div className={`grid gap-6 ${shotCue ? 'xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.75fr)]' : ''}`}>
-            <div className="space-y-6">
-              <OutcomeTable rows={outcomeRows} />
-              <ReferenceTable title="Swing and flight checks" description="Inputs first. Check these before using distance or dispersion to judge the shot." rows={swingRows} />
-            </div>
-            {shotCue && <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
-              <div><h3 className="font-semibold">Shot notes</h3><p className="text-xs text-muted-foreground">For this exact club, shot and power only.</p></div>
-              {[['Goal', shotCue.goal], ['Pre-shot', shotCue.preShot], ['Set-up', shotCue.setup], ['Look', shotCue.look], ...(shotCue.clock ? [['Swing size', shotCue.clock]] : []), ['Swing', shotCue.swing]].map(([label, value]) => <div key={label}><div className="text-[11px] font-semibold uppercase tracking-wide text-primary">{label}</div><p className="mt-0.5 text-sm leading-snug text-muted-foreground print:text-foreground">{value}</p></div>)}
-            </aside>}
+          <div className="space-y-6">
+            <OutcomeTable rows={outcomeRows} />
+            <ReferenceTable title="Swing and flight checks" description="Inputs first. Check these before using distance or dispersion to judge the shot." rows={swingRows} />
           </div>
-
-          <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground print:text-foreground">
-            One result, one correction. Keep the same intention for the next shot instead of changing several things at once.
-          </div>
+          {shotCue && <TechniqueNotes title={getConfigDisplayName(currentConfigKey)} notes={shotCue.technique} />}
         </CardContent>
       </Card>
     </div>

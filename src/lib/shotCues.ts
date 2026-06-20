@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DEFAULT_SHOT_TECHNIQUE, resolveTechniqueNotes, type ShotTechniqueNote } from '@/lib/shotTechniqueNotes';
 
 export const SHOT_CUES_STORAGE_KEY = 'golf_shot_cues_v1';
 export const SHOT_CUES_CHANGED_EVENT = 'golf-shot-cues-changed';
@@ -17,6 +18,7 @@ export interface ShotCueCard {
   fullClock?: string;
   halfClock?: string;
   courseCue: string;
+  technique: ShotTechniqueNote[];
 }
 
 export interface ResolvedShotCue extends ShotCueCard {
@@ -24,7 +26,7 @@ export interface ResolvedShotCue extends ShotCueCard {
   clock?: string;
 }
 
-export const DEFAULT_SHOT_CUES: ShotCueCard[] = [
+const BASE_SHOT_CUES: Array<Omit<ShotCueCard, 'technique'>> = [
   { id: 'driver', title: 'Driver', appliesTo: 'Driver · Full', goal: 'Clubface first. Right foot back. Inside-back of ball. Lead arm long. Slight draw, strong launch, balanced finish.', preShot: 'Pick the target and start-line spot. Picture a gentle draw. Make one smooth rehearsal.', setup: 'Clubface first. Match the grip Vs. Right foot half-to-full shoe back. Ball inside lead heel. Small trail-side tilt.', look: 'Inside-back quadrant of the ball.', swing: 'Smooth wide takeaway. Natural hinge. Lead side starts as the arms fall inside. Sweep through with the lead arm long.', courseCue: 'Face first. Right foot back. Inside-back. Sweep it. Lead arm long.' },
   { id: 'wood_hybrid', title: '5 Wood / Hybrid', appliesTo: '5W, 4H, 5H · Full', goal: 'Clubface first. Right foot slightly back. Brush through for a climbing, playable flight.', preShot: 'Pick target and start line. Picture the climbing flight. Make one sweeping rehearsal.', setup: 'Clubface first. Match the grip Vs. Right foot quarter-to-half shoe back. Ball slightly forward. Pressure inside the toes and toward lead side.', look: 'Outside-right of the ball and just forward.', swing: 'Smooth wide turn. Natural hinge. Lead side starts as the arms fall inside. Brush through with the lead arm long.', courseCue: 'Face first. Right foot slightly back. Slightly outside-right/forward. Brush through.' },
   { id: 'iron_6_7', title: '6 / 7 Iron Full', appliesTo: '6I, 7I · Full', goal: 'Clubface first. Right foot slightly back. Ball then turf. Lead arm long.', preShot: 'Pick target and start line. Picture the flight. Make one ball-first rehearsal.', setup: 'Clubface first. Match the grip Vs. Right foot quarter-to-half shoe back. Ball centre to slightly forward. Pressure inside toes and lead side.', look: 'Grass outside-right just after the ball.', swing: 'Smooth turn and natural hinge. Lead side starts. Strike ball then turf and keep the lead arm long.', courseCue: 'Face first. Right foot slightly back. Grass outside-right after ball. Ball then turf.' },
@@ -35,11 +37,16 @@ export const DEFAULT_SHOT_CUES: ShotCueCard[] = [
   { id: 'chip', title: 'Wedge Chip', appliesTo: 'PW, GW, SW · Chip · Full or Half', goal: 'Choose the landing spot. Stand close. Toe down. Strike from the toe and putt it.', preShot: 'Choose landing spot and final target. Picture first bounce and roll. Make one putting rehearsal.', setup: 'Face to landing spot. Stand close, grip down, separate the hands and set the toe down. Narrow stance, ball middle-to-back, handle ahead.', look: 'Front of the ball or grass just ahead.', swing: 'Putting motion with no hinge. Move the chest, make a toe strike, land it and let it roll.', fullClock: '7:30–8 o’clock', halfClock: '7 o’clock', courseCue: 'Landing spot. Stand close. Toe down. Toe strike. Putt it.' },
 ];
 
+export const DEFAULT_SHOT_CUES: ShotCueCard[] = BASE_SHOT_CUES.map(card => ({
+  ...card,
+  technique: DEFAULT_SHOT_TECHNIQUE[card.id],
+}));
+
 function readCards(): ShotCueCard[] {
   try {
     const stored = JSON.parse(localStorage.getItem(SHOT_CUES_STORAGE_KEY) || 'null');
     if (!Array.isArray(stored)) return DEFAULT_SHOT_CUES;
-    return DEFAULT_SHOT_CUES.map(defaultCard => ({ ...defaultCard, ...(stored.find((card: ShotCueCard) => card.id === defaultCard.id) ?? {}) }));
+    return DEFAULT_SHOT_CUES.map(defaultCard => ({ ...defaultCard, ...(stored.find((card: ShotCueCard) => card.id === defaultCard.id) ?? {}), technique: stored.find((card: ShotCueCard) => card.id === defaultCard.id)?.technique ?? defaultCard.technique }));
   } catch { return DEFAULT_SHOT_CUES; }
 }
 
@@ -79,7 +86,7 @@ export function resolveShotCue(cards: ShotCueCard[], configKey: string): Resolve
   const card = cards.find(candidate => candidate.id === id);
   if (!card) return null;
   const power = configKey.split('_')[2];
-  return { ...card, configKey, clock: power === 'full' ? card.fullClock : power === '9pm' ? card.halfClock : undefined };
+  return { ...card, configKey, clock: power === 'full' ? card.fullClock : power === '9pm' ? card.halfClock : undefined, technique: resolveTechniqueNotes(card.technique, power) };
 }
 
 export function shotCueLink(configKey: string): string {

@@ -6,16 +6,27 @@ describe('shot cue power matching', () => {
     const cue = resolveShotCue(DEFAULT_SHOT_CUES, 'pw_pitch_full');
     expect(cue?.clock).toBe('9–10 o’clock with fuller hinge');
     expect(cue?.clock).not.toContain('8 o’clock');
+    expect(cue?.technique.find(note => note.label === 'Clock length')?.text).toContain('9–10 o’clock');
+    expect(cue?.technique.find(note => note.label === 'Clock length')?.text).not.toContain('Half');
   });
 
   it('uses only the Half swing size for a Half pitch', () => {
     const cue = resolveShotCue(DEFAULT_SHOT_CUES, 'pw_pitch_9pm');
     expect(cue?.clock).toBe('8 o’clock with smaller hinge');
     expect(cue?.clock).not.toContain('9–10');
+    expect(cue?.technique.find(note => note.label === 'Clock length')?.text).toContain('8 o’clock');
+    expect(cue?.technique.find(note => note.label === 'Clock length')?.text).not.toContain('Full');
   });
 
   it('does not fall back to a cue for an unsupported power', () => {
     expect(cueIdForConfig('dr_full_9pm')).toBeNull();
     expect(resolveShotCue(DEFAULT_SHOT_CUES, '7i_punch_9pm')).toBeNull();
+  });
+
+  it('keeps the complete technique card rather than the condensed cue', () => {
+    const cue = resolveShotCue(DEFAULT_SHOT_CUES, 'dr_full_full');
+    expect(cue?.technique).toHaveLength(15);
+    expect(cue?.technique.map(note => note.label)).toContain('Grip alignment');
+    expect(cue?.technique.map(note => note.label)).toContain('Follow-through');
   });
 });
