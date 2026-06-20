@@ -69,7 +69,8 @@ export function getSwingEffortLabel(value: string): string {
 }
 
 export function getTargetIntentLabel(value: string): string {
-  return TARGET_INTENT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  const normalized = value.trim().toLowerCase();
+  return TARGET_INTENT_OPTIONS.find((option) => option.value === normalized)?.label ?? value;
 }
 
 export function getPredictedShotLabel(shotFamily: string, swingEffort: string): string {

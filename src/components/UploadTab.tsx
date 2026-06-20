@@ -17,7 +17,6 @@ import {
   CLUB_OPTIONS,
   END_LIE_OPTIONS,
   START_LIE_OPTIONS,
-  TARGET_INTENT_OPTIONS,
   ensureOption,
   getEnabledShotFamilyOptions,
   getEnabledSwingEffortOptions,
@@ -25,6 +24,7 @@ import {
   getPredictedShotLabel,
   getShotFamilyLabel,
   getSwingEffortLabel,
+  getTargetIntentLabel,
   roundClubToPracticeClubId,
 } from '@/lib/shotOptions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -853,7 +853,7 @@ export function UploadTab() {
                     const availableTargets = ensureOption(
                       getEnabledTargetIntentOptions(shotProfiles, row.club, row.shotFamily, row.swingEffort, 'onCourse'),
                       row.targetIntent,
-                      row.targetIntent,
+                      getTargetIntentLabel(row.targetIntent),
                     );
                     return (
                       <tr key={row.id} className={`border-t align-top ${row.accepted ? 'bg-primary/5' : ''}`}>

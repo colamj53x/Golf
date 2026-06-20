@@ -11,7 +11,6 @@ import {
   CLUB_OPTIONS,
   END_LIE_OPTIONS,
   START_LIE_OPTIONS,
-  TARGET_INTENT_OPTIONS,
   ensureOption,
   getEnabledShotFamilyOptions,
   getEnabledSwingEffortOptions,
@@ -19,6 +18,7 @@ import {
   getPredictedShotLabel,
   getShotFamilyLabel,
   getSwingEffortLabel,
+  getTargetIntentLabel,
 } from '@/lib/shotOptions';
 
 type ReviewDraft = Pick<
@@ -219,7 +219,7 @@ export function RoundShotReviewDialog({
                     const targetOptions = ensureOption(
                       getEnabledTargetIntentOptions(shotProfiles, draft.club, draft.shotFamily, draft.swingEffort, 'onCourse'),
                       draft.targetIntent,
-                      draft.targetIntent,
+                      getTargetIntentLabel(draft.targetIntent),
                     );
 
                     return (
