@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Calendar, Target, TrendingUp, TrendingDown, Minus, Settings, Pencil, ChevronsUpDown, Upload, CheckCircle2, ListFilter, Copy, BarChart3 } from 'lucide-react';
+import { Plus, Calendar, Target, TrendingUp, TrendingDown, Minus, Settings, Pencil, ChevronsUpDown, Upload, CheckCircle2, ListFilter, Copy, BarChart3, Trash2 } from 'lucide-react';
 
 import { format } from 'date-fns';
 import { ShotManagementDialog } from '@/components/ShotManagementDialog';
@@ -23,6 +23,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -224,6 +235,7 @@ export function PracticeDashboardTab() {
     getSessionsForClub, 
     addPracticeSession, 
     updatePracticeSession, 
+    deletePracticeSession,
     updatePracticeConfig,
     selectedClub,
     selectedShotType,
@@ -508,6 +520,12 @@ export function PracticeDashboardTab() {
 
     setIsEditSessionOpen(false);
     toast.success('Session updated');
+  };
+
+  const handleDeleteCurrentSession = async () => {
+    if (!currentSession) return;
+    await deletePracticeSession(currentSession.id);
+    setIsEditSessionOpen(false);
   };
 
   const openEditTargets = () => {
@@ -1293,9 +1311,28 @@ export function PracticeDashboardTab() {
                     />
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsEditSessionOpen(false)}>Cancel</Button>
-                  <Button onClick={handleEditSession}>Update Session</Button>
+                <DialogFooter className="sm:justify-between">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="gap-2"><Trash2 className="h-4 w-4" />Delete this session</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this practice session?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This permanently removes the {getConfigDisplayName(currentConfigKey)} session from {format(currentSession.date, 'dd MMM yyyy')}, including its individual shots. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep session</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteCurrentSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete session</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsEditSessionOpen(false)}>Cancel</Button>
+                    <Button onClick={handleEditSession}>Update Session</Button>
+                  </div>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
