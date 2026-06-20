@@ -11,6 +11,7 @@ import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { getEnabledShotFamilyOptions, getEnabledSwingEffortOptions } from '@/lib/shotOptions';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { buildRangeReferenceRows, type RangeReferenceRow } from '@/lib/rangeFocus';
+import { resolveShotCue, useShotCues } from '@/lib/shotCues';
 import { PRACTICE_CLUBS, getConfigDisplayName } from '@/types/practiceClubs';
 import type { MetricStatus } from '@/types/practice';
 
@@ -122,6 +123,7 @@ export function PracticePlanTab() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const shotProfiles = useShotProfiles();
+  const shotCues = useShotCues();
   const {
     practiceConfigs,
     getSessionsForClub,
@@ -167,6 +169,7 @@ export function PracticePlanTab() {
   );
   const swingRows = rows.filter(row => row.section === 'swing');
   const outcomeRows = rows.filter(row => row.section === 'outcome');
+  const shotCue = resolveShotCue(shotCues, currentConfigKey);
 
   const exportToPDF = async () => {
     if (!contentRef.current) return;
@@ -279,12 +282,16 @@ export function PracticePlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6 pt-5 print:px-0 print:pt-4">
-          <OutcomeTable rows={outcomeRows} />
-          <ReferenceTable
-            title="Swing and flight checks"
-            description="Inputs first. Check these before using distance or dispersion to judge the shot."
-            rows={swingRows}
-          />
+          <div className={`grid gap-6 ${shotCue ? 'xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.75fr)]' : ''}`}>
+            <div className="space-y-6">
+              <OutcomeTable rows={outcomeRows} />
+              <ReferenceTable title="Swing and flight checks" description="Inputs first. Check these before using distance or dispersion to judge the shot." rows={swingRows} />
+            </div>
+            {shotCue && <aside className="space-y-3 rounded-lg border bg-muted/20 p-4">
+              <div><h3 className="font-semibold">Shot notes</h3><p className="text-xs text-muted-foreground">For this exact club, shot and power only.</p></div>
+              {[['Goal', shotCue.goal], ['Pre-shot', shotCue.preShot], ['Set-up', shotCue.setup], ['Look', shotCue.look], ...(shotCue.clock ? [['Swing size', shotCue.clock]] : []), ['Swing', shotCue.swing]].map(([label, value]) => <div key={label}><div className="text-[11px] font-semibold uppercase tracking-wide text-primary">{label}</div><p className="mt-0.5 text-sm leading-snug text-muted-foreground print:text-foreground">{value}</p></div>)}
+            </aside>}
+          </div>
 
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground print:text-foreground">
             One result, one correction. Keep the same intention for the next shot instead of changing several things at once.

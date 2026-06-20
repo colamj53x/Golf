@@ -1,0 +1,21 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_SHOT_CUES, cueIdForConfig, resolveShotCue } from './shotCues';
+
+describe('shot cue power matching', () => {
+  it('uses only the Full swing size for a Full pitch', () => {
+    const cue = resolveShotCue(DEFAULT_SHOT_CUES, 'pw_pitch_full');
+    expect(cue?.clock).toBe('9–10 o’clock with fuller hinge');
+    expect(cue?.clock).not.toContain('8 o’clock');
+  });
+
+  it('uses only the Half swing size for a Half pitch', () => {
+    const cue = resolveShotCue(DEFAULT_SHOT_CUES, 'pw_pitch_9pm');
+    expect(cue?.clock).toBe('8 o’clock with smaller hinge');
+    expect(cue?.clock).not.toContain('9–10');
+  });
+
+  it('does not fall back to a cue for an unsupported power', () => {
+    expect(cueIdForConfig('dr_full_9pm')).toBeNull();
+    expect(resolveShotCue(DEFAULT_SHOT_CUES, '7i_punch_9pm')).toBeNull();
+  });
+});

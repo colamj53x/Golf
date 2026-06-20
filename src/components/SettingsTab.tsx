@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Crosshair, Goal, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
@@ -37,6 +38,7 @@ import {
   type ShotPickerLie,
   type ShotPickerSlope,
 } from '@/lib/shotPickerAdjustments';
+import { DEFAULT_SHOT_CUES, saveShotCues, useShotCues, type ShotCueCard } from '@/lib/shotCues';
 
 const SETTINGS_SECTIONS = [
   {
@@ -63,6 +65,7 @@ const SETTINGS_SECTIONS = [
     description: 'Distance-to-target cutoffs for Full and Half shots.',
     icon: SlidersHorizontal,
   },
+  { href: '#settings-shot-cues', title: 'Practice & On-Course Cues', description: 'Edit the notes shown on practice PDFs and Play cue cards.', icon: Goal },
 ];
 
 const lieAdjustmentRows: Array<{ key: ShotPickerLie; label: string; note: string }> = [
@@ -409,8 +412,22 @@ export function SettingsTab() {
         <ShotClassificationRulesCard />
       </section>
 
+      <section id="settings-shot-cues" className="scroll-mt-6">
+        <ShotCueSettingsCard />
+      </section>
+
     </div>
   );
+}
+
+function ShotCueSettingsCard() {
+  const cards = useShotCues();
+  const [draft, setDraft] = useState<ShotCueCard[]>(cards);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (!editing) setDraft(cards); }, [cards, editing]);
+  const update = (id: string, field: keyof ShotCueCard, value: string) => setDraft(current => current.map(card => card.id === id ? { ...card, [field]: value } : card));
+  const fields: Array<[keyof ShotCueCard, string]> = [['goal', 'Practice goal'], ['preShot', 'Pre-shot'], ['setup', 'Set-up'], ['look', 'Where to look'], ['swing', 'Swing'], ['fullClock', 'Full-shot swing size'], ['halfClock', 'Half-shot swing size'], ['courseCue', 'On-course cue']];
+  return <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Practice & On-Course Cues</CardTitle><CardDescription>Structured notes from your shot cards. Full and Half swing-size notes are stored separately.</CardDescription></div><div className="flex gap-2">{editing && <Button variant="outline" onClick={() => { setDraft(cards); setEditing(false); }}>Cancel</Button>}<Button onClick={() => { if (editing) { saveShotCues(draft); toast.success('Shot cues saved'); } setEditing(!editing); }}>{editing ? <><Save className="mr-2 h-4 w-4" />Save</> : <><Pencil className="mr-2 h-4 w-4" />Edit</>}</Button></div></div></CardHeader><CardContent><Accordion type="single" collapsible className="w-full">{draft.map(card => <AccordionItem key={card.id} value={card.id}><AccordionTrigger><span><span className="font-semibold">{card.title}</span><span className="ml-2 text-xs font-normal text-muted-foreground">{card.appliesTo}</span></span></AccordionTrigger><AccordionContent className="space-y-4 pt-2">{fields.filter(([field]) => (field !== 'fullClock' && field !== 'halfClock') || card[field] !== undefined).map(([field, label]) => <div key={field} className="space-y-1.5"><Label>{label}</Label><Textarea value={(card[field] as string) || ''} disabled={!editing} onChange={event => update(card.id, field, event.target.value)} rows={field === 'courseCue' ? 2 : 3} /></div>)}</AccordionContent></AccordionItem>)}</Accordion>{editing && <Button variant="ghost" className="mt-4" onClick={() => setDraft(DEFAULT_SHOT_CUES)}>Restore defaults</Button>}</CardContent></Card>;
 }
 
 function ShotPickerAdjustmentsCard() {

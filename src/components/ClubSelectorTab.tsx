@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
-import { AlertCircle, ArrowDownUp, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
+import { AlertCircle, ArrowDownUp, BookOpen, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { ShotsBySession, usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
@@ -28,6 +29,7 @@ import {
   type ShotPickerLie,
   type ShotPickerSlope,
 } from '@/lib/shotPickerAdjustments';
+import { cueIdForConfig, shotCueLink } from '@/lib/shotCues';
 
 const GOOD_SHOT_LEVELS = ['Pro', 'Elite Am', '0 Handicap', '5 Handicap', '10 Handicap'];
 const GAP_WEDGE_FULL_PITCH_TARGET = 70;
@@ -1228,6 +1230,7 @@ export function ClubSelectorTab({
                                   : result.pointer}
                               </p>
                             </div>
+                            {cueIdForConfig(result.profileId) && <Button asChild type="button" size="sm" variant="outline" className="gap-1.5"><Link to={shotCueLink(result.profileId)}><BookOpen className="h-3.5 w-3.5" />View cue</Link></Button>}
                           </div>
                           <div className="grid gap-2 p-4 pb-0 text-sm sm:grid-cols-3">
                             <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
@@ -1407,6 +1410,7 @@ function MatrixMobileCell({
           <span className="font-medium">{fmtPct(cell.last20TargetPct)}</span>
         </div>
       </div>
+      {cueIdForConfig(cell.profileId) && <Button asChild size="sm" variant="ghost" className="mt-2 h-7 w-full gap-1 text-xs"><Link to={shotCueLink(cell.profileId)}><BookOpen className="h-3 w-3" />View cue</Link></Button>}
     </div>
   );
 }
@@ -1450,6 +1454,7 @@ function MatrixCell({
           <span className="font-semibold">{fmtPct(cell.last20TargetPct)}</span>
         </div>
       </div>
+      {cueIdForConfig(cell.profileId) && <Button asChild size="sm" variant="ghost" className="col-span-3 h-7 gap-1 text-xs"><Link to={shotCueLink(cell.profileId)}><BookOpen className="h-3 w-3" />View cue</Link></Button>}
     </div>
   );
 }

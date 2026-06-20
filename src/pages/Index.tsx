@@ -14,6 +14,7 @@ const UploadTab = lazy(async () => ({ default: (await import('@/components/Uploa
 const PracticeTab = lazy(async () => ({ default: (await import('@/components/PracticeTab')).PracticeTab }));
 const ClubSelectorTab = lazy(async () => ({ default: (await import('@/components/ClubSelectorTab')).ClubSelectorTab }));
 const ClubGappingTab = lazy(async () => ({ default: (await import('@/components/ClubGappingTab')).ClubGappingTab }));
+const OnCourseCuesTab = lazy(async () => ({ default: (await import('@/components/OnCourseCuesTab')).OnCourseCuesTab }));
 const ReportsTab = lazy(async () => ({ default: (await import('@/components/reports/ReportsTab')).ReportsTab }));
 const LibraryTab = lazy(async () => ({ default: (await import('@/components/LibraryTab')).LibraryTab }));
 const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/MoreToolsTab')).MoreToolsTab }));
@@ -21,7 +22,7 @@ const PlayingPartnersTab = lazy(async () => ({ default: (await import('@/compone
 const JournalTab = lazy(async () => ({ default: (await import('@/components/JournalTab')).JournalTab }));
 
 const mainTabs = ['play', 'review', 'practice', 'settings'] as const;
-const playTabs = ['shot-picker', 'short-game-matrix', 'club-gapping'] as const;
+const playTabs = ['shot-picker', 'short-game-matrix', 'club-gapping', 'cues'] as const;
 const reviewTabs = ['today', 'rounds', 'journal', 'advanced'] as const;
 const settingsTabs = ['partners', 'shot-profiles', 'upload', 'library', 'tools', 'preferences'] as const;
 type MainTab = typeof mainTabs[number];
@@ -116,10 +117,11 @@ const Index = () => {
       <main className="container py-6">
         <Suspense fallback={<TabLoader />}>
           {activeTab === 'play' && <>
-            <SectionTabs value={playTab} values={playTabs} labels={{ 'shot-picker': 'Shot Picker', 'short-game-matrix': 'Short Game Matrix', 'club-gapping': 'Club Gapping' }} onChange={value => navigate(path('play', value))} />
+            <SectionTabs value={playTab} values={playTabs} labels={{ 'shot-picker': 'Shot Picker', 'short-game-matrix': 'Short Game Matrix', 'club-gapping': 'Club Gapping', cues: 'On-Course Cues' }} onChange={value => navigate(path('play', value))} />
             {playTab === 'shot-picker' && <ClubSelectorTab defaultView="club-selector" singleView />}
             {playTab === 'short-game-matrix' && <ClubSelectorTab defaultView="wedge-matrix" singleView />}
             {playTab === 'club-gapping' && <ClubGappingTab />}
+            {playTab === 'cues' && <OnCourseCuesTab />}
           </>}
           {activeTab === 'practice' && <PracticeTab />}
           {activeTab === 'review' && <>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Gauge } from 'lucide-react';
+import { BookOpen, Gauge } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +27,10 @@ import {
 } from '@/lib/gapping';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
+import { cueIdForConfig, shotCueLink } from '@/lib/shotCues';
 
 export function ClubGappingTab() {
+  const navigate = useNavigate();
   const { shots, gappingReliablePercent, gappingGreenThreshold, gappingAmberThreshold } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
@@ -102,6 +105,7 @@ export function ClubGappingTab() {
                 <TableRow>
                   <TableHead className="min-w-[120px]">Club</TableHead>
                   <TableHead>Shot</TableHead>
+                  <TableHead>Cue</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Vertical</TableHead>
@@ -140,6 +144,7 @@ export function ClubGappingTab() {
                           {getShotLabel(row.profile)}
                         </Badge>
                       </TableCell>
+                      <TableCell>{cueIdForConfig(row.profile.id) && <Button type="button" size="sm" variant="ghost" className="gap-1.5 whitespace-nowrap" onClick={() => navigate(shotCueLink(row.profile.id))}><BookOpen className="h-3.5 w-3.5" />View cue</Button>}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">{row.target}</Badge>
                       </TableCell>
@@ -168,7 +173,7 @@ export function ClubGappingTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>
