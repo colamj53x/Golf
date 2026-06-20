@@ -147,8 +147,52 @@ function TechniqueNotes({ title, notes }: { title: string; notes: Array<{ label:
   );
 }
 
+function PdfTargets({ outcomeRows, swingRows }: { outcomeRows: RangeReferenceRow[]; swingRows: RangeReferenceRow[] }) {
+  return <div className="space-y-4">
+    <section>
+      <h3 className="text-sm font-bold">Outcome confirmation</h3>
+      <table className="mt-1.5 w-full border-collapse overflow-hidden rounded-md border text-[10px]">
+        <thead className="bg-slate-100"><tr><th className="px-2 py-1.5 text-left">Outcome</th><th className="px-2 py-1.5 text-left">Target</th></tr></thead>
+        <tbody>{outcomeRows.map(row => <tr key={row.metricId} data-pdf-break className="border-t"><td className="px-2 py-1.5 font-medium">{row.metricName}</td><td className="px-2 py-1.5 font-bold">{row.target}</td></tr>)}</tbody>
+      </table>
+    </section>
+    <section>
+      <h3 className="text-sm font-bold">Swing and flight targets</h3>
+      <p className="mt-0.5 text-[9px] text-slate-500">Check each shot against these numbers.</p>
+      <table className="mt-1.5 w-full border-collapse overflow-hidden rounded-md border text-[10px]">
+        <thead className="bg-slate-100"><tr><th className="px-2 py-1.5 text-left">Check</th><th className="px-2 py-1.5 text-left">Target</th><th className="px-2 py-1.5 text-left">Latest 18</th></tr></thead>
+        <tbody>{swingRows.map(row => <tr key={row.metricId} data-pdf-break className="border-t"><td className="px-2 py-1.5 font-medium">{row.metricName}</td><td className="whitespace-nowrap px-2 py-1.5 font-bold">{row.target}</td><td className="px-2 py-1.5">{statusText(row)}</td></tr>)}</tbody>
+      </table>
+    </section>
+  </div>;
+}
+
+function PdfTechnique({ notes }: { notes: Array<{ label: string; text: string }> }) {
+  const filteredNotes = notes.filter(note => note.label !== 'Pre-shot routine');
+  return <section>
+    <h3 className="text-sm font-bold">Full shot technique</h3>
+    <p className="mt-0.5 text-[9px] text-slate-500">Complete setup and swing words for this shot.</p>
+    <div className="mt-2 grid grid-cols-2 gap-1.5">
+      {SHOT_TECHNIQUE_INTRO.map(item => <div key={item.label} data-pdf-break className="rounded-md border border-emerald-200 bg-emerald-50 p-2"><div className="text-[8px] font-bold uppercase tracking-wide text-emerald-800">{item.label}</div><p className="mt-1 text-[9px] leading-[1.3]">{item.text}</p></div>)}
+      {filteredNotes.map(note => <div key={note.label} data-pdf-break className={`rounded-md border p-2 ${note.label === 'Shot goal' ? 'col-span-2' : ''}`}><div className="text-[8px] font-bold uppercase tracking-wide text-emerald-800">{note.label}</div><p className="mt-1 text-[9px] leading-[1.3]">{note.text}</p></div>)}
+    </div>
+  </section>;
+}
+
+function PdfCorrectionGuide({ rows }: { rows: RangeReferenceRow[] }) {
+  if (!rows.length) return null;
+  return <section data-pdf-break-before className="border-t pt-4">
+    <h3 className="text-sm font-bold">Correction guide</h3>
+    <p className="mt-0.5 text-[9px] text-slate-500">Read only the correction that matches the side of the miss.</p>
+    <table className="mt-2 w-full border-collapse overflow-hidden rounded-md border text-[10px]">
+      <thead className="bg-slate-100"><tr><th className="w-[15%] px-2 py-1.5 text-left">Check</th><th className="w-[42.5%] px-2 py-1.5 text-left">If low / left</th><th className="w-[42.5%] px-2 py-1.5 text-left">If high / right</th></tr></thead>
+      <tbody>{rows.map(row => <tr key={row.metricId} data-pdf-break className="border-t align-top"><td className="px-2 py-2 font-bold">{row.metricName}</td><td className="px-2 py-2"><div className="text-[8px] font-bold uppercase tracking-wide text-sky-700">{row.lowLabel}</div><p className="mt-1 leading-[1.35]">{row.lowTip}</p></td><td className="px-2 py-2"><div className="text-[8px] font-bold uppercase tracking-wide text-orange-700">{row.highLabel}</div><p className="mt-1 leading-[1.35]">{row.highTip}</p></td></tr>)}</tbody>
+    </table>
+  </section>;
+}
+
 export function PracticePlanTab() {
-  const contentRef = useRef<HTMLDivElement>(null);
+  const pdfContentRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const shotProfiles = useShotProfiles();
   const shotCues = useShotCues();
@@ -198,13 +242,14 @@ export function PracticePlanTab() {
   const swingRows = rows.filter(row => row.section === 'swing');
   const outcomeRows = rows.filter(row => row.section === 'outcome');
   const shotCue = resolveShotCue(shotCues, currentConfigKey);
+  const pdfPreShot = shotCue?.technique.find(note => note.label === 'Pre-shot routine')?.text ?? '';
 
   const exportToPDF = async () => {
-    if (!contentRef.current) return;
+    if (!pdfContentRef.current) return;
     setIsExporting(true);
 
     try {
-      const canvas = await html2canvas(contentRef.current, {
+      const canvas = await html2canvas(pdfContentRef.current, {
         scale: 2,
         useCORS: true,
         logging: false,
@@ -214,12 +259,14 @@ export function PracticePlanTab() {
       const margin = 8;
       const availableWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
       const availableHeight = pdf.internal.pageSize.getHeight() - (margin * 2);
-      const maxSliceHeight = canvas.width * (availableHeight / availableWidth);
-      const contentRect = contentRef.current.getBoundingClientRect();
-      const canvasScale = canvas.width / contentRef.current.offsetWidth;
-      const breakAfter = Array.from(contentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break]'))
+      const renderedWidth = availableWidth * 0.9;
+      const pageX = (pdf.internal.pageSize.getWidth() - renderedWidth) / 2;
+      const maxSliceHeight = canvas.width * (availableHeight / renderedWidth);
+      const contentRect = pdfContentRef.current.getBoundingClientRect();
+      const canvasScale = canvas.width / pdfContentRef.current.offsetWidth;
+      const breakAfter = Array.from(pdfContentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break]'))
         .map(element => (element.getBoundingClientRect().bottom - contentRect.top) * canvasScale)
-      const breakBefore = Array.from(contentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break-before]'))
+      const breakBefore = Array.from(pdfContentRef.current.querySelectorAll<HTMLElement>('[data-pdf-break-before]'))
         .map(element => (element.getBoundingClientRect().top - contentRect.top) * canvasScale)
       const breakpoints = [...breakAfter, ...breakBefore]
         .filter(point => point > 0 && point < canvas.height)
@@ -241,8 +288,8 @@ export function PracticePlanTab() {
         context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
         context.drawImage(canvas, 0, Math.floor(sliceStart), canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
         if (pageIndex > 0) pdf.addPage('a4', 'landscape');
-        const renderedHeight = availableWidth * (sliceHeight / canvas.width);
-        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.88), 'JPEG', margin, margin, availableWidth, renderedHeight, undefined, 'FAST');
+        const renderedHeight = renderedWidth * (sliceHeight / canvas.width);
+        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.88), 'JPEG', pageX, margin, renderedWidth, renderedHeight, undefined, 'FAST');
         sliceStart = sliceEnd;
         pageIndex += 1;
       }
@@ -315,7 +362,7 @@ export function PracticePlanTab() {
         </CardContent>
       </Card>
 
-      <Card ref={contentRef} className="range-reference-card practice-reference-print mx-auto max-w-6xl shadow-sm print:max-w-none print:border-0 print:shadow-none">
+      <Card className="range-reference-card practice-reference-print mx-auto max-w-6xl shadow-sm print:max-w-none print:border-0 print:shadow-none">
         <CardHeader className="border-b pb-4 print:px-0 print:pt-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -342,6 +389,25 @@ export function PracticePlanTab() {
           {shotCue && <TechniqueNotes title={getConfigDisplayName(currentConfigKey)} notes={shotCue.technique} />}
         </CardContent>
       </Card>
+
+      <div aria-hidden="true" className="pointer-events-none fixed left-[-20000px] top-0 w-[1120px]">
+        <div ref={pdfContentRef} className="w-[1120px] border bg-white p-6 text-slate-950">
+          <header className="border-b pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="text-xs font-semibold text-emerald-700">Six-shot range reference</div><h2 className="mt-1 text-2xl font-bold">{getConfigDisplayName(currentConfigKey)}</h2></div>
+              <div className="rounded-full border px-3 py-1 text-[10px] font-semibold">{recentShots.length > 0 ? `Latest ${recentShots.length} shots` : 'Targets only'}</div>
+            </div>
+            {pdfPreShot && <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3"><div className="text-[9px] font-bold uppercase tracking-wide text-emerald-800">Pre-shot routine</div><p className="mt-1 text-[11px] leading-[1.4]">{pdfPreShot}</p></div>}
+          </header>
+          <main className="space-y-5 pt-4">
+            <div className="grid grid-cols-[0.42fr_0.58fr] gap-5">
+              <PdfTargets outcomeRows={outcomeRows} swingRows={swingRows} />
+              {shotCue && <PdfTechnique notes={shotCue.technique} />}
+            </div>
+            <PdfCorrectionGuide rows={swingRows} />
+          </main>
+        </div>
+      </div>
     </div>
   );
 }
