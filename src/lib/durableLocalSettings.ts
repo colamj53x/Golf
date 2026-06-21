@@ -11,7 +11,10 @@ const KEYS = [
   'golf_gapping_shot_category_overrides_v1',
   'golf_shot_classification_rules_v1',
   'golf_shot_cues_v1',
+  'golf_settings_ideas_v1',
 ] as const;
+
+export const DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT = 'golf-durable-local-settings-hydrated';
 
 export async function hydrateDurableLocalSettings(userId: string): Promise<void> {
   const { data, error } = await supabase
@@ -37,7 +40,7 @@ export async function hydrateDurableLocalSettings(userId: string): Promise<void>
       localStorage.setItem(key, JSON.stringify(value));
     }
   }
-  window.dispatchEvent(new Event('golf-durable-local-settings-hydrated'));
+  window.dispatchEvent(new Event(DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT));
 }
 
 export async function persistDurableLocalSettings(userId?: string): Promise<void> {

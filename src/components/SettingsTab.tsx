@@ -5,12 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Crosshair, Goal, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
+import { Check, Crosshair, Goal, Lightbulb, Plus, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PRACTICE_CLUBS, SHOT_TYPES, POWER_OPTIONS, parsePracticeConfigKey } from '@/types/practiceClubs';
 import {
@@ -39,8 +40,16 @@ import {
   type ShotPickerSlope,
 } from '@/lib/shotPickerAdjustments';
 import { DEFAULT_SHOT_CUES, saveShotCues, useShotCues, type ShotCueCard } from '@/lib/shotCues';
+import { DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT } from '@/lib/durableLocalSettings';
+import { createSettingsIdea, loadSettingsIdeas, saveSettingsIdeas, type SettingsIdea } from '@/lib/settingsIdeas';
 
 const SETTINGS_SECTIONS = [
+  {
+    href: '#settings-ideas',
+    title: 'Ideas',
+    description: 'Keep a tagged list of things to try or build.',
+    icon: Lightbulb,
+  },
   {
     href: '#settings-global',
     title: 'Global Settings',
@@ -189,6 +198,8 @@ export function SettingsTab() {
           );
         })}
       </div>
+
+      <IdeasCard />
 
       {/* Global Settings Card */}
       <Card id="settings-global" className="scroll-mt-6">
@@ -417,6 +428,117 @@ export function SettingsTab() {
       </section>
 
     </div>
+  );
+}
+
+function IdeasCard() {
+  const [ideas, setIdeas] = useState<SettingsIdea[]>(() => loadSettingsIdeas());
+  const [ideaText, setIdeaText] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+
+  useEffect(() => {
+    const handleHydrated = () => setIdeas(loadSettingsIdeas());
+    window.addEventListener(DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT, handleHydrated);
+    return () => window.removeEventListener(DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT, handleHydrated);
+  }, []);
+
+  const updateIdeas = (nextIdeas: SettingsIdea[]) => {
+    setIdeas(nextIdeas);
+    saveSettingsIdeas(nextIdeas);
+  };
+
+  const handleAdd = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!ideaText.trim()) {
+      toast.error('Add some text for your idea');
+      return;
+    }
+
+    updateIdeas([createSettingsIdea(ideaText, tagsInput), ...ideas]);
+    setIdeaText('');
+    setTagsInput('');
+    toast.success('Idea added');
+  };
+
+  const handleDone = (idea: SettingsIdea) => {
+    updateIdeas(ideas.filter(candidate => candidate.id !== idea.id));
+    toast.success('Idea completed and removed');
+  };
+
+  return (
+    <Card id="settings-ideas" className="scroll-mt-6">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Lightbulb className="h-5 w-5" />
+          Ideas
+        </CardTitle>
+        <CardDescription>
+          Capture things you want to try. Add optional tags, then mark an idea done to remove it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <form onSubmit={handleAdd} className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label htmlFor="settings-idea-text">Idea</Label>
+            <Input
+              id="settings-idea-text"
+              value={ideaText}
+              onChange={event => setIdeaText(event.target.value)}
+              placeholder="Something to try or build..."
+              autoComplete="off"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="settings-idea-tags">Tags</Label>
+            <Input
+              id="settings-idea-tags"
+              value={tagsInput}
+              onChange={event => setTagsInput(event.target.value)}
+              placeholder="practice, reports"
+              aria-describedby="settings-idea-tags-help"
+              autoComplete="off"
+            />
+            <p id="settings-idea-tags-help" className="text-xs text-muted-foreground">Separate tags with commas.</p>
+          </div>
+          <Button type="submit" className="gap-2 md:mb-5">
+            <Plus className="h-4 w-4" />
+            Add idea
+          </Button>
+        </form>
+
+        {ideas.length === 0 ? (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No ideas yet. Add one above when inspiration strikes.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {ideas.map(idea => (
+              <div key={idea.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="break-words font-medium">{idea.text}</p>
+                  {idea.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {idea.tags.map(tag => <Badge key={tag.toLocaleLowerCase()} variant="secondary">{tag}</Badge>)}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-2 self-start sm:self-auto"
+                  onClick={() => handleDone(idea)}
+                  aria-label={`Mark ${idea.text} done and remove it`}
+                >
+                  <Check className="h-4 w-4" />
+                  Done
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
