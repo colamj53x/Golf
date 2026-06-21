@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Target, TrendingUp, TrendingDown, Minus, Award, Activity, ChevronDown, ChevronRight, ChevronsUpDown, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   processShot, 
@@ -74,6 +75,7 @@ export function DashboardTab({
     updateRoundShotClassifications,
     playingPartners,
     setPlayingPartners,
+    saveUserSettingsNow,
   } = useGolfData();
   const [selectedClub, setSelectedClub] = useState<string>('all');
   const [selectedStartLie, setSelectedStartLie] = useState<string>('all');
@@ -389,14 +391,28 @@ export function DashboardTab({
     }
   };
 
-  const addPlayingPartner = (name: string) => {
+  const addPlayingPartner = async (name: string): Promise<string | null> => {
     const trimmed = name.trim();
     if (!trimmed) return null;
     const existing = playingPartners.find((partner) => partner.name.trim().toLowerCase() === trimmed.toLowerCase());
     if (existing) return existing.id;
     const id = crypto.randomUUID();
-    setPlayingPartners((current) => [...current, { id, name: trimmed, notes: '', hasMobileNumber: false, playedDates: [] }]);
-    return id;
+    const nextPartners = [...playingPartners, {
+      id,
+      name: trimmed,
+      notes: '',
+      hasMobileNumber: false,
+      playedDates: activeRoundDateKey ? [activeRoundDateKey] : [],
+    }];
+    try {
+      await saveUserSettingsNow({ playingPartners: nextPartners });
+      setPlayingPartners(nextPartners);
+      toast.success(`${trimmed} saved to Playing Partners`);
+      return id;
+    } catch {
+      toast.error(`Could not save ${trimmed}. Please try again.`);
+      return null;
+    }
   };
 
   return (

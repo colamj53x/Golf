@@ -34,7 +34,7 @@ interface RoundReflectionEditorProps {
   editRequestKey?: number;
   hideReadOnlyWhenCollapsed?: boolean;
   playingPartners?: PlayingPartner[];
-  onAddPlayingPartner?: (name: string) => string | null;
+  onAddPlayingPartner?: (name: string) => Promise<string | null>;
 }
 
 type ReflectionField = {
@@ -117,6 +117,7 @@ export function RoundReflectionEditor({
   const [isEditing, setIsEditing] = useState(!collapsible);
   const [valueBeforeEditing, setValueBeforeEditing] = useState(value);
   const [partnerSearch, setPartnerSearch] = useState('');
+  const [isAddingPartner, setIsAddingPartner] = useState(false);
   const latestValue = useRef(value);
   const statusClassName = statusTone === 'destructive'
     ? 'text-destructive'
@@ -176,13 +177,18 @@ export function RoundReflectionEditor({
     onChange({ ...value, playingPartnerIds: nextIds });
   };
 
-  const addPlayingPartnerFromSearch = () => {
+  const addPlayingPartnerFromSearch = async () => {
     const trimmed = partnerSearch.trim();
-    if (!onAddPlayingPartner || !trimmed || exactPartnerExists) return;
-    const partnerId = onAddPlayingPartner(trimmed);
-    if (!partnerId) return;
-    onChange({ ...value, playingPartnerIds: [...selectedPartnerIds, partnerId] });
-    setPartnerSearch('');
+    if (!onAddPlayingPartner || !trimmed || exactPartnerExists || isAddingPartner) return;
+    setIsAddingPartner(true);
+    try {
+      const partnerId = await onAddPlayingPartner(trimmed);
+      if (!partnerId) return;
+      onChange({ ...value, playingPartnerIds: [...selectedPartnerIds, partnerId] });
+      setPartnerSearch('');
+    } finally {
+      setIsAddingPartner(false);
+    }
   };
 
   if (collapsible && hideReadOnlyWhenCollapsed && !isEditing) {
@@ -233,7 +239,7 @@ export function RoundReflectionEditor({
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault();
-                        addPlayingPartnerFromSearch();
+                        void addPlayingPartnerFromSearch();
                       }
                     }}
                     placeholder="Search or add a playing partner"
@@ -256,9 +262,9 @@ export function RoundReflectionEditor({
                     );
                   })}
                   {onAddPlayingPartner && partnerSearch.trim() && !exactPartnerExists && (
-                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={addPlayingPartnerFromSearch}>
+                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void addPlayingPartnerFromSearch()} disabled={isAddingPartner}>
                       <Plus className="h-4 w-4" />
-                      Add {partnerSearch.trim()}
+                      {isAddingPartner ? 'Saving partner...' : `Add ${partnerSearch.trim()}`}
                     </Button>
                   )}
                 </div>
