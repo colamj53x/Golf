@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { buildCourseHistoryReflection, buildLastFiveReflection, buildPreRoundReflection, createEmptyJournalEntryDraft, hasJournalEntryContent, JOURNAL_CATEGORIES, normalizeJournalEntryDraft, ROUND_TYPES } from '@/lib/golfJournal';
 import { deleteJournalEntry, loadGeneratedJournalReflections, loadJournalEntries, saveGeneratedJournalReflection, upsertJournalEntry } from '@/lib/golfJournalRepository';
 import { getShotDateKey } from '@/lib/golfCalculations';
+import { buildJournalRoundEvidence, type JournalCategoryEvidence } from '@/lib/journalRoundEvidence';
 import { buildRoundReview, isPuttingShot, type RoundReviewModel } from '@/lib/roundReview';
 import type { GeneratedJournalReflection, JournalCategoryKey, JournalEntry, JournalEntryDraft, PlayingPartner } from '@/types/golf';
 
@@ -111,6 +112,25 @@ function MetricEvidenceCard({ label, value, context, interpretation }: { label: 
   );
 }
 
+function CategoryEvidenceStrip({ evidence }: { evidence: JournalCategoryEvidence }) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">This round</div>
+      {evidence.metrics.length > 0 && (
+        <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
+          {evidence.metrics.map((metric) => (
+            <div key={metric.label} className="min-w-0">
+              <div className="truncate text-xs text-muted-foreground">{metric.label}</div>
+              <div className="mt-0.5 text-base font-semibold leading-tight">{metric.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className={`${evidence.metrics.length > 0 ? 'mt-2' : 'mt-1'} text-xs leading-5 text-muted-foreground`}>{evidence.note}</p>
+    </div>
+  );
+}
+
 function PartnerTags({ partners, selectedIds, onChange }: { partners: PlayingPartner[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
   const [selected, setSelected] = useState('');
   const available = partners.filter((partner) => !selectedIds.includes(partner.id));
@@ -199,6 +219,16 @@ export function JournalTab() {
     if (!draft.roundReviewId) return null;
     return buildRoundReview(shots, clubs, distanceToTargetTolerance, draft.roundReviewId);
   }, [clubs, distanceToTargetTolerance, draft.roundReviewId, shots]);
+
+  const selectedRoundPuttingCount = useMemo(() => {
+    if (!draft.roundReviewId) return 0;
+    return shots.filter((shot) => getShotDateKey(shot.date) === draft.roundReviewId && isPuttingShot(shot)).length;
+  }, [draft.roundReviewId, shots]);
+
+  const categoryRoundEvidence = useMemo(
+    () => buildJournalRoundEvidence(selectedRoundReview, selectedRoundPuttingCount),
+    [selectedRoundPuttingCount, selectedRoundReview]
+  );
 
   const filteredHistory = useMemo(() => {
     const query = historyQuery.trim().toLowerCase();
@@ -633,6 +663,11 @@ export function JournalTab() {
                           </Select>
                         </div>
                         <div className="grid gap-3 md:grid-cols-3">
+                          {categoryRoundEvidence[key] && (
+                            <div className="md:col-span-3">
+                              <CategoryEvidenceStrip evidence={categoryRoundEvidence[key]} />
+                            </div>
+                          )}
                           <PromptInput label="What happened?" value={category.whatHappened} onChange={(whatHappened) => updateCategory(key, { whatHappened })} />
                           <PromptInput label="Likely cause" value={category.likelyCause} onChange={(likelyCause) => updateCategory(key, { likelyCause })} />
                           <PromptInput label="What to try next time" value={category.tryNextTime} onChange={(tryNextTime) => updateCategory(key, { tryNextTime })} />
