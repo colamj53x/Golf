@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
-import { AlertCircle, ArrowDownUp, BookOpen, Crosshair, Flag, ShieldAlert, Target, Wind } from 'lucide-react';
+import { AlertCircle, ArrowDownUp, BookOpen, Crosshair, ShieldAlert, Target, Wind } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
@@ -37,7 +37,9 @@ const CHIP_TARGETS: Record<string, { full: number; half: number }> = {
   pw: { full: 34, half: 18 },
   gw: { full: 19, half: 10 },
 };
-const WEDGE_SHOT_TYPES = ['chip', 'pitch', 'bump'];
+const WEDGE_SHOT_TYPES = ['pitch', 'chip', 'bump', 'punch'];
+const AIR_SHOT_TYPES = ['pitch'];
+const GROUND_SHOT_TYPES = ['chip', 'bump', 'punch'];
 const MATRIX_CLUB_ORDER = ['8i', '9i', 'pw', 'gw', 'sw', 'lw'];
 const MATRIX_BUMP_CLUB_IDS = ['8i', '9i'];
 const MATRIX_PITCH_CLUB_IDS = ['pw', 'gw', 'sw'];
@@ -51,11 +53,11 @@ type LieOption = ShotPickerLie;
 type SlopeOption = ShotPickerSlope;
 type FeetOption = ShotPickerFeet;
 type TargetOption = 'green' | 'fairway';
-type TroubleOption = 'left' | 'right' | 'short' | 'long';
 type DataConfidence = 'high' | 'medium' | 'low' | 'very-low';
 type MatrixPower = typeof MATRIX_POWER_COLUMNS[number]['id'];
 type MatrixSortKey = 'club' | 'shot' | 'distance';
 type MatrixLieContext = Extract<ShotContext, 'fairway' | 'roughRecovery'>;
+type MatrixShotMode = 'air' | 'ground';
 
 interface ClubRecommendation {
   clubId: string;
@@ -91,7 +93,6 @@ interface ClubRecommendation {
   hitCount: number;
   goodDistancePct: number;
   badges: string[];
-  pointer: string;
 }
 
 interface WedgeMatrixCell {
@@ -145,13 +146,6 @@ const feetOptions: Array<{ value: FeetOption; label: string }> = [
 const targetOptions: Array<{ value: TargetOption; label: string }> = [
   { value: 'green', label: 'Green' },
   { value: 'fairway', label: 'Fairway' },
-];
-
-const troubleOptions: Array<{ value: TroubleOption; label: string }> = [
-  { value: 'left', label: 'Left' },
-  { value: 'right', label: 'Right' },
-  { value: 'short', label: 'Short' },
-  { value: 'long', label: 'Long' },
 ];
 
 const matrixLieOptions: Array<{ value: MatrixLieContext; label: string }> = [
@@ -225,6 +219,10 @@ function getShortProfileName(profile: ShotProfile): string {
 
 function getShotTypeLabel(shotType: string): string {
   return SHOT_TYPES.find((item) => item.id === shotType)?.name ?? shotType;
+}
+
+function getMatrixShotTypeLabel(shotType: string): string {
+  return shotType === 'bump' ? 'Bump / run' : getShotTypeLabel(shotType);
 }
 
 function getPowerLabel(power: string): string {
@@ -617,47 +615,16 @@ function getSampleBadge(confidence: DataConfidence, count: number) {
   return <Badge variant="outline" className="border-red-500 text-red-700">{label}</Badge>;
 }
 
-function toggleTroubleSide(current: TroubleOption[], side: TroubleOption): TroubleOption[] {
-  return current.includes(side)
-    ? current.filter((item) => item !== side)
-    : [...current, side];
-}
-
-function buildPointer(
-  result: ClubRecommendation,
-  target: TargetOption,
-  trouble: TroubleOption[],
-  mustCarry: boolean,
-  clubAdjustmentDelta: number,
-  directionNotes: string[],
-): string {
-  if (clubAdjustmentDelta !== 0 || directionNotes.length > 0) {
-    return [
-      clubAdjustmentDelta !== 0 ? getClubAdjustmentLabel(clubAdjustmentDelta) : null,
-      ...directionNotes,
-    ].filter(Boolean).join(' · ');
-  }
-  if (mustCarry && result.shortRisk > 30) return 'Take more club or choose a fuller swing; short is the main problem.';
-  if (trouble.includes('left') && result.leftRisk > 25) return 'Commit to start line and avoid trying to turn this over.';
-  if (trouble.includes('right') && result.rightRisk > 25) return 'Aim with room right; hold the face through impact.';
-  if (trouble.includes('long') && result.longRisk > 25) return 'Take speed off only if that is a practiced shot; otherwise club down.';
-  if (trouble.includes('short') && result.shortRisk > 25) return 'Favour enough club; the short miss is too expensive here.';
-  if (target === 'fairway') return 'Pick a conservative start line and make the stock swing.';
-  return 'Stock tempo, clear target, commit to the finish.';
-}
-
 function calculateRecommendations(
   gappingRows: GappingRow[],
   clubs: ClubConfig[],
   targetDistance: number,
-  minimumSafeDistance: number | null,
+  minimumCarryDistance: number | null,
   tolerancePct: number,
   lie: LieOption,
   clubAdjustmentDelta: number,
   directionNotes: string[],
   target: TargetOption,
-  trouble: TroubleOption[],
-  mustCarry: boolean,
 ): ClubRecommendation[] {
   if (!targetDistance || targetDistance <= 0) return [];
 
@@ -677,10 +644,12 @@ function calculateRecommendations(
       if (Math.abs(fallbackDistance - adjustedTargetDistance) > 45) return null;
 
       const distanceWindow = 10;
-      const minSafe = minimumSafeDistance && minimumSafeDistance > 0 ? minimumSafeDistance : null;
+      const minimumCarry = minimumCarryDistance && minimumCarryDistance > 0 ? minimumCarryDistance : null;
+      const meetsCarryRequirement = (shot: Shot) => minimumCarry === null || shot.carry >= minimumCarry;
       const isSafeDistance = (shot: Shot) =>
-        shot.total >= (minSafe ?? adjustedTargetDistance - distanceWindow) &&
-        shot.total <= adjustedTargetDistance + distanceWindow;
+        shot.total >= adjustedTargetDistance - distanceWindow &&
+        shot.total <= adjustedTargetDistance + distanceWindow &&
+        meetsCarryRequirement(shot);
       const isGoodDistance = (shot: Shot) => GOOD_SHOT_LEVELS.includes(shot.shotQuality) && isSafeDistance(shot);
 
       const sample = row.topQuartile.length ? row.topQuartile : row.sample;
@@ -723,31 +692,27 @@ function calculateRecommendations(
 
       const distanceError = Math.abs(avgTotal - adjustedTargetDistance);
       const targetFit = clamp(100 - distanceError * (target === 'green' ? 3 : 2));
-      const troublePenalty = trouble.reduce((total, side) => {
-        if (side === 'left') return total + leftRisk;
-        if (side === 'right') return total + rightRisk;
-        if (side === 'short') return total + shortRisk;
-        return total + longRisk;
-      }, 0) / Math.max(1, trouble.length);
-      const carryPenalty = mustCarry ? shortRisk * 0.7 : 0;
+      const carryPenalty = minimumCarry !== null && (avgCarry === null || avgCarry < minimumCarry) ? 25 : 0;
       const samplePenalty = sample.length >= 10 ? 0 : sample.length >= 5 ? 4 : sample.length >= 3 ? 8 : 14;
       const liePenalty = lie === 'roughRecovery' || clubAdjustmentDelta !== 0 ? 6 : 0;
       const missingOutcomePenalty = hitPct === 0 ? 18 : 0;
       const mappingConfidence = row.recentTargetPct ?? row.rangeConfidence ?? goodShotPct;
       const isShortOfTarget = target === 'green' && avgTotal < adjustedTargetDistance - 5;
-      const carryFit = minimumSafeDistance && minimumSafeDistance > 0
-        ? avgCarry !== null && avgCarry >= minimumSafeDistance
+      const carryFit = minimumCarryDistance && minimumCarryDistance > 0
+        ? avgCarry !== null && avgCarry >= minimumCarryDistance
           ? 100
           : 0
         : 100;
-      const troubleFit = clamp(100 - troublePenalty);
+      const directionalFit = clamp(100 - Math.max(leftRisk, rightRisk));
+      const carryFailurePenalty = minimumCarry !== null && carryFit === 0 ? 35 : 0;
       const bestFitScore = Math.round(clamp(
         targetFit * 0.35 +
         (row.recentSafePct ?? 50) * 0.20 +
         mappingConfidence * 0.15 +
         (withinTolerancePct ?? 0) * 0.15 +
-        troubleFit * 0.10 +
-        carryFit * 0.05
+        directionalFit * 0.10 +
+        carryFit * 0.05 -
+        carryFailurePenalty
       ));
       const confidence = Math.round(clamp(
         mappingConfidence * 0.34 +
@@ -756,7 +721,6 @@ function calculateRecommendations(
         goodShotPct * 0.08 +
         (100 - Math.min(leftRisk + rightRisk, 100)) * 0.06 +
         (100 - Math.min(shortRisk + longRisk, 100)) * 0.06 -
-        troublePenalty * 0.35 -
         carryPenalty -
         samplePenalty -
         liePenalty -
@@ -764,12 +728,9 @@ function calculateRecommendations(
       ));
 
       const badges: string[] = [];
-      if (mustCarry && shortRisk > 25) badges.push('short carry risk');
-      if (trouble.includes('left') && leftRisk > 20) badges.push('left risk');
-      if (trouble.includes('right') && rightRisk > 20) badges.push('right risk');
-      if (trouble.includes('long') && longRisk > 20) badges.push('long risk');
-      if (trouble.includes('short') && shortRisk > 20) badges.push('short risk');
-      if (minSafe) badges.push(`safe ${Math.round(minSafe)}m+`);
+      if (minimumCarry) badges.push(avgCarry !== null && avgCarry >= minimumCarry
+        ? `carries ${Math.round(minimumCarry)}m+`
+        : `below ${Math.round(minimumCarry)}m carry`);
       if (hitPct === 0) badges.push(`no ${target} hits at number`);
       if (Math.abs(avgSide) > sideBand) badges.push(avgSide > 0 ? 'right bias' : 'left bias');
       if (clubAdjustmentDelta !== 0) badges.push(getClubAdjustmentLabel(clubAdjustmentDelta).toLowerCase());
@@ -809,10 +770,8 @@ function calculateRecommendations(
         hitCount,
         goodDistancePct,
         badges,
-        pointer: '',
       };
 
-      result.pointer = buildPointer(result, target, trouble, mustCarry, clubAdjustmentDelta, directionNotes);
       return result;
     })
     .filter((result): result is ClubRecommendation => Boolean(result))
@@ -854,17 +813,16 @@ export function ClubSelectorTab({
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
   const { shotsBySession } = usePracticeShotsBySessions(practiceSessionIds);
   const [targetDistance, setTargetDistance] = useState('120');
-  const [minimumSafeDistance, setMinimumSafeDistance] = useState('');
+  const [minimumCarryDistance, setMinimumCarryDistance] = useState('');
   const [lie, setLie] = useState<LieOption>('fairway');
   const [slope, setSlope] = useState<SlopeOption>('flat');
   const [feet, setFeet] = useState<FeetOption>('level');
   const [target, setTarget] = useState<TargetOption>('green');
-  const [trouble, setTrouble] = useState<TroubleOption[]>([]);
-  const [mustCarry, setMustCarry] = useState(false);
   const [matrixSort, setMatrixSort] = useState<MatrixSortKey>('club');
   const [matrixLieContext, setMatrixLieContext] = useState<MatrixLieContext>('fairway');
+  const [matrixShotMode, setMatrixShotMode] = useState<MatrixShotMode>('air');
   const numericTarget = Number(targetDistance);
-  const numericMinimumSafe = minimumSafeDistance ? Number(minimumSafeDistance) : null;
+  const numericMinimumCarry = minimumCarryDistance ? Number(minimumCarryDistance) : null;
   const numericDistanceTolerancePct = shotPickerDistanceTolerancePct > 0 ? shotPickerDistanceTolerancePct : 5;
   const selectedAdjustmentRules = [
     shotPickerAdjustments.lie[lie],
@@ -886,8 +844,8 @@ export function ClubSelectorTab({
     shotClassificationRules,
   }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotClassificationRules]);
   const recommendations = useMemo(
-    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry),
-    [selectorGappingRows, clubs, numericTarget, numericMinimumSafe, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target, trouble, mustCarry],
+    () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumCarry, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target),
+    [selectorGappingRows, clubs, numericTarget, numericMinimumCarry, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target],
   );
 
   const wedgeMatrix = useMemo<WedgeMatrixRow[]>(() => {
@@ -945,6 +903,11 @@ export function ClubSelectorTab({
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
   }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingReliablePercent, shotClassificationRules, matrixLieContext, matrixSort]);
+  const visibleWedgeMatrix = useMemo(() => wedgeMatrix.filter((row) => (
+    matrixShotMode === 'air'
+      ? AIR_SHOT_TYPES.includes(row.shotType)
+      : GROUND_SHOT_TYPES.includes(row.shotType)
+  )), [matrixShotMode, wedgeMatrix]);
 
   if (isLoading) {
     return (
@@ -960,10 +923,26 @@ export function ClubSelectorTab({
             <CardHeader>
               <CardTitle>Short Game Matrix</CardTitle>
               <CardDescription>
-                Chip, pitch, and bump-and-run numbers from the same shot mapping used by Club Gapping.
+                Carry-first air shots and release-first ground shots from the same mapping used by Club Gapping.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
+              <div className="inline-flex w-full rounded-lg border bg-muted/30 p-1 sm:w-auto" aria-label="Short game shot style">
+                {([
+                  { id: 'air', label: 'Air shot' },
+                  { id: 'ground', label: 'Ground shot' },
+                ] as const).map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    variant={matrixShotMode === option.id ? 'default' : 'ghost'}
+                    className="min-h-11 flex-1 px-6 sm:flex-none"
+                    onClick={() => setMatrixShotMode(option.id)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
               <div className="grid gap-3 rounded-md border bg-muted/20 p-3 lg:grid-cols-[1fr_auto] lg:items-end">
                 <ButtonGroup label="Lie">
                   {matrixLieOptions.map((option) => (
@@ -982,7 +961,7 @@ export function ClubSelectorTab({
                   {[
                     { id: 'club', label: 'Club' },
                     { id: 'shot', label: 'Shot' },
-                    { id: 'distance', label: 'Distance' },
+                    { id: 'distance', label: 'Total' },
                   ].map((option) => (
                     <Button
                       key={option.id}
@@ -1000,7 +979,7 @@ export function ClubSelectorTab({
               </div>
 
               <div className="grid gap-3 md:hidden">
-                {wedgeMatrix.map((row) => (
+                {visibleWedgeMatrix.map((row) => (
                   <MatrixMobileCard
                     key={`${row.clubId}-${row.shotType}`}
                     row={row}
@@ -1008,6 +987,11 @@ export function ClubSelectorTab({
                     amberThreshold={gappingAmberThreshold}
                   />
                 ))}
+                {visibleWedgeMatrix.length === 0 && (
+                  <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No {matrixShotMode === 'air' ? 'air-shot' : 'ground-shot'} mapping is available yet.
+                  </div>
+                )}
               </div>
 
               <div className="hidden overflow-x-auto rounded-md border md:block">
@@ -1024,10 +1008,10 @@ export function ClubSelectorTab({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {wedgeMatrix.map((row) => (
+                    {visibleWedgeMatrix.map((row) => (
                       <TableRow key={`${row.clubId}-${row.shotType}`}>
                         <TableCell className="font-medium">{row.clubName}</TableCell>
-                        <TableCell>{getShotTypeLabel(row.shotType)}</TableCell>
+                        <TableCell>{getMatrixShotTypeLabel(row.shotType)}</TableCell>
                         {MATRIX_POWER_COLUMNS.map((column) => (
                           <TableCell key={column.id} className="align-top">
                             <MatrixCell
@@ -1040,6 +1024,13 @@ export function ClubSelectorTab({
                         ))}
                       </TableRow>
                     ))}
+                    {visibleWedgeMatrix.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                          No {matrixShotMode === 'air' ? 'air-shot' : 'ground-shot'} mapping is available yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -1060,10 +1051,10 @@ export function ClubSelectorTab({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
-                <div className="grid gap-4 md:grid-cols-[180px_1fr]">
-                  <div className="grid gap-3">
+                <div className="grid gap-5 md:grid-cols-[220px_1fr]">
+                  <div className="grid content-start gap-4 rounded-lg border bg-muted/20 p-4">
                     <div className="space-y-2">
-                      <Label htmlFor="target-distance">Target distance (m)</Label>
+                      <Label htmlFor="target-distance">Playing distance</Label>
                       <Input
                         id="target-distance"
                         type="number"
@@ -1075,16 +1066,16 @@ export function ClubSelectorTab({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="safe-distance">Minimum safe (m)</Label>
+                      <Label htmlFor="minimum-carry-distance">Need to carry at least</Label>
                       <Input
-                        id="safe-distance"
+                        id="minimum-carry-distance"
                         type="number"
                         inputMode="numeric"
                         min="1"
                         max="300"
-                        value={minimumSafeDistance}
-                        onChange={(event) => setMinimumSafeDistance(event.target.value)}
-                        placeholder="Optional"
+                        value={minimumCarryDistance}
+                        onChange={(event) => setMinimumCarryDistance(event.target.value)}
+                        placeholder="Optional metres"
                       />
                     </div>
                   </div>
@@ -1144,45 +1135,8 @@ export function ClubSelectorTab({
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-                  <ButtonGroup label="Trouble side">
-                    <Button
-                      type="button"
-                      variant={trouble.length === 0 ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTrouble([])}
-                    >
-                      None
-                    </Button>
-                    {troubleOptions.map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant={trouble.includes(option.value) ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setTrouble((current) => toggleTroubleSide(current, option.value))}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </ButtonGroup>
-                  <div className="space-y-2">
-                    <Label>Carry requirement</Label>
-                    <Button
-                      type="button"
-                      variant={mustCarry ? 'default' : 'outline'}
-                      size="sm"
-                      className="w-full justify-start gap-2 lg:w-auto"
-                      onClick={() => setMustCarry((value) => !value)}
-                    >
-                      <Flag className="h-4 w-4" />
-                      Must carry
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-3">
-                  <Metric label="Playing number" value={formatDistance(Number.isFinite(effectiveTargetDistance) ? effectiveTargetDistance : null)} />
+                <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+                  <Metric label="Playing distance" value={formatDistance(Number.isFinite(effectiveTargetDistance) ? effectiveTargetDistance : null)} />
                   <Metric label="Club adjustment" value={getClubAdjustmentLabel(clubAdjustmentDelta)} />
                   <Metric label="Target adjustment" value={directionNotes.length ? directionNotes.join(' · ') : 'Normal target'} />
                 </div>
@@ -1204,61 +1158,28 @@ export function ClubSelectorTab({
                     <p className="mt-1 text-sm">Try a different target distance or add more mapping data.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {recommendations.slice(0, 4).map((result, index) => (
-                      <div key={result.profileId} className="space-y-3">
-                        {index === 1 && (
-                          <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                            Other Options
-                          </div>
-                        )}
-                        <div className="overflow-hidden rounded-md border">
-                          <div className={`flex items-center justify-between gap-3 px-4 py-2 text-xs font-semibold uppercase tracking-wide ${index === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                            <span>{index === 0 ? 'Best Option' : result.targetFit >= 70 ? 'Also Works' : result.isShortOfTarget ? 'Lay Up' : 'Option'}</span>
-                            <span>Fit {result.bestFitScore}/100</span>
-                          </div>
-                          <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-0">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-lg font-semibold">{result.clubName}</span>
-                                <Badge variant="outline">{result.shotLabel}</Badge>
-                                {result.isShortOfTarget && <Badge variant="outline" className="border-amber-500 text-amber-700">Short</Badge>}
-                              </div>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {result.isShortOfTarget
-                                  ? `Lay up: this maps to ${formatDistance(result.avgTotal)}, short of ${formatDistance(effectiveTargetDistance)}.`
-                                  : result.pointer}
-                              </p>
-                            </div>
-                            {cueIdForConfig(result.profileId) && <Button asChild type="button" size="sm" variant="outline" className="gap-1.5"><Link to={shotCueLink(result.profileId)}><BookOpen className="h-3.5 w-3.5" />View cue</Link></Button>}
-                          </div>
-                          <div className="grid gap-2 p-4 pb-0 text-sm sm:grid-cols-3">
-                            <Metric label="Avg total" value={formatDistance(result.avgTotal)} />
-                            <Metric label="Avg carry" value={formatDistance(result.avgCarry)} />
-                            <Metric label="Direction bias" value={fmtSigned(result.avgSide)} />
-                          </div>
-                          <div className="grid gap-2 p-4 pt-2 text-sm sm:grid-cols-3">
-                            <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
-                            <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
-                            <Metric label={`Within ${numericDistanceTolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
-                          </div>
-                          <div className="grid gap-2 px-4 pb-4 text-sm sm:grid-cols-2">
-                            <Metric label={`Short of ${formatDistance(effectiveTargetDistance)}`} value={fmtPct(result.nominatedShortPct)} />
-                            <Metric label={`Long of ${formatDistance(effectiveTargetDistance)}`} value={fmtPct(result.nominatedLongPct)} />
-                          </div>
-                          {result.badges.length > 0 && (
-                            <div className="flex flex-wrap gap-2 px-4 pb-4">
-                              {result.badges.map((badge) => (
-                                <Badge key={badge} variant="outline" className="gap-1">
-                                  <ShieldAlert className="h-3 w-3" />
-                                  {badge}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                  <div className="space-y-5">
+                    <RecommendationOptionCard
+                      result={recommendations[0]}
+                      primary
+                      playingDistance={effectiveTargetDistance}
+                      minimumCarry={numericMinimumCarry}
+                      tolerancePct={numericDistanceTolerancePct}
+                    />
+                    {recommendations.length > 1 && (
+                      <div className="space-y-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Other options</div>
+                        {recommendations.slice(1, 4).map((result) => (
+                          <RecommendationOptionCard
+                            key={result.profileId}
+                            result={result}
+                            playingDistance={effectiveTargetDistance}
+                            minimumCarry={numericMinimumCarry}
+                            tolerancePct={numericDistanceTolerancePct}
+                          />
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -1303,11 +1224,102 @@ function ButtonGroup({ label, children }: { label: string; children: React.React
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function getRecommendationReason(
+  result: ClubRecommendation,
+  primary: boolean,
+  minimumCarry: number | null,
+): string {
+  if (minimumCarry && (result.avgCarry === null || result.avgCarry < minimumCarry)) {
+    return 'Too short to be a realistic option.';
+  }
+  if (primary && result.isShortOfTarget) return 'Likely short, but safest playable option.';
+  if (primary) return 'Best overall fit for this shot.';
+  if (result.longRisk >= 35 && result.targetFit >= 55) return 'Closer to the number, but higher long risk.';
+  if (Math.max(result.leftRisk, result.rightRisk) >= 30) return 'Direction pattern makes this a riskier option.';
+  if (result.isShortOfTarget || result.targetFit < 50) return 'Too short to be a realistic option.';
+  return 'A playable alternative with a lower overall fit.';
+}
+
+function RecommendationOptionCard({
+  result,
+  primary = false,
+  playingDistance,
+  minimumCarry,
+  tolerancePct,
+}: {
+  result: ClubRecommendation;
+  primary?: boolean;
+  playingDistance: number;
+  minimumCarry: number | null;
+  tolerancePct: number;
+}) {
+  const reason = getRecommendationReason(result, primary, minimumCarry);
+  const roll = result.avgCarry === null ? null : Math.max(0, result.avgTotal - result.avgCarry);
+
+  return (
+    <div className={`overflow-hidden rounded-xl border bg-card ${primary ? 'border-2 border-primary shadow-md' : ''}`}>
+      <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${primary ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+        {primary ? 'Primary recommendation' : result.targetFit >= 70 ? 'Strong alternative' : result.isShortOfTarget ? 'Lay-up option' : 'Secondary option'}
+      </div>
+      <div className={`space-y-4 ${primary ? 'p-5 sm:p-6' : 'p-4'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className={`font-bold tracking-tight ${primary ? 'text-3xl sm:text-4xl' : 'text-xl sm:text-2xl'}`}>{result.clubName}</h3>
+              <Badge variant="outline" className={primary ? 'text-sm' : ''}>{result.shotLabel}</Badge>
+              {result.isShortOfTarget && <Badge variant="outline" className="border-amber-500 text-amber-700">Short</Badge>}
+            </div>
+          </div>
+          <div className={`rounded-lg text-center ${primary ? 'bg-primary px-5 py-3 text-primary-foreground shadow-sm' : 'border bg-muted/40 px-4 py-2'}`}>
+            <div className={`font-semibold uppercase tracking-wide ${primary ? 'text-xs opacity-85' : 'text-[10px] text-muted-foreground'}`}>Fit Score</div>
+            <div className={`font-bold leading-none ${primary ? 'mt-1 text-3xl' : 'mt-1 text-xl'}`}>{result.bestFitScore}<span className="text-sm font-medium opacity-70">/100</span></div>
+          </div>
+        </div>
+
+        <p className={`font-semibold leading-snug ${primary ? 'text-base text-foreground sm:text-lg' : 'text-sm text-foreground'}`}>{reason}</p>
+
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          <Metric label="Carry" value={formatDistance(result.avgCarry)} prominent={primary} />
+          <Metric label="Roll" value={formatDistance(roll)} prominent={primary} />
+          <Metric label="Total" value={formatDistance(result.avgTotal)} prominent={primary} />
+        </div>
+        <div className="grid gap-2 text-sm sm:grid-cols-4">
+          <Metric label="Typical miss" value={fmtSigned(result.avgSide)} />
+          <ConfidenceMetric label="Shot confidence" value={result.shotConfidence} />
+          <ConfidenceMetric label="Safety confidence" value={result.safetyConfidence} />
+          <Metric label={`Within ${tolerancePct}%`} value={fmtPct(result.withinTolerancePct)} />
+        </div>
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <Metric label={`Short of ${formatDistance(playingDistance)}`} value={fmtPct(result.nominatedShortPct)} />
+          <Metric label={`Long of ${formatDistance(playingDistance)}`} value={fmtPct(result.nominatedLongPct)} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {result.badges.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {result.badges.map((badge) => (
+                <Badge key={badge} variant="outline" className="gap-1">
+                  <ShieldAlert className="h-3 w-3" />
+                  {badge}
+                </Badge>
+              ))}
+            </div>
+          ) : <span />}
+          {cueIdForConfig(result.profileId) && (
+            <Button asChild type="button" size="sm" variant={primary ? 'default' : 'outline'} className="min-h-10 gap-1.5">
+              <Link to={shotCueLink(result.profileId)}><BookOpen className="h-4 w-4" />View cue</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, prominent = false }: { label: string; value: string; prominent?: boolean }) {
   return (
     <div className="rounded-md bg-muted/50 px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="font-medium">{value}</div>
+      <div className={`font-semibold ${prominent ? 'text-xl sm:text-2xl' : ''}`}>{value}</div>
     </div>
   );
 }
@@ -1340,9 +1352,9 @@ function MatrixMobileCard({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate font-semibold">{row.clubName}</div>
-          <div className="text-sm text-muted-foreground">{getShotTypeLabel(row.shotType)}</div>
+          <div className="text-sm text-muted-foreground">{getMatrixShotTypeLabel(row.shotType)}</div>
         </div>
-        <Badge variant="outline" className="shrink-0">{getShotTypeLabel(row.shotType)}</Badge>
+        <Badge variant="outline" className="shrink-0">{getMatrixShotTypeLabel(row.shotType)}</Badge>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {MATRIX_POWER_COLUMNS.map((column) => (
@@ -1382,7 +1394,7 @@ function MatrixMobileCell({
     );
   }
 
-  const primaryLabel = shotType === 'pitch' ? 'Carry' : 'Distance';
+  const primaryLabel = shotType === 'pitch' ? 'Carry' : 'Total';
   const primaryValue = getMatrixCellPrimaryDistance(cell, shotType);
   const comfortClass = getComfortTileClass(cell.last20TargetPct, greenThreshold, amberThreshold);
 
@@ -1398,7 +1410,7 @@ function MatrixMobileCell({
       <div className="mt-1 text-xs opacity-70">{primaryLabel}</div>
       <div className="mt-3 grid gap-1 text-xs">
         <div className="flex justify-between gap-2">
-          <span className="opacity-70">Distance</span>
+          <span className="opacity-70">Total</span>
           <span className="font-medium">{formatDistance(cell.total)}</span>
         </div>
         <div className="flex justify-between gap-2">
@@ -1430,14 +1442,14 @@ function MatrixCell({
     return <div className="rounded-md border bg-muted/20 p-2 text-center text-xs text-muted-foreground">-</div>;
   }
 
-  const highlightTotal = shotType === 'bump' || shotType === 'chip';
+  const highlightTotal = shotType === 'bump' || shotType === 'chip' || shotType === 'punch';
   const highlightCarry = shotType === 'pitch';
   const primaryMetricClass = 'rounded-md border border-emerald-300 bg-emerald-100 px-2 py-1 text-emerald-950';
 
   return (
     <div className="grid grid-cols-3 gap-2 rounded-md border bg-muted/20 p-2 text-xs">
       <div className={`min-w-0 ${highlightTotal ? primaryMetricClass : ''}`}>
-        <div className="text-muted-foreground">Distance</div>
+        <div className="text-muted-foreground">Total</div>
         <div className="font-semibold">{formatDistance(cell.total)}</div>
       </div>
       <div className={`min-w-0 ${highlightCarry ? primaryMetricClass : ''}`}>

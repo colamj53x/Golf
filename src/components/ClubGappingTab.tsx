@@ -12,15 +12,9 @@ import {
   buildClubGappingRows,
   clubSortIndex,
   fmt,
-  fmtReliableHcp,
   getClubName,
   getSidePattern,
-  getShotBadgeClass,
   getShotLabel,
-  isShortShot,
-  percentDotTone,
-  powerStrength,
-  rangeDotTone,
   SHOT_CONTEXT_OPTIONS,
   type GappingRow,
   type ShotContext,
@@ -31,7 +25,7 @@ import { cueIdForConfig, shotCueLink } from '@/lib/shotCues';
 
 export function ClubGappingTab() {
   const navigate = useNavigate();
-  const { shots, gappingReliablePercent, gappingGreenThreshold, gappingAmberThreshold } = useGolfData();
+  const { shots, gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -82,7 +76,7 @@ export function ClubGappingTab() {
             Club Gapping
           </CardTitle>
           <CardDescription>
-            Distances use the best shot-quality level that covers {gappingReliablePercent}% of your rated shots for each club and shot.
+            Quick on-course reference for reliable distance and typical miss patterns.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -103,77 +97,50 @@ export function ClubGappingTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[120px]">Club</TableHead>
-                  <TableHead>Shot</TableHead>
-                  <TableHead>Cue</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Vertical</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Bias</TableHead>
+                  <TableHead className="min-w-[180px]">Club</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Carry</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Carry Range</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Last 20 T</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Last 20 Safe</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Range %</TableHead>
-                  <TableHead className="text-right whitespace-nowrap" title={`${gappingReliablePercent}% of shots are at this handicap level or better`}>
-                    {gappingReliablePercent}% Shots Are
-                  </TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Roll</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Typical miss</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {groupedRows.map(([clubName, clubRows]) => (
-                  clubRows.map((row, index) => {
-                    const strongestShortShotPower = Math.max(
-                      ...clubRows
-                        .filter((clubRow) => clubRow.profile.shotType === row.profile.shotType && isShortShot(clubRow.profile))
-                        .map((clubRow) => powerStrength(clubRow.profile.power)),
-                      -1,
-                    );
-                    const isHardestShortShot = isShortShot(row.profile) && powerStrength(row.profile.power) === strongestShortShotPower;
+                  clubRows.map((row) => {
+                    const roll = row.displayTotal !== null && row.displayCarry !== null
+                      ? Math.max(0, row.displayTotal - row.displayCarry)
+                      : null;
+                    const miss = getSidePattern(row);
 
                     return (
-                    <TableRow key={`${row.profile.id}-${row.target}`}>
-                      <TableCell className="font-semibold">
-                        {index === 0 ? clubName : ''}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}
-                          className={getShotBadgeClass(row.profile, isHardestShortShot)}
-                        >
-                          {getShotLabel(row.profile)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{cueIdForConfig(row.profile.id) && <Button type="button" size="sm" variant="ghost" className="gap-1.5 whitespace-nowrap" onClick={() => navigate(shotCueLink(row.profile.id))}><BookOpen className="h-3.5 w-3.5" />View cue</Button>}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">{row.target}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold whitespace-nowrap">{fmt(row.displayTotal)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.totalMin)} - {fmt(row.totalMax)}</TableCell>
-                      <TableCell className={`text-right whitespace-nowrap ${getSidePattern(row).className}`} title={`Mean side bias from reliable shots`}>
-                        {getSidePattern(row).label}
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.displayCarryMin)} - {fmt(row.displayCarryMax)}</TableCell>
-                      <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentTargetPct, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Last 20 at ${row.qualityCutoff} hcp or better ${fmt(row.recentTargetPct, '%')}`} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${percentDotTone(row.recentSafePct, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Last 20 safe outcomes ${fmt(row.recentSafePct, '%')}`} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={`mx-auto block h-5 w-5 rounded-full border ${rangeDotTone(row.rangeConfidence, gappingGreenThreshold, gappingAmberThreshold)}`} title={`Range ${fmt(row.rangeConfidence, '%')}`} />
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap" title={`${gappingReliablePercent}% of shots are ${fmtReliableHcp(row.reliableHcpLevel)} or better. Actual coverage: ${fmt(row.reliableCoveragePct, '%')}`}>
-                        {fmtReliableHcp(row.reliableHcpLevel)}
-                      </TableCell>
-                    </TableRow>
+                      <TableRow key={`${row.profile.id}-${row.target}`}>
+                        <TableCell>
+                          <div className="flex min-w-[170px] flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-lg font-bold">{clubName}</span>
+                              <Badge variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}>{getShotLabel(row.profile)}</Badge>
+                              <Badge variant="secondary" className="capitalize">{row.target}</Badge>
+                            </div>
+                            {cueIdForConfig(row.profile.id) && (
+                              <Button type="button" size="sm" variant="ghost" className="h-8 w-fit gap-1.5 px-2" onClick={() => navigate(shotCueLink(row.profile.id))}>
+                                <BookOpen className="h-3.5 w-3.5" />Cue
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-lg font-semibold whitespace-nowrap">{fmt(row.displayCarry)}</TableCell>
+                        <TableCell className="text-right text-lg font-semibold whitespace-nowrap">{fmt(roll)}</TableCell>
+                        <TableCell className="text-right text-xl font-bold whitespace-nowrap">{fmt(row.displayTotal)}</TableCell>
+                        <TableCell className={`text-right font-semibold whitespace-nowrap ${miss.className}`} title="Mean side bias from reliable shots">
+                          {miss.label}
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={13} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>

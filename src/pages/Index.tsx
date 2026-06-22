@@ -63,8 +63,8 @@ function legacyRedirect(pathname: string): string | null {
 function SectionTabs({ value, values, labels, onChange }: { value: string; values: readonly string[]; labels: Record<string, string>; onChange: (value: string) => void }) {
   return (
     <Tabs value={value} onValueChange={onChange}>
-      <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
-        {values.map(item => <TabsTrigger key={item} value={item} className="shrink-0">{labels[item]}</TabsTrigger>)}
+      <TabsList className="mb-5 h-auto w-full justify-start overflow-x-auto rounded-lg border bg-muted/30 p-1 sm:w-auto">
+        {values.map(item => <TabsTrigger key={item} value={item} className="min-h-10 shrink-0 px-4 font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">{labels[item]}</TabsTrigger>)}
       </TabsList>
     </Tabs>
   );
