@@ -109,6 +109,22 @@ describe('buildClubGappingRows', () => {
     expect(rows[0].profile.id).toBe('dr_full_full');
   });
 
+  it('uses the configured fallback HCP when shots have no usable quality rating', () => {
+    const rows = buildClubGappingRows({
+      profiles: { [driverProfile.id]: driverProfile },
+      shots: [{ ...driverShot, shotQuality: 'Unrated' }],
+      shotContext: 'tee',
+      practiceSessions: [],
+      practiceConfigs: [],
+      shotsBySession: {},
+      gappingReliablePercent: 60,
+      gappingQualityFallbackHcp: 15,
+      shotCategoryOverrides: {},
+    });
+
+    expect(rows[0].qualityCutoff).toBe(15);
+  });
+
   it('uses the import-reviewed category before distance inference', () => {
     const pitchHalf = shortProfile('9pm');
     const pitchFull = shortProfile('full');

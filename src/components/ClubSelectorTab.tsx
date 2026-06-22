@@ -802,6 +802,7 @@ export function ClubSelectorTab({
     clubs,
     isLoading,
     gappingReliablePercent,
+    gappingQualityFallbackHcp,
     gappingGreenThreshold,
     gappingAmberThreshold,
     shotPickerDistanceTolerancePct,
@@ -840,9 +841,10 @@ export function ClubSelectorTab({
     practiceConfigs,
     shotsBySession,
     gappingReliablePercent,
+    gappingQualityFallbackHcp,
     shotCategoryOverrides: {},
     shotClassificationRules,
-  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotClassificationRules]);
+  }), [shotProfiles, shots, lie, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, gappingQualityFallbackHcp, shotClassificationRules]);
   const recommendations = useMemo(
     () => calculateRecommendations(selectorGappingRows, clubs, numericTarget, numericMinimumCarry, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target),
     [selectorGappingRows, clubs, numericTarget, numericMinimumCarry, numericDistanceTolerancePct, lie, clubAdjustmentDelta, directionNotes, target],
@@ -857,6 +859,7 @@ export function ClubSelectorTab({
       practiceConfigs,
       shotsBySession,
       gappingReliablePercent,
+      gappingQualityFallbackHcp,
       shotCategoryOverrides: {},
       shotClassificationRules,
     })
@@ -902,7 +905,7 @@ export function ClubSelectorTab({
     }
 
     return [...rows.values()].sort((a, b) => compareMatrixRows(a, b, matrixSort));
-  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingReliablePercent, shotClassificationRules, matrixLieContext, matrixSort]);
+  }, [shots, clubs, practiceConfigs, practiceSessions, shotProfiles, shotsBySession, gappingReliablePercent, gappingQualityFallbackHcp, shotClassificationRules, matrixLieContext, matrixSort]);
   const visibleWedgeMatrix = useMemo(() => wedgeMatrix.filter((row) => (
     matrixShotMode === 'air'
       ? AIR_SHOT_TYPES.includes(row.shotType)

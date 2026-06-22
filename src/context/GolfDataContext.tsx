@@ -41,6 +41,8 @@ interface GolfDataContextType {
   setLowTargetExclusionThreshold: React.Dispatch<React.SetStateAction<number>>;
   gappingReliablePercent: number;
   setGappingReliablePercent: React.Dispatch<React.SetStateAction<number>>;
+  gappingQualityFallbackHcp: number;
+  setGappingQualityFallbackHcp: React.Dispatch<React.SetStateAction<number>>;
   gappingGreenThreshold: number;
   setGappingGreenThreshold: React.Dispatch<React.SetStateAction<number>>;
   gappingAmberThreshold: number;
@@ -169,6 +171,11 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     return saved ? parseFloat(saved) : 60;
   });
 
+  const [gappingQualityFallbackHcp, setGappingQualityFallbackHcp] = useState<number>(() => {
+    const saved = localStorage.getItem('golf-gapping-quality-fallback-hcp');
+    return saved ? parseFloat(saved) : 10;
+  });
+
   const [gappingGreenThreshold, setGappingGreenThreshold] = useState<number>(() => {
     const saved = localStorage.getItem('golf-gapping-green-threshold');
     return saved ? parseFloat(saved) : 65;
@@ -246,6 +253,10 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
   }, [gappingReliablePercent]);
 
   useEffect(() => {
+    localStorage.setItem('golf-gapping-quality-fallback-hcp', gappingQualityFallbackHcp.toString());
+  }, [gappingQualityFallbackHcp]);
+
+  useEffect(() => {
     localStorage.setItem('golf-gapping-green-threshold', gappingGreenThreshold.toString());
   }, [gappingGreenThreshold]);
 
@@ -286,6 +297,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     distanceToTargetTolerance,
     lowTargetExclusionThreshold,
     gappingReliablePercent,
+    gappingQualityFallbackHcp,
     gappingGreenThreshold,
     gappingAmberThreshold,
     shotPickerDistanceTolerancePct,
@@ -316,6 +328,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           setDistanceToTargetTolerance(next.distanceToTargetTolerance);
           setLowTargetExclusionThreshold(next.lowTargetExclusionThreshold);
           setGappingReliablePercent(next.gappingReliablePercent);
+          setGappingQualityFallbackHcp(next.gappingQualityFallbackHcp);
           setGappingGreenThreshold(next.gappingGreenThreshold);
           setGappingAmberThreshold(next.gappingAmberThreshold);
           setShotPickerDistanceTolerancePct(next.shotPickerDistanceTolerancePct);
@@ -358,6 +371,7 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
     clubs,
     distanceToTargetTolerance,
     gappingReliablePercent,
+    gappingQualityFallbackHcp,
     gappingGreenThreshold,
     gappingAmberThreshold,
     lowTargetExclusionThreshold,
@@ -654,6 +668,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
       setLowTargetExclusionThreshold,
       gappingReliablePercent,
       setGappingReliablePercent,
+      gappingQualityFallbackHcp,
+      setGappingQualityFallbackHcp,
       gappingGreenThreshold,
       setGappingGreenThreshold,
       gappingAmberThreshold,

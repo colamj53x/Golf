@@ -12,9 +12,11 @@ import {
   buildClubGappingRows,
   clubSortIndex,
   fmt,
+  fmtReliableHcp,
   getClubName,
+  getExpandedGappingShotLabel,
   getSidePattern,
-  getShotLabel,
+  percentDotTone,
   SHOT_CONTEXT_OPTIONS,
   type GappingRow,
   type ShotContext,
@@ -25,7 +27,13 @@ import { cueIdForConfig, shotCueLink } from '@/lib/shotCues';
 
 export function ClubGappingTab() {
   const navigate = useNavigate();
-  const { shots, gappingReliablePercent } = useGolfData();
+  const {
+    shots,
+    gappingReliablePercent,
+    gappingQualityFallbackHcp,
+    gappingGreenThreshold,
+    gappingAmberThreshold,
+  } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
@@ -42,10 +50,11 @@ export function ClubGappingTab() {
       practiceConfigs,
       shotsBySession,
       gappingReliablePercent,
+      gappingQualityFallbackHcp,
       shotCategoryOverrides: {},
       shotClassificationRules,
     });
-  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, shotClassificationRules]);
+  }, [profiles, shots, shotContext, practiceSessions, practiceConfigs, shotsBySession, gappingReliablePercent, gappingQualityFallbackHcp, shotClassificationRules]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, GappingRow[]>();
@@ -102,6 +111,8 @@ export function ClubGappingTab() {
                   <TableHead className="text-right whitespace-nowrap">Roll</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Total</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Typical miss</TableHead>
+                  <TableHead className="text-right whitespace-nowrap"><span className="block">Quality</span><span className="text-[10px] font-normal text-muted-foreground">Last 20</span></TableHead>
+                  <TableHead className="text-right whitespace-nowrap"><span className="block">Safety</span><span className="text-[10px] font-normal text-muted-foreground">Last 20</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -111,6 +122,12 @@ export function ClubGappingTab() {
                       ? Math.max(0, row.displayTotal - row.displayCarry)
                       : null;
                     const miss = getSidePattern(row);
+                    const shotBadgeClass = row.profile.power === 'full'
+                      ? 'border-green-600 bg-green-50 text-green-800 hover:bg-green-50'
+                      : 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-50';
+                    const targetBadgeClass = row.target === 'green'
+                      ? 'border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100'
+                      : 'border-sky-500 bg-sky-100 text-sky-900 hover:bg-sky-100';
 
                     return (
                       <TableRow key={`${row.profile.id}-${row.target}`}>
@@ -118,8 +135,8 @@ export function ClubGappingTab() {
                           <div className="flex min-w-[170px] flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-lg font-bold">{clubName}</span>
-                              <Badge variant={row.profile.shotType === 'punch' ? 'default' : 'outline'}>{getShotLabel(row.profile)}</Badge>
-                              <Badge variant="secondary" className="capitalize">{row.target}</Badge>
+                              <Badge variant="outline" className={shotBadgeClass}>{getExpandedGappingShotLabel(row.profile)}</Badge>
+                              <Badge variant="outline" className={`capitalize ${targetBadgeClass}`}>{row.target} target</Badge>
                             </div>
                             {cueIdForConfig(row.profile.id) && (
                               <Button type="button" size="sm" variant="ghost" className="h-8 w-fit gap-1.5 px-2" onClick={() => navigate(shotCueLink(row.profile.id))}>
@@ -134,13 +151,33 @@ export function ClubGappingTab() {
                         <TableCell className={`text-right font-semibold whitespace-nowrap ${miss.className}`} title="Mean side bias from reliable shots">
                           {miss.label}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <div
+                            className="inline-flex items-center justify-end gap-2 whitespace-nowrap"
+                            title={`Last 20 quality: ${fmt(row.recentTargetPct, '%')} at ${fmtReliableHcp(row.qualityCutoff)} or better`}
+                            aria-label={`Last 20 quality ${fmt(row.recentTargetPct, '%')} at ${fmtReliableHcp(row.qualityCutoff)} or better`}
+                          >
+                            <span className={`block h-4 w-4 shrink-0 rounded-full border ${percentDotTone(row.recentTargetPct, gappingGreenThreshold, gappingAmberThreshold)}`} />
+                            <span className="text-xs font-medium tabular-nums">{fmt(row.recentTargetPct, '%')}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div
+                            className="inline-flex items-center justify-end gap-2 whitespace-nowrap"
+                            title={`Last 20 safe outcomes: ${fmt(row.recentSafePct, '%')}`}
+                            aria-label={`Last 20 safe outcomes ${fmt(row.recentSafePct, '%')}`}
+                          >
+                            <span className={`block h-4 w-4 shrink-0 rounded-full border ${percentDotTone(row.recentSafePct, gappingGreenThreshold, gappingAmberThreshold)}`} />
+                            <span className="text-xs font-medium tabular-nums">{fmt(row.recentSafePct, '%')}</span>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       No gapping data yet for this shot type.
                     </TableCell>
                   </TableRow>

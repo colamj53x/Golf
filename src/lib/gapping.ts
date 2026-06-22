@@ -159,7 +159,7 @@ function selectGappingQualityShots(shots: Shot[], cutoff: number): Shot[] {
   return cutoffShots;
 }
 
-function selectReliableGappingShots(shots: Shot[], reliablePercent: number): {
+function selectReliableGappingShots(shots: Shot[], reliablePercent: number, fallbackQualityCutoff: number): {
   shots: Shot[];
   reliableHcpLevel: number | null;
   reliableCoveragePct: number | null;
@@ -171,7 +171,7 @@ function selectReliableGappingShots(shots: Shot[], reliablePercent: number): {
   const ratedShots = sortByQuality(shots).filter((shot) => Number.isFinite(shotHandicap(shot)));
   if (ratedShots.length === 0) {
     return {
-      shots: selectGappingQualityShots(shots, DEFAULT_QUALITY_CUTOFF),
+      shots: selectGappingQualityShots(shots, fallbackQualityCutoff),
       reliableHcpLevel: null,
       reliableCoveragePct: null,
     };
@@ -897,6 +897,7 @@ function buildRow(
   shotsBySession: ShotsBySession,
   profiles: ShotProfileMap,
   reliablePercent: number,
+  fallbackQualityCutoff: number,
   shotCategoryOverrides: ShotCategoryOverrides,
   shotClassificationRules: ShotClassificationRules,
 ): GappingRow {
@@ -955,9 +956,9 @@ function buildRow(
         return override ? override.target === target : matchesTargetIntent(shot, target, intentWindow);
       }))
     : cleanedClubShots;
-  const reliableSelection = selectReliableGappingShots(targetReferenceShots, reliablePercent);
+  const reliableSelection = selectReliableGappingShots(targetReferenceShots, reliablePercent, fallbackQualityCutoff);
   const referenceShots = reliableSelection.shots;
-  const qualityCutoff = reliableSelection.reliableHcpLevel ?? DEFAULT_QUALITY_CUTOFF;
+  const qualityCutoff = reliableSelection.reliableHcpLevel ?? fallbackQualityCutoff;
   const top = referenceShots;
   const totals = top.map((shot) => shot.total);
   const variationTotals = referenceShots.map((shot) => shot.total);
@@ -1050,6 +1051,7 @@ export function buildClubGappingRows({
   practiceConfigs,
   shotsBySession,
   gappingReliablePercent = DEFAULT_RELIABLE_PERCENT,
+  gappingQualityFallbackHcp = DEFAULT_QUALITY_CUTOFF,
   shotCategoryOverrides,
   shotClassificationRules = loadShotClassificationRules(),
 }: {
@@ -1060,6 +1062,7 @@ export function buildClubGappingRows({
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
   gappingReliablePercent?: number;
+  gappingQualityFallbackHcp?: number;
   shotCategoryOverrides: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
 }): GappingRow[] {
@@ -1103,6 +1106,7 @@ export function buildClubGappingRows({
       shotsBySession,
       profiles,
       gappingReliablePercent,
+      gappingQualityFallbackHcp,
       shotCategoryOverrides,
       shotClassificationRules,
     )))
@@ -1122,6 +1126,7 @@ export function buildCourseShotGappingAssignments({
   practiceConfigs,
   shotsBySession,
   gappingReliablePercent = DEFAULT_RELIABLE_PERCENT,
+  gappingQualityFallbackHcp = DEFAULT_QUALITY_CUTOFF,
   shotCategoryOverrides = {},
   shotClassificationRules = loadShotClassificationRules(),
 }: {
@@ -1131,6 +1136,7 @@ export function buildCourseShotGappingAssignments({
   practiceConfigs: ClubPracticeConfig[];
   shotsBySession: ShotsBySession;
   gappingReliablePercent?: number;
+  gappingQualityFallbackHcp?: number;
   shotCategoryOverrides?: ShotCategoryOverrides;
   shotClassificationRules?: ShotClassificationRules;
 }): {
@@ -1150,6 +1156,7 @@ export function buildCourseShotGappingAssignments({
       practiceConfigs,
       shotsBySession,
       gappingReliablePercent,
+      gappingQualityFallbackHcp,
       shotCategoryOverrides,
       shotClassificationRules,
     });

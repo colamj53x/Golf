@@ -115,6 +115,17 @@ const directionAmountOptions: Array<{ value: ShotPickerDirectionAmount; label: s
   { value: 'large', label: 'Large' },
 ];
 
+const GAPPING_QUALITY_FALLBACK_OPTIONS = [
+  { value: -10, label: 'Pro' },
+  { value: -5, label: 'Elite amateur' },
+  { value: 0, label: '0 HCP' },
+  { value: 5, label: '5 HCP' },
+  { value: 10, label: '10 HCP' },
+  { value: 15, label: '15 HCP' },
+  { value: 20, label: '20 HCP' },
+  { value: 25, label: '25 HCP' },
+] as const;
+
 export function SettingsTab() {
   const {
     distanceToTargetTolerance,
@@ -123,6 +134,8 @@ export function SettingsTab() {
     setLowTargetExclusionThreshold,
     gappingReliablePercent,
     setGappingReliablePercent,
+    gappingQualityFallbackHcp,
+    setGappingQualityFallbackHcp,
     gappingGreenThreshold,
     setGappingGreenThreshold,
     gappingAmberThreshold,
@@ -141,6 +154,7 @@ export function SettingsTab() {
   const [editingTolerance, setEditingTolerance] = useState(distanceToTargetTolerance);
   const [editingLowTargetThreshold, setEditingLowTargetThreshold] = useState(lowTargetExclusionThreshold);
   const [editingGappingReliablePercent, setEditingGappingReliablePercent] = useState(gappingReliablePercent);
+  const [editingGappingQualityFallbackHcp, setEditingGappingQualityFallbackHcp] = useState(gappingQualityFallbackHcp);
   const [editingGappingGreenThreshold, setEditingGappingGreenThreshold] = useState(gappingGreenThreshold);
   const [editingGappingAmberThreshold, setEditingGappingAmberThreshold] = useState(gappingAmberThreshold);
   const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
@@ -154,6 +168,9 @@ export function SettingsTab() {
     setDistanceToTargetTolerance(editingTolerance);
     setLowTargetExclusionThreshold(editingLowTargetThreshold);
     setGappingReliablePercent(Math.max(10, Math.min(100, Math.round(editingGappingReliablePercent))));
+    setGappingQualityFallbackHcp(GAPPING_QUALITY_FALLBACK_OPTIONS.some(option => option.value === editingGappingQualityFallbackHcp)
+      ? editingGappingQualityFallbackHcp
+      : 10);
     const nextAmber = Math.max(0, Math.min(100, Math.round(editingGappingAmberThreshold)));
     const nextGreen = Math.max(nextAmber, Math.min(100, Math.round(editingGappingGreenThreshold)));
     setGappingAmberThreshold(nextAmber);
@@ -171,6 +188,7 @@ export function SettingsTab() {
     setEditingTolerance(distanceToTargetTolerance);
     setEditingLowTargetThreshold(lowTargetExclusionThreshold);
     setEditingGappingReliablePercent(gappingReliablePercent);
+    setEditingGappingQualityFallbackHcp(gappingQualityFallbackHcp);
     setEditingGappingGreenThreshold(gappingGreenThreshold);
     setEditingGappingAmberThreshold(gappingAmberThreshold);
     setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
@@ -280,6 +298,28 @@ export function SettingsTab() {
             />
             <span className="text-sm text-muted-foreground">
               Sets how many rated shots must be covered when choosing each club's predictable distance
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="gappingQualityFallbackHcp" className="whitespace-nowrap min-w-[200px]">
+              Gapping Quality Fallback
+            </Label>
+            <Select
+              value={String(editingGappingQualityFallbackHcp)}
+              onValueChange={(value) => setEditingGappingQualityFallbackHcp(Number(value))}
+              disabled={!isEditing}
+            >
+              <SelectTrigger id="gappingQualityFallbackHcp" className="h-8 w-40 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GAPPING_QUALITY_FALLBACK_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">
+              HCP cutoff used only when quality ratings cannot calculate one. Shared by Club Gapping and Shot Picker.
             </span>
           </div>
           <div className="flex items-center gap-4">
