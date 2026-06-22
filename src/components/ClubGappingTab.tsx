@@ -66,7 +66,7 @@ export function ClubGappingTab() {
       const bDistance = b.displayTotal ?? Number.NEGATIVE_INFINITY;
       if (aDistance !== bDistance) return bDistance - aDistance;
 
-      return getShotLabel(a.profile).localeCompare(getShotLabel(b.profile));
+      return getExpandedGappingShotLabel(a.profile).localeCompare(getExpandedGappingShotLabel(b.profile));
     });
 
     for (const row of sortedRows) {
