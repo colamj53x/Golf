@@ -41,7 +41,15 @@ import {
 } from '@/lib/shotPickerAdjustments';
 import { DEFAULT_SHOT_CUES, saveShotCues, useShotCues, type ShotCueCard } from '@/lib/shotCues';
 import { DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT } from '@/lib/durableLocalSettings';
-import { createSettingsIdea, loadSettingsIdeas, saveSettingsIdeas, type SettingsIdea } from '@/lib/settingsIdeas';
+import {
+  createSettingsIdea,
+  loadSettingsIdeaTags,
+  loadSettingsIdeas,
+  mergeSettingsIdeaTags,
+  rememberSettingsIdeaTags,
+  saveSettingsIdeas,
+  type SettingsIdea,
+} from '@/lib/settingsIdeas';
 
 const SETTINGS_SECTIONS = [
   {
@@ -433,11 +441,45 @@ export function SettingsTab() {
 
 function IdeasCard() {
   const [ideas, setIdeas] = useState<SettingsIdea[]>(() => loadSettingsIdeas());
+  const [savedTags, setSavedTags] = useState<string[]>(() => loadSettingsIdeaTags());
   const [ideaText, setIdeaText] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
+
+  const allTags = useMemo(() => mergeSettingsIdeaTags(
+    savedTags,
+    ideas.flatMap(idea => idea.tags),
+  ).sort((left, right) => left.localeCompare(right)), [ideas, savedTags]);
+  const filteredIdeas = useMemo(() => selectedTag
+    ? ideas.filter(idea => idea.tags.some(tag => tag.toLocaleLowerCase() === selectedTag.toLocaleLowerCase()))
+    : ideas, [ideas, selectedTag]);
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const idea of ideas) {
+      for (const tag of idea.tags) {
+        const key = tag.toLocaleLowerCase();
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [ideas]);
+  const tagInputParts = tagsInput.split(',');
+  const currentTagQuery = (tagInputParts[tagInputParts.length - 1] || '').trim().toLocaleLowerCase();
+  const completedTagKeys = new Set(tagInputParts.slice(0, -1).map(tag => tag.trim().toLocaleLowerCase()).filter(Boolean));
+  const tagSuggestions = allTags.filter(tag => (
+    !completedTagKeys.has(tag.toLocaleLowerCase()) &&
+    tag.toLocaleLowerCase().includes(currentTagQuery)
+  ));
 
   useEffect(() => {
-    const handleHydrated = () => setIdeas(loadSettingsIdeas());
+    const handleHydrated = () => {
+      const nextIdeas = loadSettingsIdeas();
+      const nextTags = mergeSettingsIdeaTags(loadSettingsIdeaTags(), nextIdeas.flatMap(idea => idea.tags));
+      setIdeas(nextIdeas);
+      setSavedTags(nextTags);
+    };
+    handleHydrated();
     window.addEventListener(DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT, handleHydrated);
     return () => window.removeEventListener(DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT, handleHydrated);
   }, []);
@@ -454,15 +496,24 @@ function IdeasCard() {
       return;
     }
 
-    updateIdeas([createSettingsIdea(ideaText, tagsInput), ...ideas]);
+    const nextIdea = createSettingsIdea(ideaText, tagsInput);
+    updateIdeas([nextIdea, ...ideas]);
+    setSavedTags(rememberSettingsIdeaTags(nextIdea.tags));
     setIdeaText('');
     setTagsInput('');
     toast.success('Idea added');
   };
 
   const handleDone = (idea: SettingsIdea) => {
+    setSavedTags(rememberSettingsIdeaTags(allTags));
     updateIdeas(ideas.filter(candidate => candidate.id !== idea.id));
     toast.success('Idea completed and removed');
+  };
+
+  const selectTagSuggestion = (tag: string) => {
+    const completedTags = tagInputParts.slice(0, -1).map(value => value.trim()).filter(Boolean);
+    setTagsInput(`${[...completedTags, tag].join(', ')}, `);
+    setIsTagMenuOpen(false);
   };
 
   return (
@@ -473,10 +524,42 @@ function IdeasCard() {
           Ideas
         </CardTitle>
         <CardDescription>
-          Capture things you want to try. Add optional tags, then mark an idea done to remove it.
+          Capture things you want to try. Tags are remembered for reuse, and marking an idea done removes only the idea.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {allTags.length > 0 && (
+          <div className="space-y-2">
+            <Label>Filter by tag</Label>
+            <div className="flex flex-wrap gap-2" aria-label="Filter ideas by tag">
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedTag === null ? 'default' : 'outline'}
+                className="h-7 rounded-full px-3"
+                onClick={() => setSelectedTag(null)}
+              >
+                All <span className="ml-1 opacity-70">{ideas.length}</span>
+              </Button>
+              {allTags.map(tag => {
+                const isSelected = selectedTag?.toLocaleLowerCase() === tag.toLocaleLowerCase();
+                return (
+                  <Button
+                    key={tag.toLocaleLowerCase()}
+                    type="button"
+                    size="sm"
+                    variant={isSelected ? 'default' : 'outline'}
+                    className="h-7 rounded-full px-3"
+                    onClick={() => setSelectedTag(isSelected ? null : tag)}
+                  >
+                    {tag} <span className="ml-1 opacity-70">{tagCounts.get(tag.toLocaleLowerCase()) || 0}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleAdd} className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)_auto] md:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="settings-idea-text">Idea</Label>
@@ -488,16 +571,40 @@ function IdeasCard() {
               autoComplete="off"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="relative space-y-1.5">
             <Label htmlFor="settings-idea-tags">Tags</Label>
             <Input
               id="settings-idea-tags"
               value={tagsInput}
               onChange={event => setTagsInput(event.target.value)}
+              onFocus={() => setIsTagMenuOpen(true)}
+              onBlur={() => setIsTagMenuOpen(false)}
               placeholder="practice, reports"
               aria-describedby="settings-idea-tags-help"
               autoComplete="off"
             />
+            {isTagMenuOpen && allTags.length > 0 && (
+              <div role="listbox" aria-label="Saved idea tags" className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                {tagSuggestions.length > 0 ? tagSuggestions.map(tag => (
+                  <button
+                    key={tag.toLocaleLowerCase()}
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => selectTagSuggestion(tag)}
+                  >
+                    <span>{tag}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {tagCounts.get(tag.toLocaleLowerCase()) || 0} {(tagCounts.get(tag.toLocaleLowerCase()) || 0) === 1 ? 'idea' : 'ideas'}
+                    </span>
+                  </button>
+                )) : (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No saved tags match. Keep typing to add a new one.</div>
+                )}
+              </div>
+            )}
             <p id="settings-idea-tags-help" className="text-xs text-muted-foreground">Separate tags with commas.</p>
           </div>
           <Button type="submit" className="gap-2 md:mb-5">
@@ -510,9 +617,14 @@ function IdeasCard() {
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             No ideas yet. Add one above when inspiration strikes.
           </div>
+        ) : filteredIdeas.length === 0 ? (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No current ideas use the <span className="font-medium text-foreground">{selectedTag}</span> tag.
+            <Button type="button" variant="link" className="ml-1 h-auto p-0" onClick={() => setSelectedTag(null)}>Show all ideas</Button>
+          </div>
         ) : (
           <div className="space-y-2">
-            {ideas.map(idea => (
+            {filteredIdeas.map(idea => (
               <div key={idea.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="break-words font-medium">{idea.text}</p>

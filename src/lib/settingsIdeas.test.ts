@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSettingsIdea, parseSettingsIdeas } from './settingsIdeas';
+import { createSettingsIdea, mergeSettingsIdeaTags, parseSettingsIdeas } from './settingsIdeas';
 
 describe('settingsIdeas', () => {
   it('keeps valid ideas and cleans up duplicate tags', () => {
@@ -19,5 +19,12 @@ describe('settingsIdeas', () => {
     expect(idea.tags).toEqual(['Putting', 'Reports']);
     expect(idea.id).toBeTruthy();
     expect(idea.createdAt).toBeTruthy();
+  });
+
+  it('keeps remembered tags and merges them case-insensitively', () => {
+    expect(mergeSettingsIdeaTags(
+      ['Practice', 'Reports'],
+      [' practice ', 'Putting', '', 42],
+    )).toEqual(['Practice', 'Reports', 'Putting']);
   });
 });

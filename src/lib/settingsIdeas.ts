@@ -1,4 +1,5 @@
 export const SETTINGS_IDEAS_STORAGE_KEY = 'golf_settings_ideas_v1';
+export const SETTINGS_IDEA_TAGS_STORAGE_KEY = 'golf_settings_idea_tags_v1';
 
 export interface SettingsIdea {
   id: string;
@@ -21,6 +22,10 @@ function normalizeTags(value: unknown): string[] {
     tags.push(tag);
   }
   return tags;
+}
+
+export function mergeSettingsIdeaTags(...tagGroups: unknown[]): string[] {
+  return normalizeTags(tagGroups.flatMap(group => Array.isArray(group) ? group : []));
 }
 
 export function parseSettingsIdeas(value: unknown): SettingsIdea[] {
@@ -51,12 +56,37 @@ export function loadSettingsIdeas(): SettingsIdea[] {
   }
 }
 
-export function saveSettingsIdeas(ideas: SettingsIdea[]): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(SETTINGS_IDEAS_STORAGE_KEY, JSON.stringify(parseSettingsIdeas(ideas)));
+export function loadSettingsIdeaTags(): string[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    return normalizeTags(JSON.parse(localStorage.getItem(SETTINGS_IDEA_TAGS_STORAGE_KEY) || '[]'));
+  } catch {
+    return [];
+  }
+}
+
+function persistSettingsSoon(): void {
   void import('@/lib/durableLocalSettings').then(({ persistDurableLocalSettingsSoon }) => {
     persistDurableLocalSettingsSoon();
   });
+}
+
+export function saveSettingsIdeas(ideas: SettingsIdea[]): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(SETTINGS_IDEAS_STORAGE_KEY, JSON.stringify(parseSettingsIdeas(ideas)));
+  persistSettingsSoon();
+}
+
+export function saveSettingsIdeaTags(tags: string[]): string[] {
+  const normalized = normalizeTags(tags);
+  if (typeof localStorage === 'undefined') return normalized;
+  localStorage.setItem(SETTINGS_IDEA_TAGS_STORAGE_KEY, JSON.stringify(normalized));
+  persistSettingsSoon();
+  return normalized;
+}
+
+export function rememberSettingsIdeaTags(tags: string[]): string[] {
+  return saveSettingsIdeaTags(mergeSettingsIdeaTags(loadSettingsIdeaTags(), tags));
 }
 
 export function createSettingsIdea(text: string, tagsInput: string): SettingsIdea {

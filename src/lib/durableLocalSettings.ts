@@ -12,6 +12,7 @@ const KEYS = [
   'golf_shot_classification_rules_v1',
   'golf_shot_cues_v1',
   'golf_settings_ideas_v1',
+  'golf_settings_idea_tags_v1',
 ] as const;
 
 export const DURABLE_LOCAL_SETTINGS_HYDRATED_EVENT = 'golf-durable-local-settings-hydrated';
