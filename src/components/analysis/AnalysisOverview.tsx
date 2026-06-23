@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import {
   Activity,
   AlertTriangle,
-  ArrowRight,
   Brain,
   CalendarRange,
   ClipboardList,
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
-import { useAnalysisPuttingSessions } from '@/hooks/useAnalysisPuttingSessions';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import {
   buildAnalysisModel,
@@ -21,7 +19,6 @@ import {
   type SqiSegment,
 } from '@/lib/analysisSynthesis';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -122,16 +119,9 @@ function SqiPerspectivePanel({
   );
 }
 
-export function AnalysisOverview({
-  onOpenLatestRound,
-  onOpenPractice,
-}: {
-  onOpenLatestRound?: () => void;
-  onOpenPractice?: () => void;
-} = {}) {
-  const { shots, clubs, roundReflections, gappingReliablePercent, todayRecentShotCount, isLoading: golfLoading } = useGolfData();
+export function AnalysisOverview() {
+  const { shots, clubs, gappingReliablePercent, todayRecentShotCount, isLoading: golfLoading } = useGolfData();
   const { practiceConfigs, practiceSessions, isLoading: practiceLoading } = usePracticeData();
-  const puttingSessions = useAnalysisPuttingSessions();
   const profiles = useShotProfiles();
   const shotClassificationRules = useShotClassificationRules();
   const practiceSessionIds = useMemo(() => practiceSessions.map((session) => session.id), [practiceSessions]);
@@ -144,10 +134,9 @@ export function AnalysisOverview({
     shots: recentShots,
     baselineShots: shots,
     clubs,
-    roundReflections,
+    roundReflections: [],
     practiceSessions,
-    puttingSessions,
-  }), [clubs, practiceSessions, puttingSessions, recentShots, roundReflections, shots]);
+  }), [clubs, practiceSessions, recentShots, shots]);
   const priorities = useMemo(() => buildPracticePriorities({
     shots: recentShots,
     profiles,
@@ -217,12 +206,14 @@ export function AnalysisOverview({
           label="Capability index"
           value={capability.score === null ? '-' : `${capability.score} / 100`}
           detail={capability.weakestOption
-            ? `Lowest capability: ${capability.weakestOption.clubShot} (${capability.weakestOption.score})`
-            : 'Add rated shots to establish capability'}
+            ? `Usage weighted · lowest: ${capability.weakestOption.clubShot} (${capability.weakestOption.score})`
+            : capability.provisionalOptionCount
+              ? `${capability.provisionalOptionCount} options need 3 rated shots`
+              : 'Add rated shots to establish capability'}
         />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
+      <section>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Top 3 club / shot priorities</CardTitle>
@@ -238,18 +229,6 @@ export function AnalysisOverview({
                 <div className="mt-2 text-xs text-muted-foreground">{priority.evidence}</div>
               </div>
             ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Next practice recommendation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {priorities[0]?.recommendation ?? 'Capture more course shots to create a focused recommendation.'}
-            </p>
-            {onOpenPractice && <Button className="w-full gap-2" onClick={onOpenPractice}>Open practice <ArrowRight className="h-4 w-4" /></Button>}
-            {onOpenLatestRound && <Button className="w-full gap-2" variant="outline" onClick={onOpenLatestRound}>Latest round <ArrowRight className="h-4 w-4" /></Button>}
           </CardContent>
         </Card>
       </section>
@@ -306,25 +285,6 @@ export function AnalysisOverview({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Brain className="h-5 w-5 text-orange-700" /> Reflection intelligence</CardTitle>
-          <CardDescription>{analysis.reflectionSummary}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {analysis.reflectionThemes.length === 0 && <EmptyCard>Add short reflections after rounds and sessions. Repeated themes will appear here.</EmptyCard>}
-          {analysis.reflectionThemes.slice(0, 6).map((theme) => (
-            <div key={theme.id} className="rounded-lg border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold">{theme.label}</div>
-                <ConfidenceBadge value={theme.confidence} />
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">{theme.count} mentions · {theme.linkedData}</div>
-              <p className="mt-2 text-sm">{theme.meaning}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }

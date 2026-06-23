@@ -133,19 +133,26 @@ describe('practice priorities', () => {
     expect(priorities[0].recommendation).toContain('90–100m');
   });
 
-  it('builds capability from the top two shots per club and shot option', () => {
+  it('averages the top three shots and weights capability by uses per round', () => {
     const shots = [
-      shot({ id: 'driver-best', shotQuality: 'Pro' }),
-      shot({ id: 'driver-second', shotQuality: '0 Handicap' }),
-      shot({ id: 'driver-worst', shotQuality: '25 Handicap' }),
+      shot({ id: 'driver-best', date: new Date('2026-05-30T10:00:00'), shotQuality: 'Pro' }),
+      shot({ id: 'driver-second', date: new Date('2026-05-30T10:05:00'), shotQuality: '0 Handicap' }),
+      shot({ id: 'driver-third', date: new Date('2026-05-30T10:10:00'), shotQuality: '5 Handicap' }),
+      shot({ id: 'driver-fourth', shotQuality: '25 Handicap' }),
+      shot({ id: 'driver-fifth', shotQuality: '25 Handicap' }),
+      shot({ id: 'driver-sixth', shotQuality: '25 Handicap' }),
       shot({ id: 'wedge-best', club: 'PW', type: 'Approach', targetIntent: 'green', startLie: 'Fairway', shotQuality: '15 Handicap' }),
       shot({ id: 'wedge-second', club: 'PW', type: 'Approach', targetIntent: 'green', startLie: 'Fairway', shotQuality: '20 Handicap' }),
+      shot({ id: 'wedge-third', club: 'PW', type: 'Approach', targetIntent: 'green', startLie: 'Fairway', shotQuality: '25 Handicap' }),
+      shot({ id: 'wood-provisional-1', club: '5W', type: 'Approach', shotQuality: 'Pro' }),
+      shot({ id: 'wood-provisional-2', club: '5W', type: 'Approach', shotQuality: 'Pro' }),
     ];
     const capability = buildCapabilityIndex({
       shots,
       profiles: {
         dr_full_full: profile('dr_full_full', 'dr', ['fairway']),
         pw_full_full: profile('pw_full_full', 'pw', ['green']),
+        '5w_full_full': profile('5w_full_full', '5w', ['green', 'fairway']),
       },
       practiceSessions: [],
       practiceConfigs: [],
@@ -156,10 +163,13 @@ describe('practice priorities', () => {
 
     expect(capability.score).toBe(74);
     expect(capability.optionCount).toBe(2);
-    expect(capability.shotCount).toBe(4);
+    expect(capability.provisionalOptionCount).toBe(1);
+    expect(capability.shotCount).toBe(6);
+    expect(capability.totalUsesPerRound).toBe(4.5);
     expect(capability.weakestOption).toMatchObject({
       clubShot: 'Pitching Wedge · Full',
-      score: 53,
+      score: 43,
+      usesPerRound: 1.5,
     });
   });
 });

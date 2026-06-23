@@ -45,11 +45,14 @@ export interface DistancePriority {
 export interface CapabilityIndex {
   score: number | null;
   optionCount: number;
+  provisionalOptionCount: number;
   shotCount: number;
+  totalUsesPerRound: number;
   weakestOption: {
     configKey: string;
     clubShot: string;
     score: number;
+    usesPerRound: number;
   } | null;
 }
 
@@ -204,36 +207,50 @@ export function buildPracticePriorities({
 export function buildCapabilityIndex(input: BuildPracticePrioritiesInput): CapabilityIndex {
   const { shots, profiles } = input;
   const shotToConfig = mapShotsToConfigs(input);
-  const groupedScores = new Map<string, number[]>();
+  const grouped = new Map<string, { scores: number[]; uses: number }>();
+  const roundCount = new Set(shots.map((shot) => getShotDateKey(shot.date))).size;
 
   for (const shot of shots) {
     const score = shotQualityScore(shot.shotQuality);
     const configKey = shotToConfig.get(shot.id) ?? fallbackConfigKey(shot);
-    if (score === null || !configKey) continue;
-    groupedScores.set(configKey, [...(groupedScores.get(configKey) ?? []), score]);
+    if (!configKey) continue;
+    const current = grouped.get(configKey) ?? { scores: [], uses: 0 };
+    grouped.set(configKey, {
+      scores: score === null ? current.scores : [...current.scores, score],
+      uses: current.uses + 1,
+    });
   }
 
-  const options = [...groupedScores.entries()].map(([configKey, scores]) => {
-    const topTwo = [...scores].sort((a, b) => b - a).slice(0, 2);
+  const allOptions = [...grouped.entries()].map(([configKey, group]) => {
+    const topThree = [...group.scores].sort((a, b) => b - a).slice(0, 3);
     const profile = profileForKey(configKey, profiles);
     const clubName = PRACTICE_CLUBS.find((club) => club.id === profile.clubId)?.name ?? profile.clubId;
     return {
       configKey,
       clubShot: `${clubName} · ${getShotLabel(profile)}`,
-      score: Math.round(mean(topTwo) ?? 0),
-      shotCount: topTwo.length,
+      score: Math.round(mean(topThree) ?? 0),
+      shotCount: topThree.length,
+      usesPerRound: roundCount ? group.uses / roundCount : 0,
     };
   });
+  const options = allOptions.filter((option) => option.shotCount >= 3);
   const weakestOption = [...options].sort((a, b) => a.score - b.score)[0] ?? null;
+  const totalUsesPerRound = options.reduce((sum, option) => sum + option.usesPerRound, 0);
+  const weightedScore = totalUsesPerRound
+    ? options.reduce((sum, option) => sum + option.score * option.usesPerRound, 0) / totalUsesPerRound
+    : null;
 
   return {
-    score: options.length ? Math.round(mean(options.map((option) => option.score)) ?? 0) : null,
+    score: weightedScore === null ? null : Math.round(weightedScore),
     optionCount: options.length,
+    provisionalOptionCount: allOptions.length - options.length,
     shotCount: options.reduce((sum, option) => sum + option.shotCount, 0),
+    totalUsesPerRound: round(totalUsesPerRound),
     weakestOption: weakestOption ? {
       configKey: weakestOption.configKey,
       clubShot: weakestOption.clubShot,
       score: weakestOption.score,
+      usesPerRound: round(weakestOption.usesPerRound),
     } : null,
   };
 }
