@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Download, Pencil, Target, TrendingDown, TrendingUp } from 'lucide-react';
-import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +26,9 @@ import {
 } from '@/lib/roundReviewInsights';
 import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
-import { ClubConfig, Shot } from '@/types/golf';
+import { JOURNAL_CATEGORIES } from '@/lib/golfJournal';
+import { journalEntriesToRoundThoughts } from '@/lib/roundReviewJournal';
+import { ClubConfig, JournalEntry, Shot } from '@/types/golf';
 
 interface RoundReviewTabProps {
   shots: Shot[];
@@ -36,12 +37,14 @@ interface RoundReviewTabProps {
   roundDate: string;
   scope?: RoundReviewScope;
   thoughts?: RoundThoughts;
+  journalEntries?: JournalEntry[];
+  journalLoading?: boolean;
+  onOpenJournal?: () => void;
   onEditThoughts?: () => void;
   onReviewClubShot?: (row: RoundReviewRow) => void;
 }
 
 type ClubSortKey = 'club' | 'shot-type' | 'power' | 'target' | 'shots' | 'quality' | 'bad-miss' | 'target-success';
-type ProgressMode = 'overall' | 'tee' | 'approach' | 'short';
 type MetricDefinition = {
   key: RoundReviewMetricKey;
   label: string;
@@ -209,11 +212,27 @@ function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
   return <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>{label}<Icon className="h-3.5 w-3.5" /></button>;
 }
 
-function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditThoughts }: {
+function journalOverview(entry: JournalEntry): Array<{ label: string; value: string }> {
+  return [
+    { label: 'Comments', value: entry.overallComments },
+    { label: 'Context', value: entry.generalContext },
+    { label: 'Feel', value: entry.overallFeelRating === null ? entry.feelReason : `${entry.overallFeelRating}/5${entry.feelReason ? ` - ${entry.feelReason}` : ''}` },
+    { label: 'Best thing', value: entry.bestThingToday },
+    { label: 'Biggest frustration', value: entry.biggestFrustration },
+    { label: 'Main learning', value: entry.mainLearning },
+    { label: 'Next-round focus', value: entry.focusForNextRound },
+    { label: 'Data matched the round', value: entry.evidenceMatch ? `${entry.evidenceMatch}${entry.evidenceMatchReason ? ` - ${entry.evidenceMatchReason}` : ''}` : entry.evidenceMatchReason },
+  ].filter((item) => item.value.trim().length > 0);
+}
+
+function RoundNotesInterpretation({ thoughts, journalEntries, journalLoading, areas, story, benchmark, onOpenJournal, onEditThoughts }: {
   thoughts?: RoundThoughts;
+  journalEntries: JournalEntry[];
+  journalLoading: boolean;
   areas: RoundReviewArea[];
   story: ReturnType<typeof buildRoundStory>;
   benchmark: HcpBenchmark;
+  onOpenJournal?: () => void;
   onEditThoughts?: () => void;
 }) {
   const notes = thoughts ? THOUGHT_FIELDS
@@ -245,25 +264,48 @@ function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditTho
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle>Round Notes & Interpretation</CardTitle>
-            <CardDescription>Your notes beside a rules-based read of the same round data.</CardDescription>
+            <CardTitle>Round Journal & Interpretation</CardTitle>
+            <CardDescription>Journal entries linked to the selected rounds, beside a rules-based read of the same shot data.</CardDescription>
           </div>
-          <Button variant="outline" onClick={onEditThoughts}>Edit Round Thoughts</Button>
+          <div className="flex flex-wrap gap-2" data-pdf-ignore>
+            {onOpenJournal && <Button variant="outline" onClick={onOpenJournal}>Open Journal</Button>}
+            {onEditThoughts && <Button variant="outline" onClick={onEditThoughts}>Edit Round Thoughts</Button>}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border bg-muted/20 p-4">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My Round Notes</h4>
-          {notes.length ? (
-            <div className="mt-4 space-y-5">
-              {notes.map(note => (
-                <section key={note.key} className="space-y-1">
-                  <h5 className="font-semibold">{note.label}</h5>
-                  {note.value.split(/\n\s*\n/).map((paragraph, index) => <p key={index} className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{paragraph}</p>)}
-                </section>
-              ))}
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Journal notes by round</h4>
+          {journalLoading ? <p className="mt-4 text-sm text-muted-foreground">Loading linked journal entries...</p> : journalEntries.length ? (
+            <div className="mt-4 space-y-4">
+              {journalEntries.map((entry) => {
+                const categories = JOURNAL_CATEGORIES.map(({ key, label }) => ({ key, label, value: entry.categories[key] }))
+                  .filter(({ value }) => value.feelRating !== null || [value.whatHappened, value.likelyCause, value.tryNextTime, value.generalNotes].some((text) => text.trim()));
+                return (
+                  <article key={entry.id} className="rounded-lg border bg-background p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{entry.roundReviewId || entry.date}</Badge>
+                      {entry.courseName && <span className="text-sm font-semibold">{entry.courseName}</span>}
+                      {entry.roundType && <span className="text-xs text-muted-foreground">{entry.roundType}</span>}
+                      {entry.weatherConditions && <span className="text-xs text-muted-foreground">{entry.weatherConditions}</span>}
+                    </div>
+                    {entry.oneLineStory && <p className="mt-3 font-semibold leading-6">{entry.oneLineStory}</p>}
+                    {journalOverview(entry).map((item) => <div key={item.label} className="mt-3"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</h5><p className="mt-1 whitespace-pre-wrap text-sm leading-6">{item.value}</p></div>)}
+                    {categories.map(({ key, label, value }) => (
+                      <section key={key} className="mt-4 border-t pt-3">
+                        <h5 className="font-semibold">{label}{value.feelRating !== null ? ` - ${value.feelRating}/5` : ''}</h5>
+                        {value.whatHappened && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">What happened: </span>{value.whatHappened}</p>}
+                        {value.likelyCause && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Likely cause: </span>{value.likelyCause}</p>}
+                        {value.tryNextTime && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Try next time: </span>{value.tryNextTime}</p>}
+                        {value.generalNotes && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Notes: </span>{value.generalNotes}</p>}
+                      </section>
+                    ))}
+                  </article>
+                );
+              })}
             </div>
-          ) : <p className="mt-4 text-sm text-muted-foreground">No round notes yet. Add notes about feel, decisions, clubs, pace, or confidence to make this interpretation more useful.</p>}
+          ) : <p className="mt-4 text-sm text-muted-foreground">No journal entry is linked to the selected round set yet.</p>}
+          {notes.length > 0 && <div className="mt-5 border-t pt-4"><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saved round thoughts</h4><div className="mt-3 space-y-4">{notes.map(note => <section key={note.key}><h5 className="font-semibold">{note.label}</h5><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{note.value}</p></section>)}</div></div>}
         </div>
         <div className="rounded-xl border bg-primary/5 p-4">
           <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Interpretation & Improvements</h4>
@@ -285,7 +327,7 @@ function RoundNotesInterpretation({ thoughts, areas, story, benchmark, onEditTho
   );
 }
 
-export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, onEditThoughts, onReviewClubShot }: RoundReviewTabProps) {
+export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundDate, scope = 'round', thoughts, journalEntries = [], journalLoading = false, onOpenJournal, onEditThoughts, onReviewClubShot }: RoundReviewTabProps) {
   const { gappingReliablePercent } = useGolfData();
   const { practiceConfigs, practiceSessions } = usePracticeData();
   const profiles = useShotProfiles();
@@ -295,7 +337,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const [benchmarkHcp, setBenchmarkHcp] = useState(10);
   const [clubSort, setClubSort] = useState<ClubSortKey>('club');
   const [clubSortDirection, setClubSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [progressMode, setProgressMode] = useState<ProgressMode>('overall');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -307,7 +348,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     [shots, clubs, distanceToTargetTolerance, roundDate, gappingAssignments, scope]
   );
   const benchmark = getBenchmarkForHcp(benchmarkHcp);
-  const story = useMemo(() => buildRoundStory(review.round, benchmark, review.clubAndTypeRows, review.greenDistanceRows, thoughts), [benchmark, review, thoughts]);
+  const combinedThoughts = useMemo(() => journalEntriesToRoundThoughts(journalEntries, thoughts), [journalEntries, thoughts]);
+  const story = useMemo(() => buildRoundStory(review.round, benchmark, review.clubAndTypeRows, review.greenDistanceRows, combinedThoughts), [benchmark, combinedThoughts, review]);
   const headline = buildRoundHeadline(review.round, benchmark, review.areas);
   const metricDefinitions: MetricDefinition[] = [
     { key: 'shotQuality', label: 'Shot Quality', help: 'How well you executed the shot.', benchmark: benchmark.shotQuality, value: metrics => metrics.shotQualityIndex },
@@ -351,38 +393,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const bestDistance = [...review.greenDistanceRows].filter(row => row.round.targetSuccessPct !== null).sort((a, b) => (b.round.targetSuccessPct ?? 0) - (a.round.targetSuccessPct ?? 0))[0];
   const weakDistance = [...review.greenDistanceRows].filter(row => row.round.targetSuccessPct !== null).sort((a, b) => (a.round.targetSuccessPct ?? 0) - (b.round.targetSuccessPct ?? 0))[0];
   const benchmarkOptions = Object.keys(HCP_BENCHMARKS).map(Number).sort((a, b) => b - a);
-  const progressLines = progressMode === 'tee'
-    ? [
-        { key: 'teeShotQuality', label: 'Tee Shot Quality', color: 'hsl(var(--primary))' },
-        { key: 'teeTargetSuccess', label: 'Tee Target Success', color: '#0ea5e9' },
-        { key: 'teeSafeShotRate', label: 'Tee Safe Shot Rate', color: '#16a34a' },
-      ]
-    : progressMode === 'approach'
-      ? [
-          { key: 'approachShotQuality', label: 'Green Target Quality', color: 'hsl(var(--primary))' },
-          { key: 'approachTargetSuccess', label: 'Green Target Success', color: '#0ea5e9' },
-          { key: 'approachSafeShotRate', label: 'Safe Shot Rate', color: '#16a34a' },
-        ]
-      : progressMode === 'short'
-        ? [
-            { key: 'shortGameShotQuality', label: 'Short Game Quality', color: 'hsl(var(--primary))' },
-            { key: 'shortGameScoringZoneSuccess', label: 'Scoring Zone Success', color: '#d97706' },
-            { key: 'shortGameSafeShotRate', label: 'Safe Shot Rate', color: '#16a34a' },
-          ]
-        : [
-            { key: 'shotQuality', label: 'Shot Quality', color: 'hsl(var(--primary))' },
-            { key: 'targetSuccess', label: 'Target Success', color: '#0ea5e9' },
-            { key: 'safeShotRate', label: 'Safe Shot Rate', color: '#16a34a' },
-            { key: 'scoringZoneSuccess', label: 'Scoring Zone Success', color: '#d97706' },
-          ];
-  const progressReference = progressMode === 'tee'
-    ? benchmark.teeShotQuality
-    : progressMode === 'approach'
-      ? benchmark.greenTargetQuality
-      : progressMode === 'short'
-        ? benchmark.scoringZoneSuccess
-        : benchmark.shotQuality;
-
   const exportToPDF = async () => {
     if (!reportRef.current) return;
 
@@ -486,29 +496,6 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
           <div className="grid gap-4 lg:grid-cols-3"><StoryCard title="What worked" items={story.worked} /><StoryCard title="What cost shots" items={story.cost} /><StoryCard title="What to practise" items={story.practise} /></div>
         </section>
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div><CardTitle>Progress Over Time</CardTitle><CardDescription>Each point represents {review.progress.length === 10 ? 'one-tenth' : 'one block'} of your recorded rounds, from earliest to latest. Higher is better.</CardDescription></div>
-              <div className="flex flex-wrap gap-2">
-                {([['overall', 'Overall'], ['tee', 'Tee / Driving'], ['approach', 'Approach'], ['short', 'Short Game']] as Array<[ProgressMode, string]>).map(([mode, label]) => <Button key={mode} size="sm" variant={progressMode === mode ? 'default' : 'outline'} onClick={() => setProgressMode(mode)}>{label}</Button>)}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {review.progress.length < 2 ? <div className="py-12 text-center text-muted-foreground">Not enough rounds yet to show progress over time.</div> : (
-              <ResponsiveContainer width="100%" height={340}>
-                <LineChart data={review.progress} margin={{ top: 12, right: 20, left: -10, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" /><XAxis dataKey="label" /><YAxis domain={[0, 100]} unit="%" />
-                  <ChartTooltip formatter={(value: number) => `${Math.round(value)}%`} /><Legend />
-                  <ReferenceLine y={progressReference} stroke="hsl(var(--primary))" strokeDasharray="6 4" label={`${benchmarkHcp} HCP target`} />
-                  {progressLines.map(line => <Line key={line.key} type="monotone" dataKey={line.key} name={line.label} stroke={line.color} strokeWidth={line.key.toLowerCase().includes('quality') ? 2.5 : 2} connectNulls />)}
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
         <AreaBreakdown areas={review.areas} benchmark={benchmark} />
 
         <section className="space-y-4">
@@ -569,7 +556,16 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
           </CardContent></Card>
         </section>
 
-        {scope === 'round' && <RoundNotesInterpretation thoughts={thoughts} areas={review.areas} story={story} benchmark={benchmark} onEditThoughts={onEditThoughts} />}
+        <RoundNotesInterpretation
+          thoughts={thoughts}
+          journalEntries={journalEntries}
+          journalLoading={journalLoading}
+          areas={review.areas}
+          story={story}
+          benchmark={benchmark}
+          onOpenJournal={onOpenJournal}
+          onEditThoughts={scope === 'round' ? onEditThoughts : undefined}
+        />
       </div>
     </TooltipProvider>
   );

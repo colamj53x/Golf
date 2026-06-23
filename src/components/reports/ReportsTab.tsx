@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, Ruler, Layers, Calendar, GitCompare } from 'lucide-react';
+import { BarChart3, Ruler, Layers, Calendar, GitCompare, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RoundProgressReport } from './RoundProgressReport';
 
 const ReportsByClub = lazy(async () => ({
   default: (await import('./ReportsByClub')).ReportsByClub,
@@ -27,12 +28,16 @@ const ReportLoader = () => (
 );
 
 export function ReportsTab() {
-  const [activeReport, setActiveReport] = useState('club');
+  const [activeReport, setActiveReport] = useState('progress');
 
   return (
     <div className="space-y-6 animate-fade-in">
       <Tabs value={activeReport} onValueChange={setActiveReport}>
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+          <TabsTrigger value="progress" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Progress</span>
+          </TabsTrigger>
           <TabsTrigger value="club" className="gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">By Club</span>
@@ -55,6 +60,9 @@ export function ReportsTab() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="progress" className="mt-6">
+          <RoundProgressReport />
+        </TabsContent>
         <TabsContent value="club" className="mt-6">
           <Suspense fallback={<ReportLoader />}>
             <ReportsByClub />

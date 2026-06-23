@@ -127,7 +127,7 @@ const Index = () => {
           {activeTab === 'review' && <>
             <SectionTabs value={reviewTab} values={reviewTabs} labels={{ today: 'Today', rounds: 'Round Review', journal: 'Journal', advanced: 'Advanced Reports' }} onChange={value => navigate(path('review', value))} />
             {reviewTab === 'today' && <AnalysisOverview onOpenPractice={() => navigate('/practice')} onOpenLatestRound={() => navigate('/review/rounds')} />}
-            {reviewTab === 'rounds' && <DashboardTab showOverview={false} initialRoundDate={selectedRoundDate} onOpenUpload={() => navigate('/settings/upload')} />}
+            {reviewTab === 'rounds' && <DashboardTab showOverview={false} initialRoundDate={selectedRoundDate} onOpenUpload={() => navigate('/settings/upload')} onOpenJournal={() => navigate('/review/journal')} />}
             {reviewTab === 'journal' && <JournalTab />}
             {reviewTab === 'advanced' && <div className="space-y-6"><ReportsTab /><DashboardTab initialView="overview" showLatestRound={false} /></div>}
           </>}

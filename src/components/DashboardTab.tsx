@@ -19,7 +19,7 @@ import {
   formatDistance
 } from '@/lib/golfCalculations';
 import { METRIC_CATEGORIES, SHOT_QUALITY_LEVELS } from '@/lib/metricCategories';
-import { ProcessedShot } from '@/types/golf';
+import { JournalEntry, ProcessedShot } from '@/types/golf';
 import { calculateClubRatings } from '@/lib/clubRatings';
 import { DISTANCE_FILTER_OPTIONS, filterShotsByTargetDistance } from '@/lib/distanceFilters';
 import { RoundReviewTab } from '@/components/dashboard/RoundReviewTab';
@@ -32,9 +32,12 @@ import {
   roundReflectionDraftsEqual,
   saveRoundReflectionLocalDraft,
 } from '@/lib/roundReflectionDrafts';
+import { loadJournalEntries } from '@/lib/golfJournalRepository';
+import { journalEntriesForRounds } from '@/lib/roundReviewJournal';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
+  onOpenJournal?: () => void;
   initialView?: 'latest-round' | 'overview';
   initialRoundDate?: string;
   showLatestRound?: boolean;
@@ -56,6 +59,7 @@ function reviewScopeLabel(scope: RoundReviewScope): string {
 
 export function DashboardTab({
   onOpenUpload,
+  onOpenJournal,
   initialView = 'latest-round',
   initialRoundDate = '',
   showLatestRound = true,
@@ -92,11 +96,36 @@ export function DashboardTab({
   const [reviewShotIds, setReviewShotIds] = useState<string[] | null>(null);
   const [reviewShotTitle, setReviewShotTitle] = useState<string | null>(null);
   const [roundThoughtsEditRequest, setRoundThoughtsEditRequest] = useState(0);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [journalLoading, setJournalLoading] = useState(false);
   const userId = user?.id ?? null;
 
   useEffect(() => {
     if (initialRoundDate) setSelectedRoundDate(initialRoundDate);
   }, [initialRoundDate]);
+
+  useEffect(() => {
+    if (!userId) {
+      setJournalEntries([]);
+      return;
+    }
+    let cancelled = false;
+    setJournalLoading(true);
+    void loadJournalEntries(userId)
+      .then((entries) => {
+        if (!cancelled) setJournalEntries(entries);
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) console.error('Failed to load round review journal entries:', error);
+        if (!cancelled) setJournalEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setJournalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
   const shotRoundReviewDateKeys = useMemo(() => [...new Set(
     shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date))
   )].sort((a, b) => b.localeCompare(a)), [shots]);
@@ -355,6 +384,7 @@ export function DashboardTab({
       : []
     : shots.filter(shot => !isPuttingShot(shot) && activeRoundReviewDates.has(getShotDateKey(shot.date)));
   const activeRoundShotCount = activeReviewShots.length;
+  const activeJournalEntries = journalEntriesForRounds(journalEntries, [...activeRoundReviewDates]);
   const reviewDialogShots = reviewShotIds
     ? activeReviewShots.filter(shot => reviewShotIds.includes(shot.id))
     : activeReviewShots;
@@ -561,6 +591,9 @@ export function DashboardTab({
               roundDate={activeRoundDateKey ?? ''}
               scope={roundReviewScope}
               thoughts={roundReviewScope === 'round' ? roundReflectionDraft : undefined}
+              journalEntries={activeJournalEntries}
+              journalLoading={journalLoading}
+              onOpenJournal={onOpenJournal}
               onEditThoughts={() => {
                 setRoundThoughtsEditRequest(request => request + 1);
                 requestAnimationFrame(() => document.getElementById('round-thoughts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
