@@ -204,6 +204,7 @@ describe('buildRoundReview', () => {
     expect(last5.scope).toBe('last5');
     expect(last5.label).toBe('Last 5 Rounds');
     expect(last5.round.shotCount).toBe(5);
+    expect(last5.selectedRoundDates).toEqual(['2026-05-31', '2026-05-30', '2026-05-29', '2026-05-28', '2026-05-27']);
     expect(last10.scope).toBe('last10');
     expect(last10.label).toBe('Last 10 Rounds');
     expect(last10.round.shotCount).toBe(10);
@@ -217,6 +218,7 @@ describe('buildRoundReview', () => {
 
     expect(review.scope).toBe('all');
     expect(review.round.shotCount).toBe(2);
+    expect(review.selectedRoundDates).toEqual(['2026-05-31', '2026-05-30']);
     expect(review.last5.shotCount).toBe(0);
     expect(review.recentThird.shotCount).toBe(0);
   });

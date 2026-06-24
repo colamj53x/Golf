@@ -447,6 +447,8 @@ export function GolfDataProvider({ children }: { children: ReactNode }) {
           targetIntent: row.target_intent || '',
           holeNumber: row.hole_number ?? legacySequence.holeNumber,
           shotNumber: row.shot_number ?? legacySequence.shotNumber,
+          holePar: row.hole_par ?? null,
+          holeScore: row.hole_score ?? null,
           target: row.target || 0,
           total: row.total || 0,
           side: row.offline || 0,

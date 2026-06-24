@@ -475,12 +475,14 @@ export function parseCSV(csvContent: string): CSVParseResult {
     clubType: column(['clubtype']),
     holeNumber: column(['hole', 'holenumber']),
     shotNumber: column(['shot', 'shotnumber']),
+    holePar: column(['holepar', 'par']),
+    holeScore: column(['holescore', 'score']),
   };
 
   const shots: Shot[] = [];
   const warnings: { row: number; issue: string }[] = [];
 
-  const optionalIndexes = ['shotNotes', 'trajectory', 'shape', 'clubType', 'holeNumber', 'shotNumber'];
+  const optionalIndexes = ['shotNotes', 'trajectory', 'shape', 'clubType', 'holeNumber', 'shotNumber', 'holePar', 'holeScore'];
   if (Object.entries(indexes).some(([key, index]) => !optionalIndexes.includes(key) && index === -1)) {
     return {
       shots: [],
@@ -512,6 +514,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
       const clubType = read(indexes.clubType);
       const holeNumber = read(indexes.holeNumber);
       const shotNumber = read(indexes.shotNumber);
+      const holePar = read(indexes.holePar);
+      const holeScore = read(indexes.holeScore);
       const shotNotes = read(indexes.shotNotes) || trajectory || shape;
       
       const normalizedClub = club.trim().toLowerCase();
@@ -537,6 +541,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
         targetIntent: '',
         holeNumber: holeNumber ? parseNumeric(holeNumber) : null,
         shotNumber: shotNumber ? parseNumeric(shotNumber) : null,
+        holePar: holePar ? parseNumeric(holePar) : null,
+        holeScore: holeScore ? parseNumeric(holeScore) : null,
         target: parseNumeric(target),
         total: parseNumeric(distanceHit),
         side: estimateDispersion(dispersion, shotNotes, shape),

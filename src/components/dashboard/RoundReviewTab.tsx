@@ -28,6 +28,8 @@ import { useShotClassificationRules } from '@/lib/shotClassificationRules';
 import { useShotProfiles } from '@/lib/shotProfiles';
 import { JOURNAL_CATEGORIES } from '@/lib/golfJournal';
 import { journalEntriesToRoundThoughts } from '@/lib/roundReviewJournal';
+import { buildHoleQualityModel, type HoleQualityModel } from '@/lib/holeQuality';
+import { describeHandicapEquivalent } from '@/lib/analysisSynthesis';
 import { ClubConfig, JournalEntry, Shot } from '@/types/golf';
 
 interface RoundReviewTabProps {
@@ -205,6 +207,90 @@ function AreaBreakdown({ areas, benchmark }: { areas: RoundReviewArea[]; benchma
   );
 }
 
+function formatSigned(value: number | null): string {
+  if (value === null) return '-';
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded > 0 ? '+' : ''}${rounded}`;
+}
+
+function HoleQualityReview({ model, scope }: { model: HoleQualityModel; scope: RoundReviewScope }) {
+  const holeLabel = (hole: NonNullable<HoleQualityModel['bestHole']>) => (
+    `${scope === 'round' ? '' : `${hole.roundDate} · `}Hole ${hole.holeNumber}${hole.holePar ? ` · Par ${hole.holePar}` : ''}`
+  );
+
+  if (model.holes.length === 0) {
+    return (
+      <Card>
+        <CardHeader><CardTitle>Hole Quality</CardTitle><CardDescription>Average execution quality for each hole.</CardDescription></CardHeader>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          No hole sequence is stored for this round set yet. Re-upload the source CSV with Hole and Shot columns to unlock hole analysis.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold">Hole Quality</h3>
+        <p className="text-sm text-muted-foreground">Each hole is weighted equally. Hole SQI is the average quality of its rated, non-putting shots.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Average Hole SQI</div><div className="mt-1 text-2xl font-bold">{model.averageHoleSqi === null ? '-' : Math.round(model.averageHoleSqi)}</div><div className="text-xs text-muted-foreground">{describeHandicapEquivalent(model.averageHoleSqi)}</div></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Holes at target</div><div className="mt-1 text-2xl font-bold">{model.atTargetPct === null ? '-' : `${Math.round(model.atTargetPct)}%`}</div><div className="text-xs text-muted-foreground">{model.atTargetCount} / {model.ratedHoleCount} at {model.targetHandicap} HCP ({model.targetScore} SQI)</div></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Holes analysed</div><div className="mt-1 text-2xl font-bold">{model.ratedHoleCount}</div><div className="text-xs text-muted-foreground">{Math.round(model.ratedCoveragePct)}% rated coverage</div></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Best hole</div><div className="mt-1 font-semibold">{model.bestHole ? holeLabel(model.bestHole) : '-'}</div><div className="text-sm">{model.bestHole?.sqi === null || !model.bestHole ? '-' : `${Math.round(model.bestHole.sqi)} SQI`}</div></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Weakest hole</div><div className="mt-1 font-semibold">{model.weakestHole ? holeLabel(model.weakestHole) : '-'}</div><div className="text-sm">{model.weakestHole?.sqi === null || !model.weakestHole ? '-' : `${Math.round(model.weakestHole.sqi)} SQI`}</div></CardContent></Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Hole-quality distribution</CardTitle><CardDescription>Percentage of rated holes in each execution band.</CardDescription></CardHeader>
+          <CardContent className="space-y-3">
+            {model.distribution.map((band) => (
+              <div key={band.key} className="grid grid-cols-[150px_1fr_72px] items-center gap-3 text-sm">
+                <div className="font-medium">{band.label}</div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${band.holePct}%` }} /></div>
+                <div className="text-right text-muted-foreground">{band.holeCount} · {Math.round(band.holePct)}%</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Quality by par</CardTitle><CardDescription>Execution and scoring outcome separated for each par.</CardDescription></CardHeader>
+          <CardContent>
+            {model.byPar.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Hole par is not stored for these rounds yet. Re-upload them with Replace matching round dates after the database update.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[650px] text-sm">
+                  <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="py-2">Par</th><th>Holes</th><th>Avg SQI</th><th>At target</th><th>Tracked shots</th><th>Avg score</th><th>To par</th></tr></thead>
+                  <tbody>{model.byPar.map((row) => <tr key={row.par} className="border-b last:border-0"><td className="py-3 font-semibold">Par {row.par}</td><td>{row.holeCount}</td><td>{row.averageSqi === null ? '-' : Math.round(row.averageSqi)}</td><td>{row.atTargetPct === null ? '-' : `${Math.round(row.atTargetPct)}%`}</td><td>{row.averageShotCount.toFixed(1)}</td><td>{row.averageHoleScore === null ? '-' : row.averageHoleScore.toFixed(1)}</td><td>{formatSigned(row.averageToPar)}</td></tr>)}</tbody>
+                </table>
+              </div>
+            )}
+            {model.byPar.length > 0 && model.holesWithParCount < model.holes.length && <p className="mt-3 text-xs text-muted-foreground">Par is available for {model.holesWithParCount} of {model.holes.length} holes; missing holes are excluded from this split.</p>}
+          </CardContent>
+        </Card>
+      </div>
+
+      {scope === 'round' && (
+        <Card>
+          <CardHeader><CardTitle>Hole detail</CardTitle><CardDescription>Execution quality and scoring result for each hole in this round.</CardDescription></CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="py-2">Hole</th><th>Par</th><th>Hole SQI</th><th>Quality</th><th>Rated shots</th><th>Target</th><th>Score</th><th>To par</th></tr></thead>
+              <tbody>{model.holes.map((hole) => <tr key={hole.key} className="border-b last:border-0"><td className="py-3 font-semibold">{hole.holeNumber}</td><td>{hole.holePar ?? '-'}</td><td>{hole.sqi === null ? '-' : Math.round(hole.sqi)}</td><td>{describeHandicapEquivalent(hole.sqi)}</td><td>{hole.ratedShotCount} / {hole.shotCount}</td><td>{hole.sqi === null ? '-' : hole.sqi >= model.targetScore ? 'At target' : 'Below'}</td><td>{hole.holeScore ?? '-'}</td><td>{formatSigned(hole.scoreToPar)}</td></tr>)}</tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
 function SortableHeader({ label, sortKey, activeSort, direction, onSort }: {
   label: string; sortKey: ClubSortKey; activeSort: ClubSortKey; direction: 'asc' | 'desc'; onSort: (key: ClubSortKey) => void;
 }) {
@@ -350,6 +436,10 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
   const benchmark = getBenchmarkForHcp(benchmarkHcp);
   const combinedThoughts = useMemo(() => journalEntriesToRoundThoughts(journalEntries, thoughts), [journalEntries, thoughts]);
   const story = useMemo(() => buildRoundStory(review.round, benchmark, review.clubAndTypeRows, review.greenDistanceRows, combinedThoughts), [benchmark, combinedThoughts, review]);
+  const holeQuality = useMemo(
+    () => buildHoleQualityModel(shots, review.selectedRoundDates, benchmarkHcp),
+    [benchmarkHcp, review.selectedRoundDates, shots],
+  );
   const headline = buildRoundHeadline(review.round, benchmark, review.areas);
   const metricDefinitions: MetricDefinition[] = [
     { key: 'shotQuality', label: 'Shot Quality', help: 'How well you executed the shot.', benchmark: benchmark.shotQuality, value: metrics => metrics.shotQualityIndex },
@@ -497,6 +587,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         </section>
 
         <AreaBreakdown areas={review.areas} benchmark={benchmark} />
+
+        <HoleQualityReview model={holeQuality} scope={scope} />
 
         <section className="space-y-4">
           <div><h3 className="text-xl font-semibold">Distance / Scoring Zone Review</h3><p className="text-sm text-muted-foreground">Where green-target opportunities were converted and where they leaked.</p></div>

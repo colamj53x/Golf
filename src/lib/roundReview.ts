@@ -82,6 +82,7 @@ export interface RoundReviewArea {
 export interface RoundReviewModel {
   scope: RoundReviewScope;
   label: string;
+  selectedRoundDates: string[];
   round: RoundReviewMetrics;
   last5: RoundReviewMetrics;
   previous5: RoundReviewMetrics;
@@ -473,6 +474,7 @@ export function buildRoundReview(
       : aggregateRoundCount
         ? `Last ${Math.min(aggregateRoundCount, roundDates.length)} Rounds`
         : selectedDate,
+    selectedRoundDates: [...selectedDates],
     round: reviewMetrics(selected, getTarget),
     last5: reviewMetrics(last5, getTarget),
     previous5: reviewMetrics(previous5, getTarget),

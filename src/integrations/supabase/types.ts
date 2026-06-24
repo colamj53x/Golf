@@ -506,6 +506,8 @@ export type Database = {
           end_lie: string | null
           id: string
           hole_number: number | null
+          hole_par: number | null
+          hole_score: number | null
           notes: string | null
           offline: number | null
           shot_date: string | null
@@ -531,6 +533,8 @@ export type Database = {
           end_lie?: string | null
           id?: string
           hole_number?: number | null
+          hole_par?: number | null
+          hole_score?: number | null
           notes?: string | null
           offline?: number | null
           shot_date?: string | null
@@ -556,6 +560,8 @@ export type Database = {
           end_lie?: string | null
           id?: string
           hole_number?: number | null
+          hole_par?: number | null
+          hole_score?: number | null
           notes?: string | null
           offline?: number | null
           shot_date?: string | null

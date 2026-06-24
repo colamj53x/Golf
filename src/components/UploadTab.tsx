@@ -40,6 +40,8 @@ type UploadReviewRow = {
   targetIntent: string;
   holeNumber: number | null;
   shotNumber: number | null;
+  holePar: number | null;
+  holeScore: number | null;
   accepted: boolean;
   target: number;
   total: number;
@@ -73,6 +75,8 @@ type UploadShotInsert = {
   target_intent: string;
   hole_number: number | null;
   shot_number: number | null;
+  hole_par: number | null;
+  hole_score: number | null;
   target: number;
   total: number;
   offline: number;
@@ -170,6 +174,8 @@ function buildReviewRow(shot: Shot): UploadReviewRow {
     targetIntent,
     holeNumber: shot.holeNumber,
     shotNumber: shot.shotNumber,
+    holePar: shot.holePar ?? null,
+    holeScore: shot.holeScore ?? null,
     accepted: false,
     target: shot.target,
     total: shot.total,
@@ -223,7 +229,11 @@ export function UploadTab() {
 
       setPendingUpload({
         fileName: parsed.fileName,
-        rows: parsed.rows,
+        rows: parsed.rows.map((row) => ({
+          ...row,
+          holePar: row.holePar ?? null,
+          holeScore: row.holeScore ?? null,
+        })),
         skippedCount: parsed.skippedCount,
       });
       setReplaceAll(parsed.replaceAll);
@@ -412,6 +422,8 @@ export function UploadTab() {
         target_intent: row.targetIntent,
         hole_number: row.holeNumber,
         shot_number: row.shotNumber,
+        hole_par: row.holePar,
+        hole_score: row.holeScore,
         target: Math.max(0, Math.min(600, row.target)),
         total: Math.max(0, Math.min(600, row.total)),
         offline: Math.max(-200, Math.min(200, row.side)),
@@ -425,17 +437,10 @@ export function UploadTab() {
         user_id: user.id,
       }));
 
-      const reviewedShotsWithoutSequence = reviewedShots.map(({ hole_number, shot_number, ...reviewedShot }) => ({
-        ...reviewedShot,
-        notes: encodeRoundShotSequence(reviewedShot.notes, hole_number, shot_number),
-      }));
-      const legacyShots = reviewedShotsWithoutSequence.map(({ shot_family, swing_effort, target_intent, ...legacyShot }) => legacyShot);
       const relevantDates = [...new Set(reviewedShots.map((shot) => shot.shot_date))];
       let duplicateCount = 0;
 
       let shotsToInsert = reviewedShots;
-      let reviewedShotsWithoutSequenceToInsert = reviewedShotsWithoutSequence;
-      let legacyShotsToInsert = legacyShots;
 
       if (!replaceAll && replaceMatchingRounds) {
         const { error: deleteRoundsError } = await supabase
@@ -462,10 +467,8 @@ export function UploadTab() {
         }
 
         const filteredReviewedShots: UploadShotInsert[] = [];
-        const filteredReviewedShotsWithoutSequence: typeof reviewedShotsWithoutSequence = [];
-        const filteredLegacyShots: typeof legacyShots = [];
 
-        reviewedShots.forEach((shot, index) => {
+        reviewedShots.forEach((shot) => {
           const fingerprint = getUploadShotFingerprint(shot);
           const remainingCount = existingCounts.get(fingerprint) ?? 0;
 
@@ -476,61 +479,55 @@ export function UploadTab() {
           }
 
           filteredReviewedShots.push(shot);
-          filteredReviewedShotsWithoutSequence.push(reviewedShotsWithoutSequence[index]);
-          filteredLegacyShots.push(legacyShots[index]);
         });
 
         shotsToInsert = filteredReviewedShots;
-        reviewedShotsWithoutSequenceToInsert = filteredReviewedShotsWithoutSequence;
-        legacyShotsToInsert = filteredLegacyShots;
       }
 
       const batchSize = 100;
       let insertedCount = 0;
-      let usedSequenceShotInsert = true;
-      let usedLegacyShotInsert = false;
+      let insertMode: 'modern' | 'without-hole-data' | 'without-sequence' | 'legacy' = 'modern';
 
       for (let index = 0; index < shotsToInsert.length; index += batchSize) {
         const modernBatch = shotsToInsert.slice(index, index + batchSize);
-        const reviewedWithoutSequenceBatch = reviewedShotsWithoutSequenceToInsert.slice(index, index + batchSize);
-        const legacyBatch = legacyShotsToInsert.slice(index, index + batchSize);
+        const withoutHoleDataBatch = modernBatch.map(({ hole_par, hole_score, ...shot }) => shot);
+        const withoutSequenceBatch = withoutHoleDataBatch.map(({ hole_number, shot_number, ...shot }) => ({
+          ...shot,
+          notes: encodeRoundShotSequence(shot.notes, hole_number, shot_number),
+        }));
+        const legacyBatch = withoutSequenceBatch.map(({ shot_family, swing_effort, target_intent, ...shot }) => shot);
+        const variants = [
+          { mode: 'modern' as const, batch: modernBatch },
+          { mode: 'without-hole-data' as const, batch: withoutHoleDataBatch },
+          { mode: 'without-sequence' as const, batch: withoutSequenceBatch },
+          { mode: 'legacy' as const, batch: legacyBatch },
+        ];
+        const startMode = variants.findIndex((variant) => variant.mode === insertMode);
+        let inserted = false;
 
-        const preferredBatch = usedLegacyShotInsert
-          ? legacyBatch
-          : usedSequenceShotInsert
-            ? modernBatch
-            : reviewedWithoutSequenceBatch;
-        const { error } = await supabase.from('shots').insert(preferredBatch);
-        if (error) {
-          if (usedSequenceShotInsert && isMissingReviewedUploadSchemaError(error)) {
-            const { error: reviewedRetryError } = await supabase.from('shots').insert(reviewedWithoutSequenceBatch);
-            if (!reviewedRetryError) {
-              usedSequenceShotInsert = false;
-            } else if (isMissingReviewedUploadSchemaError(reviewedRetryError)) {
-              const { error: legacyRetryError } = await supabase.from('shots').insert(legacyBatch);
-              if (legacyRetryError) throw legacyRetryError;
-              usedLegacyShotInsert = true;
-            } else {
-              throw reviewedRetryError;
-            }
-          } else if (!usedLegacyShotInsert && isMissingReviewedUploadSchemaError(error)) {
-            const { error: legacyRetryError } = await supabase.from('shots').insert(legacyBatch);
-            if (legacyRetryError) throw legacyRetryError;
-            usedLegacyShotInsert = true;
-          } else {
-            throw error;
+        for (const variant of variants.slice(startMode)) {
+          const { error } = await supabase.from('shots').insert(variant.batch);
+          if (!error) {
+            insertMode = variant.mode;
+            inserted = true;
+            break;
           }
+          if (!isMissingReviewedUploadSchemaError(error)) throw error;
         }
+
+        if (!inserted) throw new Error('The reviewed upload could not be saved with the available database fields.');
 
         insertedCount += modernBatch.length;
       }
 
       const skippedMsg = pendingUpload.skippedCount > 0 ? ` (${pendingUpload.skippedCount} invalid shots skipped)` : '';
       const duplicateMsg = duplicateCount > 0 ? ` ${duplicateCount} duplicate shot${duplicateCount === 1 ? '' : 's'} already existed and were skipped.` : '';
-      const legacyMsg = usedLegacyShotInsert
+      const legacyMsg = insertMode === 'legacy'
         ? ' Saved the reviewed shots using the existing database fields.'
-        : !usedSequenceShotInsert
+        : insertMode === 'without-sequence'
           ? ' Saved classifications, but shots-to-green will need the sequence database update before it can be calculated.'
+          : insertMode === 'without-hole-data'
+            ? ' Saved the round, but par splits will need the hole par database update before they can be calculated.'
           : '';
       setUploadResult({
         success: true,
@@ -790,7 +787,9 @@ export function UploadTab() {
                               ))}
                             </SelectContent>
                           </Select>
-                          <div className="text-xs text-muted-foreground">{row.roundDate}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.roundDate}{row.holeNumber !== null ? ` · Hole ${row.holeNumber}` : ''}{row.holePar !== null ? ` · Par ${row.holePar}` : ''}
+                          </div>
                         </td>
                         <td className="px-3 py-3">
                           <div className="font-medium">{row.predictedLabel}</div>

@@ -41,6 +41,8 @@ describe('parseCSV', () => {
       total: 116.16,
       holeNumber: 10,
       shotNumber: 1,
+      holePar: 3,
+      holeScore: 4,
     });
   });
 });
