@@ -12,7 +12,7 @@ import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
 import { formatPercent, getShotDateKey } from '@/lib/golfCalculations';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
-import { buildRoundReview, RoundReviewArea, RoundReviewMetrics, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
+import { buildRoundReview, isPuttingShot, RoundReviewArea, RoundReviewMetrics, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
 import {
   BenchmarkStatus,
   buildRoundHeadline,
