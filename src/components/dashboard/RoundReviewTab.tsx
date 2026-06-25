@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useGolfData } from '@/context/GolfDataContext';
 import { usePracticeData } from '@/context/PracticeDataContext';
 import { usePracticeShotsBySessions } from '@/hooks/usePracticeShotsBySessions';
-import { formatPercent } from '@/lib/golfCalculations';
+import { formatPercent, getShotDateKey } from '@/lib/golfCalculations';
 import { buildCourseShotGappingAssignments } from '@/lib/gapping';
 import { buildRoundReview, RoundReviewArea, RoundReviewMetrics, RoundReviewRow, RoundReviewScope } from '@/lib/roundReview';
 import {
@@ -210,11 +210,12 @@ function AreaBreakdown({ areas, benchmark }: { areas: RoundReviewArea[]; benchma
 function formatHoleTargetSummary(model: HoleQualityModel): string {
   const { underCount, atCount, overCount, ratedHoleCount } = model.targetSummary;
   if (!ratedHoleCount) return 'Not enough data';
-  return `${underCount}/${atCount}/${overCount}`;
+  return `${Math.round((underCount / ratedHoleCount) * 100)}% / ${Math.round((atCount / ratedHoleCount) * 100)}% / ${Math.round((overCount / ratedHoleCount) * 100)}%`;
 }
 
-function HoleTargetSummaryCard({ model }: { model: HoleQualityModel }) {
+function HoleTargetSummaryCard({ model, last5, previous5, season }: { model: HoleQualityModel; last5?: HoleQualityModel; previous5?: HoleQualityModel; season?: HoleQualityModel }) {
   const { underCount, atCount, overCount, ratedHoleCount } = model.targetSummary;
+  const targetPct = model.atTargetPct;
   return (
     <Card>
       <CardContent className="pt-4">
@@ -223,6 +224,13 @@ function HoleTargetSummaryCard({ model }: { model: HoleQualityModel }) {
         <div className="text-xs text-muted-foreground">
           {ratedHoleCount ? `${underCount} under · ${atCount} at · ${overCount} over ${model.targetHandicap} HCP target` : 'Needs rated hole data'}
         </div>
+        {(last5 || previous5 || season) && (
+          <div className="mt-3 grid gap-1">
+            {last5 && <Trend current={targetPct} comparison={last5.atTargetPct} label="Last 5" />}
+            {previous5 && <Trend current={targetPct} comparison={previous5.atTargetPct} label="Previous 5" />}
+            {season && <span className="text-xs text-muted-foreground">Season avg: {formatMetric(season.atTargetPct, true)}</span>}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -438,6 +446,20 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
     () => buildHoleQualityModel(shots, review.selectedRoundDates, benchmarkHcp),
     [benchmarkHcp, review.selectedRoundDates, shots],
   );
+  const holeQualityComparisons = useMemo(() => {
+    const selectedBoundary = review.selectedRoundDates[0] ?? roundDate;
+    const allRoundDates = [...new Set(shots.filter(shot => !isPuttingShot(shot)).map(shot => getShotDateKey(shot.date)))]
+      .filter(date => !selectedBoundary || date <= selectedBoundary)
+      .sort((a, b) => b.localeCompare(a));
+    const selectedIndex = selectedBoundary ? Math.max(0, allRoundDates.indexOf(selectedBoundary)) : 0;
+    const last5Dates = allRoundDates.slice(selectedIndex, selectedIndex + 5);
+    const previous5Dates = allRoundDates.slice(selectedIndex + 5, selectedIndex + 10);
+    return {
+      last5: buildHoleQualityModel(shots, last5Dates, benchmarkHcp),
+      previous5: buildHoleQualityModel(shots, previous5Dates, benchmarkHcp),
+      season: buildHoleQualityModel(shots, allRoundDates, benchmarkHcp),
+    };
+  }, [benchmarkHcp, review.selectedRoundDates, roundDate, shots]);
   const headline = buildRoundHeadline(review.round, benchmark, review.areas);
   const metricDefinitions: MetricDefinition[] = [
     { key: 'shotQuality', label: 'Shot Quality', help: 'How well you executed the shot.', benchmark: benchmark.shotQuality, value: metrics => metrics.shotQualityIndex },
@@ -576,7 +598,7 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
           </div>
           <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {metricDefinitions.map(definition => <HeroMetricCard key={definition.key} definition={definition} round={review.round} last5={review.last5} previous5={review.previous5} season={review.season} />)}
-            <HoleTargetSummaryCard model={holeQuality} />
+            <HoleTargetSummaryCard model={holeQuality} last5={holeQualityComparisons.last5} previous5={holeQualityComparisons.previous5} season={holeQualityComparisons.season} />
           </div>
         </section>
 

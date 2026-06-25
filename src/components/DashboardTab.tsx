@@ -34,6 +34,7 @@ import {
 } from '@/lib/roundReflectionDrafts';
 import { loadJournalEntries } from '@/lib/golfJournalRepository';
 import { journalEntriesForRounds } from '@/lib/roundReviewJournal';
+import { buildHoleQualityModel } from '@/lib/holeQuality';
 
 interface DashboardTabProps {
   onOpenUpload?: () => void;
@@ -259,6 +260,11 @@ export function DashboardTab({
     };
 
     const overall = calculateMetrics(processed, currentConfig || undefined);
+    const holeQuality = {
+      lastRound: buildHoleQualityModel(shots, [...lastRoundDateKeys], 15),
+      last5Rounds: buildHoleQualityModel(shots, [...last5RoundDateKeys], 15),
+      overall: buildHoleQualityModel(shots, latestRoundDateKeys, 15),
+    };
 
     // Calculate club ratings
     const ratings = calculateClubRatings(processed, currentConfig || undefined);
@@ -269,6 +275,7 @@ export function DashboardTab({
       overall,
       lastRound,
       last5Rounds,
+      holeQuality,
       roundDateKeys: latestRoundDateKeys,
       selectedRoundDateKey,
       distanceToTargetEnabled: currentConfig?.distanceToTargetEnabled ?? false,
@@ -367,7 +374,7 @@ export function DashboardTab({
     );
   }
 
-  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, roundDateKeys, selectedRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
+  const { trendMetrics, capabilityMetrics, overall, lastRound, last5Rounds, holeQuality, roundDateKeys, selectedRoundDateKey, distanceToTargetEnabled, ratings, clubName } = processedData;
   const activeRoundDateKey = showOverview ? selectedRoundDateKey : roundReviewSelectedDateKey;
   const activeRoundReviewDates = roundReviewScope === 'all'
     ? new Set(shotRoundReviewDateKeys)
@@ -640,7 +647,7 @@ export function DashboardTab({
         {showOverview && <TabsContent value="overview" className="mt-6 space-y-6">
 
       {/* Summary Cards - Last 5 Rounds vs Overall */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card className="stat-card">
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
@@ -729,6 +736,34 @@ export function DashboardTab({
                   })()}
                 </div>
                 <p className="text-xs text-muted-foreground">vs {formatDistance(overall.sideVariation)} overall</p>
+              </div>
+              <Award className="h-8 w-8 text-accent opacity-80" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="stat-card">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Hole Target %</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-bold">{formatPercent(holeQuality.last5Rounds.atTargetPct)}</p>
+                  {(() => {
+                    const diff = (holeQuality.last5Rounds.atTargetPct ?? 0) - (holeQuality.overall.atTargetPct ?? 0);
+                    const threshold = 2;
+                    if (Math.abs(diff) < threshold) return <Minus className="h-4 w-4 text-muted-foreground" />;
+                    return diff > 0
+                      ? <TrendingUp className="h-4 w-4 text-primary" />
+                      : <TrendingDown className="h-4 w-4 text-destructive" />;
+                  })()}
+                </div>
+                <p className="text-xs text-muted-foreground">vs {formatPercent(holeQuality.overall.atTargetPct)} overall</p>
+                <p className="text-xs text-muted-foreground">
+                  {holeQuality.last5Rounds.targetSummary.ratedHoleCount
+                    ? `${Math.round((holeQuality.last5Rounds.targetSummary.underCount / holeQuality.last5Rounds.targetSummary.ratedHoleCount) * 100)}% under · ${Math.round((holeQuality.last5Rounds.targetSummary.atCount / holeQuality.last5Rounds.targetSummary.ratedHoleCount) * 100)}% at · ${Math.round((holeQuality.last5Rounds.targetSummary.overCount / holeQuality.last5Rounds.targetSummary.ratedHoleCount) * 100)}% over`
+                    : 'Needs hole data'}
+                </p>
               </div>
               <Award className="h-8 w-8 text-accent opacity-80" />
             </div>
