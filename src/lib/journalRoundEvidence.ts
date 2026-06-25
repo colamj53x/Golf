@@ -1,4 +1,5 @@
 import type { RoundReviewMetrics, RoundReviewModel, RoundReviewRow } from '@/lib/roundReview';
+import type { HoleQualityModel } from '@/lib/holeQuality';
 import type { JournalCategoryKey } from '@/types/golf';
 
 export interface JournalEvidenceMetric {
@@ -37,6 +38,12 @@ function score(value: number | null): string {
 
 function result(value: number, attempts: number): string {
   return attempts ? `${value}/${attempts}` : '—';
+}
+
+function holeTargetSpread(model: HoleQualityModel | null): string {
+  if (!model?.targetSummary.ratedHoleCount) return '—';
+  const { underCount, atCount, overCount } = model.targetSummary;
+  return `${underCount}/${atCount}/${overCount}`;
 }
 
 function dominantMiss(metrics: EvidenceMetrics): string {
@@ -103,7 +110,8 @@ function executionEvidence(metrics: EvidenceMetrics, targetLabel = 'Targets'): J
 
 export function buildJournalRoundEvidence(
   review: RoundReviewModel | null,
-  puttingShotCount = 0
+  puttingShotCount = 0,
+  holeQuality: HoleQualityModel | null = null
 ): Partial<Record<JournalCategoryKey, JournalCategoryEvidence>> {
   if (!review) return {};
 
@@ -161,12 +169,13 @@ export function buildJournalRoundEvidence(
 
   if (management) evidence.courseManagement = {
     metrics: [
+      { label: 'Hole target spread', value: holeTargetSpread(holeQuality) },
       { label: 'Targets achieved', value: result(management.targetSuccessCount, management.targetAttemptCount) },
       { label: 'Safe shots', value: pct(management.safeShotRate) },
       { label: 'Costly misses', value: pct(management.badMissPct) },
       { label: 'Recovery shots', value: String(recovery?.shotCount ?? 0) },
     ],
-    note: 'Use this to reflect on target choice, club choice, and where you accepted or created risk.',
+    note: 'Hole target spread is under/at/over the selected handicap target. Use this to reflect on target choice, club choice, and where you accepted or created risk.',
   };
 
   return evidence;

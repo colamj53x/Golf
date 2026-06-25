@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLUB_CONFIGS, type Shot } from '@/types/golf';
 import { buildJournalRoundEvidence } from './journalRoundEvidence';
+import { buildHoleQualityModel } from './holeQuality';
 import { buildRoundReview } from './roundReview';
 
 function shot(id: string, overrides: Partial<Shot>): Shot {
@@ -51,8 +52,13 @@ describe('buildJournalRoundEvidence', () => {
         endLie: 'Green',
       }),
     ], DEFAULT_CLUB_CONFIGS, 10, '2026-06-21');
+    const holeQuality = buildHoleQualityModel([
+      shot('hole-under', { holeNumber: 1, shotNumber: 1, shotQuality: '5 Handicap' }),
+      shot('hole-at', { holeNumber: 2, shotNumber: 1, shotQuality: '15 Handicap' }),
+      shot('hole-over', { holeNumber: 3, shotNumber: 1, shotQuality: '20 Handicap' }),
+    ], ['2026-06-21'], 15);
 
-    const evidence = buildJournalRoundEvidence(review, 0);
+    const evidence = buildJournalRoundEvidence(review, 0, holeQuality);
 
     expect(evidence.driving?.metrics).toEqual(expect.arrayContaining([
       { label: 'Shots', value: '2' },
@@ -61,6 +67,7 @@ describe('buildJournalRoundEvidence', () => {
     expect(evidence.irons?.metrics).toContainEqual({ label: 'Shots', value: '1' });
     expect(evidence.approach?.metrics).toContainEqual({ label: 'Greens', value: '1/1' });
     expect(evidence.shortGame?.metrics).toContainEqual({ label: 'Scoring zone', value: '1/1' });
+    expect(evidence.courseManagement?.metrics).toContainEqual({ label: 'Hole target spread', value: '1/1/1' });
     expect(evidence.putting?.metrics).toHaveLength(0);
     expect(evidence.mental?.note).toContain('cannot measure mindset');
   });

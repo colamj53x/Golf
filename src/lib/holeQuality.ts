@@ -12,6 +12,7 @@ export interface HoleQualityRecord {
   shotCount: number;
   ratedShotCount: number;
   sqi: number | null;
+  gir: boolean | null;
 }
 
 export interface HoleQualityDistributionBand {
@@ -26,12 +27,18 @@ export interface HoleQualityDistributionBand {
 export interface HoleQualityParSummary {
   par: number;
   holeCount: number;
+  girAttemptCount: number;
+  girCount: number;
+  girPct: number | null;
+  averageShotsToGreen: number | null;
+  regulationShot: number;
+}
+
+export interface HoleQualityTargetSummary {
+  underCount: number;
+  atCount: number;
+  overCount: number;
   ratedHoleCount: number;
-  averageSqi: number | null;
-  atTargetPct: number | null;
-  averageShotCount: number;
-  averageHoleScore: number | null;
-  averageToPar: number | null;
 }
 
 export interface HoleQualityModel {
@@ -45,6 +52,7 @@ export interface HoleQualityModel {
   ratedCoveragePct: number;
   bestHole: HoleQualityRecord | null;
   weakestHole: HoleQualityRecord | null;
+  targetSummary: HoleQualityTargetSummary;
   distribution: HoleQualityDistributionBand[];
   byPar: HoleQualityParSummary[];
   holesWithParCount: number;
@@ -82,6 +90,8 @@ const isPutting = (shot: Shot): boolean => (
   shot.club.trim().toLowerCase() === 'pu' || shot.type.trim().toLowerCase() === 'putting'
 );
 
+const isGreenResult = (shot: Shot): boolean => /green|fringe|hole/i.test(shot.endLie);
+
 export function getHoleQualityTargetScore(handicap: number): number {
   return HANDICAP_TARGET_SCORES[handicap] ?? HANDICAP_TARGET_SCORES[15];
 }
@@ -108,6 +118,13 @@ export function buildHoleQualityModel(
       .filter((score): score is number => score !== null);
     const holePar = holeShots.map((shot) => validPositiveInteger(shot.holePar)).find((value) => value !== null) ?? null;
     const holeScore = holeShots.map((shot) => validPositiveInteger(shot.holeScore)).find((value) => value !== null) ?? null;
+    const regulationShot = holePar !== null ? holePar - 2 : null;
+    const shotsToGreen = regulationShot !== null
+      ? holeShots
+        .filter((shot) => isGreenResult(shot))
+        .map((shot) => validPositiveInteger(shot.shotNumber))
+        .filter((shotNumber): shotNumber is number => shotNumber !== null)
+      : [];
     return {
       key,
       roundDate: getShotDateKey(first.date),
@@ -118,6 +135,9 @@ export function buildHoleQualityModel(
       shotCount: holeShots.length,
       ratedShotCount: scores.length,
       sqi: average(scores),
+      gir: regulationShot !== null
+        ? shotsToGreen.length > 0 && Math.min(...shotsToGreen) <= regulationShot
+        : null,
     };
   }).sort((a, b) => b.roundDate.localeCompare(a.roundDate) || a.holeNumber - b.holeNumber);
 
@@ -125,6 +145,12 @@ export function buildHoleQualityModel(
   const targetScore = getHoleQualityTargetScore(targetHandicap);
   const atTargetCount = ratedHoles.filter((hole) => hole.sqi >= targetScore).length;
   const rankedHoles = [...ratedHoles].sort((a, b) => b.sqi - a.sqi || b.ratedShotCount - a.ratedShotCount);
+  const targetSummary = {
+    underCount: ratedHoles.filter((hole) => hole.sqi > targetScore).length,
+    atCount: ratedHoles.filter((hole) => hole.sqi === targetScore).length,
+    overCount: ratedHoles.filter((hole) => hole.sqi < targetScore).length,
+    ratedHoleCount: ratedHoles.length,
+  };
   const distribution = DISTRIBUTION_BANDS.map((band) => {
     const holeCount = ratedHoles.filter((hole) => hole.sqi >= band.minimum && (band.maximum === null || hole.sqi < band.maximum)).length;
     return {
@@ -137,18 +163,24 @@ export function buildHoleQualityModel(
     .sort((a, b) => a - b);
   const byPar = availablePars.map((par): HoleQualityParSummary => {
     const parHoles = holes.filter((hole) => hole.holePar === par);
-    const ratedParHoles = parHoles.filter((hole): hole is HoleQualityRecord & { sqi: number } => hole.sqi !== null);
-    const scoredParHoles = parHoles.filter((hole): hole is HoleQualityRecord & { holeScore: number; scoreToPar: number } => hole.holeScore !== null && hole.scoreToPar !== null);
-    const parAtTarget = ratedParHoles.filter((hole) => hole.sqi >= targetScore).length;
+    const girHoles = parHoles.filter((hole): hole is HoleQualityRecord & { gir: boolean } => hole.gir !== null);
+    const girCount = girHoles.filter((hole) => hole.gir).length;
+    const shotsToGreen = parHoles.flatMap((hole) => {
+      const holeShots = grouped.get(hole.key) ?? [];
+      const greenShotNumbers = holeShots
+        .filter((shot) => isGreenResult(shot))
+        .map((shot) => validPositiveInteger(shot.shotNumber))
+        .filter((shotNumber): shotNumber is number => shotNumber !== null);
+      return greenShotNumbers.length ? [Math.min(...greenShotNumbers)] : [];
+    });
     return {
       par,
       holeCount: parHoles.length,
-      ratedHoleCount: ratedParHoles.length,
-      averageSqi: average(ratedParHoles.map((hole) => hole.sqi)),
-      atTargetPct: ratedParHoles.length ? (parAtTarget / ratedParHoles.length) * 100 : null,
-      averageShotCount: average(parHoles.map((hole) => hole.shotCount)) ?? 0,
-      averageHoleScore: average(scoredParHoles.map((hole) => hole.holeScore)),
-      averageToPar: average(scoredParHoles.map((hole) => hole.scoreToPar)),
+      girAttemptCount: girHoles.length,
+      girCount,
+      girPct: girHoles.length ? (girCount / girHoles.length) * 100 : null,
+      averageShotsToGreen: average(shotsToGreen),
+      regulationShot: par - 2,
     };
   });
 
@@ -163,6 +195,7 @@ export function buildHoleQualityModel(
     ratedCoveragePct: holes.length ? (ratedHoles.length / holes.length) * 100 : 0,
     bestHole: rankedHoles[0] ?? null,
     weakestHole: rankedHoles.at(-1) ?? null,
+    targetSummary,
     distribution,
     byPar,
     holesWithParCount: holes.filter((hole) => hole.holePar !== null).length,

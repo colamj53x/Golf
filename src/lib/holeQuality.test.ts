@@ -45,18 +45,36 @@ describe('hole quality', () => {
     expect(model.targetScore).toBe(70);
   });
 
-  it('summarises execution and scoring outcome by par', () => {
+  it('summarises greens in regulation by par', () => {
     const model = buildHoleQualityModel([
-      shot('par3', 3, '5 Handicap', { holePar: 3, holeScore: 3 }),
-      shot('par5-a', 5, '10 Handicap', { holePar: 5, holeScore: 6 }),
-      shot('par5-b', 5, '15 Handicap', { holePar: 5, holeScore: 6, shotNumber: 2 }),
+      shot('par3', 3, '5 Handicap', { holePar: 3, holeScore: 3, shotNumber: 1, endLie: 'Green' }),
+      shot('par4-a', 4, '10 Handicap', { holePar: 4, holeScore: 4, shotNumber: 1, endLie: 'Fairway' }),
+      shot('par4-b', 4, '10 Handicap', { holePar: 4, holeScore: 4, shotNumber: 2, endLie: 'Green' }),
+      shot('par5-a', 5, '10 Handicap', { holePar: 5, holeScore: 6, shotNumber: 3, endLie: 'Fairway' }),
+      shot('par5-b', 5, '15 Handicap', { holePar: 5, holeScore: 6, shotNumber: 4, endLie: 'Green' }),
     ], ['2026-06-23'], 10);
 
     expect(model.byPar).toEqual([
-      expect.objectContaining({ par: 3, holeCount: 1, averageSqi: 80, atTargetPct: 100, averageHoleScore: 3, averageToPar: 0 }),
-      expect.objectContaining({ par: 5, holeCount: 1, averageSqi: 65, atTargetPct: 0, averageHoleScore: 6, averageToPar: 1 }),
+      expect.objectContaining({ par: 3, holeCount: 1, girCount: 1, girAttemptCount: 1, girPct: 100, regulationShot: 1, averageShotsToGreen: 1 }),
+      expect.objectContaining({ par: 4, holeCount: 1, girCount: 1, girAttemptCount: 1, girPct: 100, regulationShot: 2, averageShotsToGreen: 2 }),
+      expect.objectContaining({ par: 5, holeCount: 1, girCount: 0, girAttemptCount: 1, girPct: 0, regulationShot: 3, averageShotsToGreen: 4 }),
     ]);
-    expect(model.holesWithParCount).toBe(2);
+    expect(model.holesWithParCount).toBe(3);
+  });
+
+  it('counts holes under, at, and over the handicap target', () => {
+    const model = buildHoleQualityModel([
+      shot('under', 1, '5 Handicap'),
+      shot('at', 2, '10 Handicap'),
+      shot('over', 3, '15 Handicap'),
+    ], ['2026-06-23'], 10);
+
+    expect(model.targetSummary).toEqual({
+      underCount: 1,
+      atCount: 1,
+      overCount: 1,
+      ratedHoleCount: 3,
+    });
   });
 
   it('ignores putting, missing hole numbers, and unrated shots in the SQI denominator', () => {

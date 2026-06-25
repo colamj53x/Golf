@@ -15,6 +15,7 @@ import { buildCourseHistoryReflection, buildLastFiveReflection, buildPreRoundRef
 import { deleteJournalEntry, loadGeneratedJournalReflections, loadJournalEntries, saveGeneratedJournalReflection, upsertJournalEntry } from '@/lib/golfJournalRepository';
 import { getShotDateKey } from '@/lib/golfCalculations';
 import { buildJournalRoundEvidence, type JournalCategoryEvidence } from '@/lib/journalRoundEvidence';
+import { buildHoleQualityModel } from '@/lib/holeQuality';
 import { buildRoundReview, isPuttingShot, type RoundReviewModel } from '@/lib/roundReview';
 import type { GeneratedJournalReflection, JournalCategoryKey, JournalEntry, JournalEntryDraft, PlayingPartner } from '@/types/golf';
 
@@ -225,9 +226,14 @@ export function JournalTab() {
     return shots.filter((shot) => getShotDateKey(shot.date) === draft.roundReviewId && isPuttingShot(shot)).length;
   }, [draft.roundReviewId, shots]);
 
+  const selectedRoundHoleQuality = useMemo(() => {
+    if (!selectedRoundReview) return null;
+    return buildHoleQualityModel(shots, selectedRoundReview.selectedRoundDates, 15);
+  }, [selectedRoundReview, shots]);
+
   const categoryRoundEvidence = useMemo(
-    () => buildJournalRoundEvidence(selectedRoundReview, selectedRoundPuttingCount),
-    [selectedRoundPuttingCount, selectedRoundReview]
+    () => buildJournalRoundEvidence(selectedRoundReview, selectedRoundPuttingCount, selectedRoundHoleQuality),
+    [selectedRoundHoleQuality, selectedRoundPuttingCount, selectedRoundReview]
   );
 
   const filteredHistory = useMemo(() => {
