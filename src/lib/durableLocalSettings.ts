@@ -11,6 +11,7 @@ const KEYS = [
   'golf_gapping_shot_category_overrides_v1',
   'golf_shot_classification_rules_v1',
   'golf_shot_cues_v1',
+  'golf_shot_cues_v2',
   'golf_settings_ideas_v1',
   'golf_settings_idea_tags_v1',
 ] as const;

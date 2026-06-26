@@ -46,11 +46,12 @@ export function OnCourseCuesTab() {
           </CardHeader>
           <CardContent className="grid gap-5 sm:grid-cols-2">
             {[
-              ['Pre-shot', selected.preShot],
+              ['Shot description', selected.goal],
               ['Set-up', selected.setup],
-              ['Look', selected.look],
+              ['Look / strike focus', selected.look],
               ...('clock' in selected && selected.clock ? [['Swing size', selected.clock]] : []),
-              ['Swing', selected.swing],
+              ['Swing feel', selected.swing],
+              ['Finish', selected.finish],
             ].map(([label, value]) => (
               <div key={label as string} className="rounded-xl border bg-muted/20 p-4 sm:p-5">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{label}</div>

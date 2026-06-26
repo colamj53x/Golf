@@ -104,8 +104,8 @@ function TechniqueNotes({ title, notes }: { title: string; notes: Array<{ label:
   return (
     <section className="space-y-4 border-t pt-6">
       <div data-pdf-break-before>
-        <h3 className="text-xl font-semibold">Full shot technique - {title}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">The complete practice card for this exact club, shot and power.</p>
+        <h3 className="text-xl font-semibold">Shot card - {title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">The simplified practice and on-course cues for this exact club, shot and power.</p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {SHOT_TECHNIQUE_INTRO.map(item => (
@@ -148,13 +148,12 @@ function PdfTargets({ outcomeRows, swingRows }: { outcomeRows: RangeReferenceRow
 }
 
 function PdfTechnique({ notes }: { notes: Array<{ label: string; text: string }> }) {
-  const filteredNotes = notes.filter(note => note.label !== 'Pre-shot routine');
   return <section>
-    <h3 className="text-sm font-bold">Full shot technique</h3>
-    <p className="mt-0.5 text-[9px] text-slate-500">Complete setup and swing words for this shot.</p>
+    <h3 className="text-sm font-bold">Shot card</h3>
+    <p className="mt-0.5 text-[9px] text-slate-500">Simplified practice and on-course cues for this shot.</p>
     <div className="mt-2 grid grid-cols-2 gap-1.5">
       {SHOT_TECHNIQUE_INTRO.map(item => <div key={item.label} data-pdf-break className="rounded-md border border-emerald-200 bg-emerald-50 p-2"><div className="text-[8px] font-bold uppercase tracking-wide text-emerald-800">{item.label}</div><p className="mt-1 text-[9px] leading-[1.3]">{item.text}</p></div>)}
-      {filteredNotes.map(note => <div key={note.label} data-pdf-break className={`rounded-md border p-2 ${note.label === 'Shot goal' ? 'col-span-2' : ''}`}><div className="text-[8px] font-bold uppercase tracking-wide text-emerald-800">{note.label}</div><p className="mt-1 text-[9px] leading-[1.3]">{note.text}</p></div>)}
+      {notes.map(note => <div key={note.label} data-pdf-break className={`rounded-md border p-2 ${note.label === 'Shot description' || note.label === 'One cue' ? 'col-span-2' : ''}`}><div className="text-[8px] font-bold uppercase tracking-wide text-emerald-800">{note.label}</div><p className="mt-1 text-[9px] leading-[1.3]">{note.text}</p></div>)}
     </div>
   </section>;
 }
@@ -210,7 +209,6 @@ export function PracticePlanTab() {
   const swingRows = rows.filter(row => row.section === 'swing');
   const outcomeRows = rows.filter(row => row.section === 'outcome');
   const shotCue = resolveShotCue(shotCues, currentConfigKey);
-  const pdfPreShot = shotCue?.technique.find(note => note.label === 'Pre-shot routine')?.text ?? '';
 
   const exportToPDF = async () => {
     if (!pdfContentRef.current) return;
@@ -365,7 +363,6 @@ export function PracticePlanTab() {
               <div><div className="text-xs font-semibold text-emerald-700">Six-shot range reference</div><h2 className="mt-1 text-2xl font-bold">{getConfigDisplayName(currentConfigKey)}</h2></div>
               <div className="rounded-full border px-3 py-1 text-[10px] font-semibold">{recentShots.length > 0 ? `Latest ${recentShots.length} shots` : 'Targets only'}</div>
             </div>
-            {pdfPreShot && <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3"><div className="text-[9px] font-bold uppercase tracking-wide text-emerald-800">Pre-shot routine</div><p className="mt-1 text-[11px] leading-[1.4]">{pdfPreShot}</p></div>}
           </header>
           <main className="space-y-5 pt-4">
             <div className="grid grid-cols-[0.42fr_0.58fr] gap-5">
