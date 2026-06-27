@@ -16,7 +16,7 @@ import { deleteJournalEntry, loadGeneratedJournalReflections, loadJournalEntries
 import { getShotDateKey } from '@/lib/golfCalculations';
 import { buildJournalRoundEvidence, type JournalCategoryEvidence } from '@/lib/journalRoundEvidence';
 import { buildHoleQualityModel } from '@/lib/holeQuality';
-import { buildRoundReview, isPuttingShot, type RoundReviewModel } from '@/lib/roundReview';
+import { buildRoundReview, isPuttingShot } from '@/lib/roundReview';
 import type { GeneratedJournalReflection, JournalCategoryKey, JournalEntry, JournalEntryDraft, PlayingPartner } from '@/types/golf';
 
 type JournalView = 'home' | 'entry' | 'history' | 'last5' | 'course' | 'preRound';
@@ -38,7 +38,7 @@ function ratingValue(value: number | null) {
 
 function textFromCategory(entry: JournalEntry, key: JournalCategoryKey): string {
   const category = entry.categories[key];
-  return [category.whatHappened, category.likelyCause, category.tryNextTime, category.generalNotes].filter(Boolean).join(' ');
+  return [category.generalNotes, category.whatHappened, category.likelyCause, category.tryNextTime].filter(Boolean).join(' ');
 }
 
 function partnerNames(partners: PlayingPartner[], ids: string[]): string[] {
@@ -70,32 +70,6 @@ function evidenceLabel(metric: 'shotQuality' | 'targetSuccess' | 'safeShotRate' 
   if (value >= 70) return 'Useful round inside scoring range';
   if (value >= 50) return 'Some chances converted';
   return 'Scoring shots need reflection';
-}
-
-function roundEvidenceInterpretation(review: RoundReviewModel): string {
-  const quality = review.round.shotQualityIndex;
-  const target = review.round.targetSuccessPct;
-  const safe = review.round.safeShotRate;
-  const scoring = review.round.scoringZoneSuccessPct;
-  const notes: string[] = [];
-
-  if (quality !== null && quality >= 60 && target !== null && target < 50) {
-    notes.push('You struck the ball reasonably, but target success was low. Reflect on aim, start line, face control, and whether your target routine was clear enough.');
-  }
-  if (safe >= 95) {
-    notes.push('The safe-shot rate suggests your decision-making protected the round from big damage.');
-  }
-  if (scoring !== null && scoring < 50) {
-    notes.push('The scoring-zone number points toward wedges, short game, approach proximity, or converting chances inside scoring range.');
-  }
-  if (quality !== null && quality >= 70 && target !== null && target >= 60 && safe >= 95 && scoring !== null && scoring >= 65) {
-    notes.push('The main numbers are strong. Capture what routine, conditions, tempo, or decisions helped that version of your golf show up.');
-  }
-  if (notes.length === 0) {
-    notes.push('Use the numbers as a quiet check against memory: where did the data confirm the story, and where did it challenge what the round felt like?');
-  }
-
-  return notes.join(' ');
 }
 
 function MetricEvidenceCard({ label, value, context, interpretation }: { label: string; value: string; context: string; interpretation: string }) {
@@ -541,7 +515,7 @@ export function JournalTab() {
             <Card className="border-primary/25 shadow-sm">
               <CardHeader>
                 <CardTitle>Round Truth Snapshot</CardTitle>
-                <CardDescription>The main tile for the round: what happened, what it cost, and what the linked numbers say.</CardDescription>
+                <CardDescription>The main tile for the round: summary, feel, costs, learning, and practice priorities.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
@@ -583,24 +557,20 @@ export function JournalTab() {
                           interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
                         />
                       </div>
-                      <div className="rounded-lg border bg-background p-4">
-                        <h3 className="text-sm font-semibold">What do the numbers suggest?</h3>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{roundEvidenceInterpretation(selectedRoundReview)}</p>
-                      </div>
                     </div>
                   )}
 
                   <div className="space-y-5">
                     <div className="space-y-2">
-                      <Label htmlFor="one-line-story">One-line round story</Label>
+                      <Label htmlFor="one-line-story">Summary</Label>
                       <Textarea
                         id="one-line-story"
                         value={draft.oneLineStory}
                         onChange={(event) => updateDraft({ oneLineStory: event.target.value })}
                         className="min-h-[88px]"
-                        placeholder="What was this round really about?"
+                        placeholder="Write the short version of what this round was about."
                       />
-                      <p className="text-xs leading-5 text-muted-foreground">What was this round really about?</p>
+                      <p className="text-xs leading-5 text-muted-foreground">A short plain-English summary of the round.</p>
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
@@ -637,11 +607,11 @@ export function JournalTab() {
                       />
                       <div className="md:col-span-2">
                         <PromptInput
-                          label="Next-round commitment"
+                          label="Practice priorities coming out of this round"
                           value={draft.focusForNextRound}
                           onChange={(focusForNextRound) => updateDraft({ focusForNextRound })}
-                          helper="Make this behaviour-based, not score-based."
-                          placeholder="Before every full shot, pick a clear target and rehearse tempo once."
+                          helper="What this round says to practise next."
+                          placeholder="Target routine, tempo rehearsal, wedge distance control."
                         />
                       </div>
                     </div>
@@ -653,7 +623,7 @@ export function JournalTab() {
             <Card>
               <CardHeader>
                 <CardTitle>Category Reflections</CardTitle>
-                <CardDescription>Guided notebook prompts for the main parts of the game.</CardDescription>
+                <CardDescription>Simple summaries for the main parts of the game.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {JOURNAL_CATEGORIES.map(({ key, label }) => {
@@ -668,17 +638,14 @@ export function JournalTab() {
                             <SelectContent><SelectItem value="none">No rating</SelectItem>{ratingOptions()}</SelectContent>
                           </Select>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-3">
+                        <div className="grid gap-3">
                           {categoryRoundEvidence[key] && (
-                            <div className="md:col-span-3">
+                            <div>
                               <CategoryEvidenceStrip evidence={categoryRoundEvidence[key]} />
                             </div>
                           )}
-                          <PromptInput label="What happened?" value={category.whatHappened} onChange={(whatHappened) => updateCategory(key, { whatHappened })} />
-                          <PromptInput label="Likely cause" value={category.likelyCause} onChange={(likelyCause) => updateCategory(key, { likelyCause })} />
-                          <PromptInput label="What to try next time" value={category.tryNextTime} onChange={(tryNextTime) => updateCategory(key, { tryNextTime })} />
-                          <div className="space-y-2 md:col-span-3">
-                            <Label>{label} notes</Label>
+                          <div className="space-y-2">
+                            <Label>Summary</Label>
                             <Textarea value={category.generalNotes} onChange={(event) => updateCategory(key, { generalNotes: event.target.value })} className="min-h-[110px]" />
                           </div>
                         </div>

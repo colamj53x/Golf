@@ -312,9 +312,13 @@ function journalOverview(entry: JournalEntry): Array<{ label: string; value: str
     { label: 'Best thing', value: entry.bestThingToday },
     { label: 'Biggest frustration', value: entry.biggestFrustration },
     { label: 'Main learning', value: entry.mainLearning },
-    { label: 'Next-round focus', value: entry.focusForNextRound },
+    { label: 'Practice priorities', value: entry.focusForNextRound },
     { label: 'Data matched the round', value: entry.evidenceMatch ? `${entry.evidenceMatch}${entry.evidenceMatchReason ? ` - ${entry.evidenceMatchReason}` : ''}` : entry.evidenceMatchReason },
   ].filter((item) => item.value.trim().length > 0);
+}
+
+function journalCategorySummary(value: JournalEntry['categories'][JournalCategoryKey]): string {
+  return [value.generalNotes, value.whatHappened, value.likelyCause, value.tryNextTime].filter((text) => text.trim()).join('\n');
 }
 
 function RoundNotesInterpretation({ thoughts, journalEntries, journalLoading, areas, story, benchmark, onOpenJournal, onEditThoughts }: {
@@ -386,10 +390,7 @@ function RoundNotesInterpretation({ thoughts, journalEntries, journalLoading, ar
                     {categories.map(({ key, label, value }) => (
                       <section key={key} className="mt-4 border-t pt-3">
                         <h5 className="font-semibold">{label}{value.feelRating !== null ? ` - ${value.feelRating}/5` : ''}</h5>
-                        {value.whatHappened && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">What happened: </span>{value.whatHappened}</p>}
-                        {value.likelyCause && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Likely cause: </span>{value.likelyCause}</p>}
-                        {value.tryNextTime && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Try next time: </span>{value.tryNextTime}</p>}
-                        {value.generalNotes && <p className="mt-1 text-sm leading-6"><span className="text-muted-foreground">Notes: </span>{value.generalNotes}</p>}
+                        {journalCategorySummary(value) && <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{journalCategorySummary(value)}</p>}
                       </section>
                     ))}
                   </article>

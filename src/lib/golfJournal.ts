@@ -108,10 +108,10 @@ function entryLabel(entry: JournalEntry): string {
 function categoryNotes(entry: JournalEntry, key: JournalCategoryKey): string {
   const category = entry.categories[key];
   return lines([
-    category.whatHappened && `What happened: ${category.whatHappened}`,
-    category.likelyCause && `Likely cause: ${category.likelyCause}`,
-    category.tryNextTime && `Try next time: ${category.tryNextTime}`,
-    category.generalNotes && `Notes: ${category.generalNotes}`,
+    category.generalNotes,
+    category.whatHappened,
+    category.likelyCause,
+    category.tryNextTime,
   ]);
 }
 
@@ -121,13 +121,13 @@ export function buildLastFiveReflection(entries: JournalEntry[]): string {
 
   const source = latest.map((entry, index) => lines([
     `Round ${index + 1}: ${entryLabel(entry)}`,
-    entry.oneLineStory && `Story: ${entry.oneLineStory}`,
+    entry.oneLineStory && `Summary: ${entry.oneLineStory}`,
     entry.overallComments && `Overall: ${entry.overallComments}`,
     entry.overallFeelRating && `Feel: ${entry.overallFeelRating}/5${entry.feelReason ? ` - ${entry.feelReason}` : ''}`,
     entry.bestThingToday && `Best thing: ${entry.bestThingToday}`,
     entry.biggestFrustration && `Biggest cost: ${entry.biggestFrustration}`,
     entry.mainLearning && `Learning: ${entry.mainLearning}`,
-    entry.focusForNextRound && `Next commitment: ${entry.focusForNextRound}`,
+    entry.focusForNextRound && `Practice priorities: ${entry.focusForNextRound}`,
     entry.evidenceMatch && `Evidence match: ${entry.evidenceMatch}${entry.evidenceMatchReason ? ` - ${entry.evidenceMatchReason}` : ''}`,
   ])).join('\n\n');
 
@@ -160,7 +160,7 @@ export function buildLastFiveReflection(entries: JournalEntry[]): string {
     'Course management patterns',
     categoryPattern(latest, 'courseManagement'),
     '',
-    'Practice implications',
+    'Practice priorities',
     practiceImplications(latest),
     '',
     'Next-round mindset',
@@ -239,7 +239,7 @@ function categoryPattern(entries: JournalEntry[], key: JournalCategoryKey): stri
 
 function practiceImplications(entries: JournalEntry[]): string {
   const focus = entries.map((entry) => entry.focusForNextRound || entry.mainLearning).filter(Boolean);
-  return focus.length ? focus.slice(0, 5).map((value) => `- ${value}`).join('\n') : 'The practice implication is to make the next entry more specific: one miss, one cause, one next try.';
+  return focus.length ? focus.slice(0, 5).map((value) => `- ${value}`).join('\n') : 'Use the next entry to name one priority clearly enough that it can become a practice block.';
 }
 
 function nextRoundMindset(entries: JournalEntry[]): string {
