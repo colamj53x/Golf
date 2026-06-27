@@ -45,6 +45,30 @@ describe('parseCSV', () => {
       holeScore: 4,
     });
   });
+
+  it('converts ParGolf degrees offline into side metres', () => {
+    const csv = [
+      'Golfer,Date,Course,Type,Round Par,Round Score,Hole,Hole Par,Hole Score,Hole Length,Hole Putts,Hole m of Putts Made,Shot,Distance to Target (m),Start Lie,Proximity (m),End Lie,Distance Traveled (m),Strokes Gained to a Pro,Quality,Club,Brand,Model,Rating,Slope,Tee Name,Tee Color,Tee Number,Hole Handicap,Wind Bearing,Wind Strength,Degrees Offline,Committed,Penalties,Shape,Trajectory,Club Type,Coach Tags,Elevation (m),Shot Quality,Category,',
+      'Nic Cola,2026-05-30 21:01:38 +0000,Albert Park Public Golf Course,Social,35,41,10,3,4,159,2,1.05,1,141.17,Tee,25.83,Fairway,116.16,-0.49,Heel,5H,Ping,G440,68.5,110,Men,White,0,6,258,1.99,5,1,0,,,Hybrid,,,10 Handicap,Approach,',
+    ].join('\n');
+
+    const result = parseCSV(csv);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.shots[0].side).toBeCloseTo(10.16, 1);
+  });
+
+  it('keeps explicit dispersion columns as metres', () => {
+    const csv = [
+      'Date,Club,Type,Start Lie,End Lie,Strike Quality,Shot Quality,Target,End Distance from Target,Distance Hit,Dispersion',
+      '31/05/2026,DR,Driving,Tee,Rough,Heel,15 Handicap,245,18,227,-14',
+    ].join('\n');
+
+    const result = parseCSV(csv);
+
+    expect(result.warnings).toEqual([]);
+    expect(result.shots[0].side).toBe(-14);
+  });
 });
 
 describe('calculateMetrics', () => {

@@ -417,9 +417,14 @@ function parseNumeric(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function estimateDispersion(dispersion: string, shotNotes: string, shape: string): number {
+function estimateDispersion(dispersion: string, shotNotes: string, shape: string, distanceHit = 0, isDegrees = false): number {
   const parsed = Number.parseFloat(dispersion);
-  if (Number.isFinite(parsed)) return parsed;
+  if (Number.isFinite(parsed)) {
+    if (isDegrees && Number.isFinite(distanceHit) && distanceHit > 0) {
+      return Math.tan((parsed * Math.PI) / 180) * distanceHit;
+    }
+    return parsed;
+  }
 
   const text = `${shotNotes} ${shape}`.toLowerCase();
   const rightMisses = [
@@ -517,6 +522,9 @@ export function parseCSV(csvContent: string): CSVParseResult {
       const holePar = read(indexes.holePar);
       const holeScore = read(indexes.holeScore);
       const shotNotes = read(indexes.shotNotes) || trajectory || shape;
+      const total = parseNumeric(distanceHit);
+      const dispersionHeader = normalizedHeader[indexes.dispersion] ?? '';
+      const dispersionIsDegrees = dispersionHeader === 'degreesoffline';
       
       const normalizedClub = club.trim().toLowerCase();
       const normalizedType = type.trim().toLowerCase();
@@ -544,8 +552,8 @@ export function parseCSV(csvContent: string): CSVParseResult {
         holePar: holePar ? parseNumeric(holePar) : null,
         holeScore: holeScore ? parseNumeric(holeScore) : null,
         target: parseNumeric(target),
-        total: parseNumeric(distanceHit),
-        side: estimateDispersion(dispersion, shotNotes, shape),
+        total,
+        side: estimateDispersion(dispersion, shotNotes, shape, total, dispersionIsDegrees),
         shotQuality: shotQuality.trim(),
         date: dateResult.date,
         startLie: startLie.trim(),
