@@ -12,6 +12,36 @@ import { LevelBand, PuttingDrill, ScoringInput } from '@/types/putting';
 import { mergeLockedIndoorDrills } from '@/lib/putting/drills';
 import { DrillBuilderDialog } from './DrillBuilderDialog';
 
+const SKILL_FILTERS = [
+  'Start Line',
+  'Face Control',
+  'Stroke Path',
+  'Pace',
+  'Lag Putting',
+  'Green Reading',
+  'Short Putts',
+  'Pressure',
+  'Routine',
+  'Random Practice',
+  'Indoor',
+  'Outdoor',
+];
+
+const DRILL_TYPE_LABELS = {
+  practice: 'Practice Drill',
+  test: 'Test Drill',
+  transfer: 'Transfer Drill',
+  pressure: 'Pressure Drill',
+} as const;
+
+function displayLabel(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export function PuttingDrillBankTab() {
   const { user } = useAuth();
   const [drills, setDrills] = useState<PuttingDrill[]>([]);
@@ -47,9 +77,12 @@ export function PuttingDrillBankTab() {
   }, [loadDrills]);
 
   const filtered = useMemo(() => drills.filter((drill) => {
-    const text = `${drill.name} ${drill.purpose} ${drill.skill_tags?.join(' ')}`.toLowerCase();
+    const text = `${drill.name} ${drill.purpose} ${drill.skill_tags?.join(' ')} ${drill.best_for?.join(' ')} ${drill.drill_type?.join(' ')}`.toLowerCase();
     const locationMatch = location === 'all' || drill.location === location || drill.location === 'both';
-    const skillMatch = skill === 'all' || drill.skill_tags?.includes(skill);
+    const selectedSkill = skill.toLowerCase();
+    const skillMatch = skill === 'all'
+      || drill.skill_tags?.some((tag) => tag.toLowerCase() === selectedSkill)
+      || (['indoor', 'outdoor'].includes(selectedSkill) && (drill.location === selectedSkill || drill.category === selectedSkill || drill.location === 'both'));
     return text.includes(search.toLowerCase()) && locationMatch && skillMatch;
   }), [drills, location, search, skill]);
 
@@ -63,7 +96,7 @@ export function PuttingDrillBankTab() {
         <CardContent className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
           <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search drills..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
           <Select value={location} onValueChange={setLocation}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All locations</SelectItem><SelectItem value="indoor">Indoor</SelectItem><SelectItem value="outdoor">Outdoor</SelectItem></SelectContent></Select>
-          <Select value={skill} onValueChange={setSkill}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All skills</SelectItem><SelectItem value="start line">Start line</SelectItem><SelectItem value="strike">Strike</SelectItem><SelectItem value="pace">Pace</SelectItem><SelectItem value="conversion">Conversion</SelectItem><SelectItem value="reading">Green reading</SelectItem><SelectItem value="pressure">Pressure</SelectItem><SelectItem value="tempo">Tempo</SelectItem><SelectItem value="routine">Routine</SelectItem></SelectContent></Select>
+          <Select value={skill} onValueChange={setSkill}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All skills</SelectItem>{SKILL_FILTERS.map((filter) => <SelectItem key={filter} value={filter}>{filter}</SelectItem>)}</SelectContent></Select>
         </CardContent>
       </Card>
 
@@ -73,13 +106,26 @@ export function PuttingDrillBankTab() {
             <Card key={drill.id} className="h-full">
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div><h3 className="font-bold">{drill.name}</h3><div className="mt-2 flex flex-wrap gap-1"><Badge variant="outline" className="capitalize">{drill.location}</Badge>{drill.skill_tags?.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div></div>
+                  <div>
+                    <h3 className="font-bold">{drill.name}</h3>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {drill.drill_type?.map((type) => <Badge key={type} variant="outline">{DRILL_TYPE_LABELS[type]}</Badge>)}
+                    </div>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{drill.purpose}</p>
+                <div className="flex flex-wrap gap-1">
+                  {drill.skill_tags?.map((tag) => <Badge key={tag} variant="secondary">{displayLabel(tag)}</Badge>)}
+                </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> {drill.time_minutes} min · {drill.equipment?.join(', ')}</div>
                 <div className="space-y-2 rounded-md border bg-muted/20 p-3 text-xs">
+                  <p><strong>Skill trained:</strong> {drill.skill_tags?.map(displayLabel).join(', ')}</p>
+                  <p><strong>Best used for:</strong> {drill.best_for?.join(', ')}</p>
+                  <p><strong>Location:</strong> {displayLabel(drill.location || drill.category)}</p>
                   <p><strong>Setup:</strong> {drill.setup}</p>
-                  <p><strong>Cue:</strong> {drill.recommendation}</p>
+                  <p><strong>How to do it:</strong> {drill.how_to}</p>
+                  <p><strong>Goal:</strong> {drill.goal}</p>
+                  <p><strong>Key cue:</strong> {drill.recommendation}</p>
                   <p><strong>Progression:</strong> {drill.progression}</p>
                   <p><strong>Regression:</strong> {drill.regression}</p>
                 </div>

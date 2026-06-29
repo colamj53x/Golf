@@ -7,6 +7,7 @@ export interface ScoringInput {
 export type PuttingMetric = 'startLineStrike' | 'paceTouch' | 'conversionPressure';
 export type PuttingSessionType = 'indoor' | 'outdoor' | 'technique' | 'warmup' | 'benchmark';
 export type PuttingDifficulty = 'beginner' | 'developing' | 'strong' | 'advanced';
+export type PuttingDrillIntent = 'practice' | 'test' | 'transfer' | 'pressure';
 
 export interface PuttingMetricScore {
   metric: PuttingMetric;
@@ -43,6 +44,9 @@ export interface PuttingDrill {
   time_minutes?: number;
   equipment?: string[];
   best_for?: string[];
+  drill_type?: PuttingDrillIntent[];
+  how_to?: string | null;
+  goal?: string | null;
   progression?: string | null;
   regression?: string | null;
   blast_compatible?: boolean;
