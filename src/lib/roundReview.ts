@@ -49,6 +49,8 @@ export interface RoundReviewMetrics extends MetricsResult {
   scoringZoneSuccessPct: number | null;
   scoringZoneSuccessCount: number;
   scoringZoneAttemptCount: number;
+  greenGap: number | null;
+  greenGapHoleCount: number;
 }
 
 export interface RoundReviewProgressPoint {
@@ -67,6 +69,13 @@ export interface RoundReviewProgressPoint {
   shortGameShotQuality: number | null;
   shortGameScoringZoneSuccess: number | null;
   shortGameSafeShotRate: number | null;
+}
+
+export interface GreenGapProgressPoint {
+  label: string;
+  date: string;
+  greenGap: number | null;
+  holeCount: number;
 }
 
 export interface RoundReviewArea {
@@ -90,6 +99,7 @@ export interface RoundReviewModel {
   recentThird: RoundReviewMetrics;
   priorRoundCount: number;
   progress: RoundReviewProgressPoint[];
+  greenGapProgress: GreenGapProgressPoint[];
   areas: RoundReviewArea[];
   clubAndTypeRows: RoundReviewRow[];
   greenDistanceRollups: RoundReviewRow[];
@@ -160,6 +170,7 @@ function reviewMetrics(
   });
   const scoringZoneAttempts = shots.filter(shot => getTarget(shot) === 'green' && shot.target <= 100);
   const scoringZoneSuccesses = scoringZoneAttempts.filter(isGreenResult);
+  const greenGap = calculateGreenGap(shots);
   return {
     ...base,
     targetSuccessPct: targetAttempts.length ? (targetSuccesses.length / targetAttempts.length) * 100 : null,
@@ -169,6 +180,34 @@ function reviewMetrics(
     scoringZoneSuccessPct: scoringZoneAttempts.length ? (scoringZoneSuccesses.length / scoringZoneAttempts.length) * 100 : null,
     scoringZoneSuccessCount: scoringZoneSuccesses.length,
     scoringZoneAttemptCount: scoringZoneAttempts.length,
+    greenGap: greenGap.value,
+    greenGapHoleCount: greenGap.holeCount,
+  };
+}
+
+function calculateGreenGap(shots: ProcessedShot[]): { value: number | null; holeCount: number } {
+  const byHole = new Map<string, ProcessedShot[]>();
+  for (const shot of shots) {
+    if (shot.holeNumber === null || shot.shotNumber === null || !shot.holePar) continue;
+    if (shot.holePar < 3 || shot.holePar > 5) continue;
+    const key = `${getShotDateKey(shot.date)}|${shot.holeNumber}`;
+    const holeShots = byHole.get(key) ?? [];
+    holeShots.push(shot);
+    byHole.set(key, holeShots);
+  }
+
+  const values: number[] = [];
+  for (const holeShots of byHole.values()) {
+    holeShots.sort((a, b) => (a.shotNumber ?? 0) - (b.shotNumber ?? 0));
+    const par = holeShots.find(shot => shot.holePar)?.holePar;
+    const greenShot = holeShots.find(isGreenResult);
+    if (!par || !greenShot?.shotNumber) continue;
+    values.push(greenShot.shotNumber - (par - 2));
+  }
+
+  return {
+    value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
+    holeCount: values.length,
   };
 }
 
@@ -466,6 +505,16 @@ export function buildRoundReview(
       shortGameSafeShotRate: shortMetrics.shotCount ? shortMetrics.safeShotRate : null,
     };
   });
+  const greenGapProgress: GreenGapProgressPoint[] = progressDates.map(date => {
+    const roundShots = processShots(courseShots.filter(shot => getShotDateKey(shot.date) === date), clubs, distanceToTargetTolerance);
+    const greenGap = calculateGreenGap(roundShots);
+    return {
+      label: date.slice(5),
+      date,
+      greenGap: greenGap.value,
+      holeCount: greenGap.holeCount,
+    };
+  });
 
   return {
     scope,
@@ -482,6 +531,7 @@ export function buildRoundReview(
     recentThird: reviewMetrics(last5, getTarget),
     priorRoundCount: priorRoundDates.length,
     progress,
+    greenGapProgress,
     areas,
     clubAndTypeRows: makeRows(selected, last5, previous5, season, clubAndTypeGroups, getTarget),
     greenDistanceRollups,

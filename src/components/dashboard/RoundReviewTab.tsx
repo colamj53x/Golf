@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp, Download, Pencil, Target, TrendingDown, TrendingUp } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -81,6 +82,7 @@ const METRIC_TOLERANCE: Record<RoundReviewMetricKey, number> = {
 
 const formatNumber = (value: number | null) => value === null ? 'Not enough data' : `${Math.round(value)}`;
 const formatMetric = (value: number | null, percent = false) => value === null ? 'Not enough data' : percent ? `${Math.round(value)}%` : `${Math.round(value)}`;
+const formatGreenGap = (value: number | null) => value === null ? '-' : value.toFixed(2);
 const formatShotCount = (count: number) => `${count} ${count === 1 ? 'shot' : 'shots'}`;
 const trendValue = (current: number | null, comparison: number | null) => current === null || comparison === null ? null : current - comparison;
 const THOUGHT_FIELDS: Array<{ key: Exclude<keyof RoundThoughts, 'playingPartnerIds'>; label: string }> = [
@@ -113,6 +115,80 @@ function Trend({ current, comparison, label }: { current: number | null; compari
     <span className={`inline-flex items-center gap-1 text-xs ${change > 0 ? 'text-green-600 dark:text-green-400' : change < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
       <Icon className="h-3.5 w-3.5" />{change > 0 ? '+' : ''}{Math.round(change)} vs {label}
     </span>
+  );
+}
+
+function GreenGapTrend({ current, comparison, label }: { current: number | null; comparison: number | null; label: string }) {
+  const change = trendValue(current, comparison);
+  if (change === null) return <span className="text-xs text-muted-foreground">Not enough rounds yet</span>;
+  const Icon = change < 0 ? TrendingDown : change > 0 ? TrendingUp : ArrowUpDown;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs ${change < 0 ? 'text-green-600 dark:text-green-400' : change > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+      <Icon className="h-3.5 w-3.5" />{change > 0 ? '+' : ''}{change.toFixed(2)} vs {label}
+    </span>
+  );
+}
+
+function greenGapRating(value: number | null): string {
+  if (value === null) return 'Not enough data';
+  if (value < 0.4) return 'Elite amateur';
+  if (value < 0.6) return 'Excellent';
+  if (value < 0.8) return 'Very good';
+  if (value < 1) return 'Good';
+  if (value <= 1.2) return 'Developing';
+  return 'Needs work';
+}
+
+function GreenGapReview({ review }: { review: ReturnType<typeof buildRoundReview> }) {
+  const chartData = review.greenGapProgress.filter(point => point.greenGap !== null);
+  const latestPoint = [...chartData].reverse()[0];
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold">Green Gap</h3>
+        <p className="text-sm text-muted-foreground">Average extra shots per hole to reach the green compared with regulation. Lower is better.</p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
+        <Card>
+          <CardContent className="space-y-4 pt-5">
+            <div>
+              <div className="text-xs text-muted-foreground">Selected round set</div>
+              <div className="mt-1 text-4xl font-bold tracking-tight">{formatGreenGap(review.round.greenGap)}</div>
+              <div className="text-sm text-muted-foreground">{greenGapRating(review.round.greenGap)} · {review.round.greenGapHoleCount ? `${review.round.greenGapHoleCount} holes counted` : 'Needs par and shot sequence'}</div>
+            </div>
+            <div className="grid gap-1 border-t pt-3">
+              <GreenGapTrend current={review.round.greenGap} comparison={review.last5.greenGap} label="Last 5" />
+              <GreenGapTrend current={review.round.greenGap} comparison={review.previous5.greenGap} label="Previous 5" />
+              <span className="text-xs text-muted-foreground">Season avg: {formatGreenGap(review.season.greenGap)}</span>
+            </div>
+            {latestPoint && <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">Latest round: <span className="font-semibold text-foreground">{formatGreenGap(latestPoint.greenGap)}</span> on {latestPoint.date}</div>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Green Gap by Round</CardTitle>
+            <CardDescription>Each point is one uploaded round with enough par and hole-sequence data.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {chartData.length < 2 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">Not enough round history yet to chart Green Gap.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={chartData} margin={{ top: 12, right: 20, left: -16, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="label" />
+                  <YAxis width={48} domain={[0, 'dataMax + 0.25']} tickFormatter={(value: number) => value.toFixed(1)} />
+                  <ChartTooltip formatter={(value: number) => value.toFixed(2)} labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''} />
+                  <ReferenceLine y={0.9} stroke="#16a34a" strokeDasharray="5 5" label="Year target" />
+                  <ReferenceLine y={0.7} stroke="#0ea5e9" strokeDasharray="5 5" label="Long term" />
+                  <Line type="monotone" dataKey="greenGap" name="Green Gap" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   );
 }
 
@@ -611,6 +687,8 @@ export function RoundReviewTab({ shots, clubs, distanceToTargetTolerance, roundD
         <AreaBreakdown areas={review.areas} benchmark={benchmark} />
 
         <HoleQualityReview model={holeQuality} />
+
+        <GreenGapReview review={review} />
 
         <section className="space-y-4">
           <div><h3 className="text-xl font-semibold">Distance / Scoring Zone Review</h3><p className="text-sm text-muted-foreground">Where green-target opportunities were converted and where they leaked.</p></div>

@@ -180,6 +180,35 @@ describe('buildRoundReview', () => {
     expect(review.greenDistanceRows.map(row => [row.key, row.avgShotsToGreen])).toEqual([['30-39', 2], ['0-9', 1]]);
   });
 
+  it('calculates Green Gap from par and shots needed to reach the green', () => {
+    const review = buildRoundReview([
+      shot('p3-tee', '2026-05-31', 150, '10 Handicap', { holeNumber: 1, shotNumber: 1, holePar: 3, startLie: 'Tee', endLie: 'Rough' }),
+      shot('p3-chip', '2026-05-31', 15, '10 Handicap', { holeNumber: 1, shotNumber: 2, holePar: 3, endLie: 'Green' }),
+      shot('p4-tee', '2026-05-31', 220, '10 Handicap', { holeNumber: 2, shotNumber: 1, holePar: 4, startLie: 'Tee', endLie: 'Fairway' }),
+      shot('p4-approach', '2026-05-31', 125, '10 Handicap', { holeNumber: 2, shotNumber: 2, holePar: 4, endLie: 'Green' }),
+      shot('p5-tee', '2026-05-31', 230, '10 Handicap', { holeNumber: 3, shotNumber: 1, holePar: 5, startLie: 'Tee', endLie: 'Fairway' }),
+      shot('p5-layup', '2026-05-31', 180, '10 Handicap', { holeNumber: 3, shotNumber: 2, holePar: 5, endLie: 'Fairway' }),
+      shot('p5-approach', '2026-05-31', 90, '10 Handicap', { holeNumber: 3, shotNumber: 3, holePar: 5, endLie: 'Bunker' }),
+      shot('p5-splash', '2026-05-31', 15, '10 Handicap', { holeNumber: 3, shotNumber: 4, holePar: 5, endLie: 'Green' }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(review.round.greenGap).toBeCloseTo(0.67, 1);
+    expect(review.round.greenGapHoleCount).toBe(3);
+  });
+
+  it('builds Green Gap progress by individual round', () => {
+    const review = buildRoundReview([
+      shot('old-tee', '2026-05-30', 150, '10 Handicap', { holeNumber: 1, shotNumber: 1, holePar: 3, startLie: 'Tee', endLie: 'Green' }),
+      shot('new-tee', '2026-05-31', 150, '10 Handicap', { holeNumber: 1, shotNumber: 1, holePar: 3, startLie: 'Tee', endLie: 'Rough' }),
+      shot('new-chip', '2026-05-31', 15, '10 Handicap', { holeNumber: 1, shotNumber: 2, holePar: 3, endLie: 'Green' }),
+    ], DEFAULT_CLUB_CONFIGS, 10, '2026-05-31');
+
+    expect(review.greenGapProgress.map(point => [point.date, point.greenGap, point.holeCount])).toEqual([
+      ['2026-05-30', 0, 1],
+      ['2026-05-31', 1, 1],
+    ]);
+  });
+
   it('aggregates the last 20 rounds and compares against earlier rounds', () => {
     const review = buildRoundReview([
       shot('prior', '2026-05-10', 35, '20 Handicap'),
