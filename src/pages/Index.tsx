@@ -24,7 +24,7 @@ const RetiredToolsTab = lazy(async () => ({ default: (await import('@/components
 
 const mainTabs = ['play', 'review', 'practice', 'settings'] as const;
 const retiredPlayTabs = ['shot-picker'] as const;
-const playTabs = ['short-game-matrix', 'club-gapping', 'cues'] as const;
+const playTabs = ['club-gapping', 'short-game-matrix', 'cues'] as const;
 const reviewTabs = ['today', 'rounds', 'journal', 'advanced'] as const;
 const settingsTabs = ['partners', 'shot-profiles', 'upload', 'library', 'tools', 'retired', 'preferences'] as const;
 type MainTab = typeof mainTabs[number];
@@ -33,7 +33,7 @@ const TabLoader = () => <div className="space-y-4"><Skeleton className="h-10 w-4
 const isIn = <T extends readonly string[]>(items: T, value: string): value is T[number] => items.includes(value as T[number]);
 const path = (tab: MainTab, ...segments: string[]) => `/${[tab, ...segments].filter(Boolean).join('/')}`;
 const mainPath = (tab: MainTab) => {
-  if (tab === 'play') return path('play', 'short-game-matrix');
+  if (tab === 'play') return path('play', 'club-gapping');
   if (tab === 'review') return path('review', 'today');
   if (tab === 'settings') return path('settings', 'preferences');
   return path(tab);
@@ -83,11 +83,11 @@ const Index = () => {
   if (redirect) return <Navigate to={redirect} replace />;
   if (!isIn(mainTabs, activeTab)) return <Navigate to="/review/today" replace />;
   if (activeTab === 'play' && isIn(retiredPlayTabs, child || '')) return <Navigate to="/settings/retired" replace />;
-  if (activeTab === 'play' && !isIn(playTabs, child || 'short-game-matrix')) return <Navigate to="/play/short-game-matrix" replace />;
+  if (activeTab === 'play' && !isIn(playTabs, child || 'club-gapping')) return <Navigate to="/play/club-gapping" replace />;
   if (activeTab === 'review' && !isIn(reviewTabs, child || 'today')) return <Navigate to="/review/today" replace />;
   if (activeTab === 'settings' && !isIn(settingsTabs, child || 'preferences')) return <Navigate to="/settings/preferences" replace />;
 
-  const playTab = isIn(playTabs, child || '') ? child : 'short-game-matrix';
+  const playTab = isIn(playTabs, child || '') ? child : 'club-gapping';
   const reviewTab = isIn(reviewTabs, child || '') ? child : 'today';
   const settingsTab = isIn(settingsTabs, child || '') ? child : 'preferences';
 
