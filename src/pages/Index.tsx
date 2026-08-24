@@ -20,18 +20,20 @@ const LibraryTab = lazy(async () => ({ default: (await import('@/components/Libr
 const MoreToolsTab = lazy(async () => ({ default: (await import('@/components/MoreToolsTab')).MoreToolsTab }));
 const PlayingPartnersTab = lazy(async () => ({ default: (await import('@/components/PlayingPartnersTab')).PlayingPartnersTab }));
 const JournalTab = lazy(async () => ({ default: (await import('@/components/JournalTab')).JournalTab }));
+const RetiredToolsTab = lazy(async () => ({ default: (await import('@/components/SettingsTab')).RetiredToolsTab }));
 
 const mainTabs = ['play', 'review', 'practice', 'settings'] as const;
-const playTabs = ['shot-picker', 'short-game-matrix', 'club-gapping', 'cues'] as const;
+const retiredPlayTabs = ['shot-picker'] as const;
+const playTabs = ['short-game-matrix', 'club-gapping', 'cues'] as const;
 const reviewTabs = ['today', 'rounds', 'journal', 'advanced'] as const;
-const settingsTabs = ['partners', 'shot-profiles', 'upload', 'library', 'tools', 'preferences'] as const;
+const settingsTabs = ['partners', 'shot-profiles', 'upload', 'library', 'tools', 'retired', 'preferences'] as const;
 type MainTab = typeof mainTabs[number];
 
 const TabLoader = () => <div className="space-y-4"><Skeleton className="h-10 w-48" /><Skeleton className="h-64 w-full" /><Skeleton className="h-32 w-full" /></div>;
 const isIn = <T extends readonly string[]>(items: T, value: string): value is T[number] => items.includes(value as T[number]);
 const path = (tab: MainTab, ...segments: string[]) => `/${[tab, ...segments].filter(Boolean).join('/')}`;
 const mainPath = (tab: MainTab) => {
-  if (tab === 'play') return path('play', 'shot-picker');
+  if (tab === 'play') return path('play', 'short-game-matrix');
   if (tab === 'review') return path('review', 'today');
   if (tab === 'settings') return path('settings', 'preferences');
   return path(tab);
@@ -40,7 +42,7 @@ const mainPath = (tab: MainTab) => {
 function legacyRedirect(pathname: string): string | null {
   if (pathname === '/') return '/review/today';
   if (pathname === '/today') return '/review/today';
-  if (pathname === '/on-course') return '/play/shot-picker';
+  if (pathname === '/on-course') return '/settings/retired';
   if (pathname === '/journal') return '/review/journal';
   if (pathname === '/club-gapping') return '/play/club-gapping';
   if (pathname === '/bag') return '/play/club-gapping';
@@ -80,11 +82,12 @@ const Index = () => {
 
   if (redirect) return <Navigate to={redirect} replace />;
   if (!isIn(mainTabs, activeTab)) return <Navigate to="/review/today" replace />;
-  if (activeTab === 'play' && !isIn(playTabs, child || 'shot-picker')) return <Navigate to="/play/shot-picker" replace />;
+  if (activeTab === 'play' && isIn(retiredPlayTabs, child || '')) return <Navigate to="/settings/retired" replace />;
+  if (activeTab === 'play' && !isIn(playTabs, child || 'short-game-matrix')) return <Navigate to="/play/short-game-matrix" replace />;
   if (activeTab === 'review' && !isIn(reviewTabs, child || 'today')) return <Navigate to="/review/today" replace />;
   if (activeTab === 'settings' && !isIn(settingsTabs, child || 'preferences')) return <Navigate to="/settings/preferences" replace />;
 
-  const playTab = isIn(playTabs, child || '') ? child : 'shot-picker';
+  const playTab = isIn(playTabs, child || '') ? child : 'short-game-matrix';
   const reviewTab = isIn(reviewTabs, child || '') ? child : 'today';
   const settingsTab = isIn(settingsTabs, child || '') ? child : 'preferences';
 
@@ -117,8 +120,7 @@ const Index = () => {
       <main className="container py-6">
         <Suspense fallback={<TabLoader />}>
           {activeTab === 'play' && <>
-            <SectionTabs value={playTab} values={playTabs} labels={{ 'shot-picker': 'Shot Picker', 'short-game-matrix': 'Short Game Matrix', 'club-gapping': 'Club Gapping', cues: 'On-Course Cues' }} onChange={value => navigate(path('play', value))} />
-            {playTab === 'shot-picker' && <ClubSelectorTab defaultView="club-selector" singleView />}
+            <SectionTabs value={playTab} values={playTabs} labels={{ 'short-game-matrix': 'Short Game Matrix', 'club-gapping': 'Club Gapping', cues: 'On-Course Cues' }} onChange={value => navigate(path('play', value))} />
             {playTab === 'short-game-matrix' && <ClubSelectorTab defaultView="wedge-matrix" singleView />}
             {playTab === 'club-gapping' && <ClubGappingTab />}
             {playTab === 'cues' && <OnCourseCuesTab />}
@@ -132,12 +134,13 @@ const Index = () => {
             {reviewTab === 'advanced' && <div className="space-y-6"><ReportsTab /><DashboardTab initialView="overview" showLatestRound={false} /></div>}
           </>}
           {activeTab === 'settings' && <>
-            <SectionTabs value={settingsTab} values={settingsTabs} labels={{ partners: 'Partners', 'shot-profiles': 'Shot Profiles', upload: 'Upload', library: 'Drill Library', tools: 'Tools & Definitions', preferences: 'Preferences' }} onChange={value => navigate(path('settings', value))} />
+            <SectionTabs value={settingsTab} values={settingsTabs} labels={{ partners: 'Partners', 'shot-profiles': 'Shot Profiles', upload: 'Upload', library: 'Drill Library', tools: 'Tools & Definitions', retired: 'Retired', preferences: 'Preferences' }} onChange={value => navigate(path('settings', value))} />
             {settingsTab === 'partners' && <PlayingPartnersTab />}
             {settingsTab === 'shot-profiles' && <ShotProfilesCard />}
             {settingsTab === 'upload' && <UploadTab />}
             {settingsTab === 'library' && <LibraryTab />}
             {settingsTab === 'tools' && <MoreToolsTab />}
+            {settingsTab === 'retired' && <RetiredToolsTab />}
             {settingsTab === 'preferences' && <SettingsTab />}
           </>}
         </Suspense>

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Crosshair, Goal, Lightbulb, Plus, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
+import { Archive, Check, Crosshair, Goal, Lightbulb, Plus, Save, Settings as SettingsIcon, Pencil, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Toggle } from '@/components/ui/toggle';
@@ -50,6 +50,7 @@ import {
   saveSettingsIdeas,
   type SettingsIdea,
 } from '@/lib/settingsIdeas';
+import { ClubSelectorTab } from '@/components/ClubSelectorTab';
 
 const SETTINGS_SECTIONS = [
   {
@@ -63,12 +64,6 @@ const SETTINGS_SECTIONS = [
     title: 'Global Settings',
     description: 'Calculation rules and gapping targets.',
     icon: SettingsIcon,
-  },
-  {
-    href: '#settings-shot-picker-adjustments',
-    title: 'Shot Picker Adjustments',
-    description: 'Lie, slope, and feet rules for on-course targeting.',
-    icon: Crosshair,
   },
   {
     href: '#settings-shot-profiles',
@@ -140,8 +135,6 @@ export function SettingsTab() {
     setGappingGreenThreshold,
     gappingAmberThreshold,
     setGappingAmberThreshold,
-    shotPickerDistanceTolerancePct,
-    setShotPickerDistanceTolerancePct,
     practiceDistanceTolerancePct,
     setPracticeDistanceTolerancePct,
     practiceBallFlightTolerancePct,
@@ -157,7 +150,6 @@ export function SettingsTab() {
   const [editingGappingQualityFallbackHcp, setEditingGappingQualityFallbackHcp] = useState(gappingQualityFallbackHcp);
   const [editingGappingGreenThreshold, setEditingGappingGreenThreshold] = useState(gappingGreenThreshold);
   const [editingGappingAmberThreshold, setEditingGappingAmberThreshold] = useState(gappingAmberThreshold);
-  const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
   const [editingPracticeDistanceTolerancePct, setEditingPracticeDistanceTolerancePct] = useState(practiceDistanceTolerancePct);
   const [editingPracticeBallFlightTolerancePct, setEditingPracticeBallFlightTolerancePct] = useState(practiceBallFlightTolerancePct);
   const [editingPracticeOtherTolerancePct, setEditingPracticeOtherTolerancePct] = useState(practiceOtherTolerancePct);
@@ -175,7 +167,6 @@ export function SettingsTab() {
     const nextGreen = Math.max(nextAmber, Math.min(100, Math.round(editingGappingGreenThreshold)));
     setGappingAmberThreshold(nextAmber);
     setGappingGreenThreshold(nextGreen);
-    setShotPickerDistanceTolerancePct(editingShotPickerDistanceTolerancePct);
     setPracticeDistanceTolerancePct(editingPracticeDistanceTolerancePct);
     setPracticeBallFlightTolerancePct(editingPracticeBallFlightTolerancePct);
     setPracticeOtherTolerancePct(editingPracticeOtherTolerancePct);
@@ -191,7 +182,6 @@ export function SettingsTab() {
     setEditingGappingQualityFallbackHcp(gappingQualityFallbackHcp);
     setEditingGappingGreenThreshold(gappingGreenThreshold);
     setEditingGappingAmberThreshold(gappingAmberThreshold);
-    setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
     setEditingPracticeDistanceTolerancePct(practiceDistanceTolerancePct);
     setEditingPracticeBallFlightTolerancePct(practiceBallFlightTolerancePct);
     setEditingPracticeOtherTolerancePct(practiceOtherTolerancePct);
@@ -319,7 +309,7 @@ export function SettingsTab() {
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">
-              HCP cutoff used only when quality ratings cannot calculate one. Shared by Club Gapping and Shot Picker.
+              HCP cutoff used only when quality ratings cannot calculate one. Shared by Club Gapping and retired tools.
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -358,22 +348,6 @@ export function SettingsTab() {
             />
             <span className="text-sm text-muted-foreground">
               Amber dot threshold; lower values show red
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Label htmlFor="shotPickerDistanceTolerancePct" className="whitespace-nowrap min-w-[200px]">
-              Shot Picker Distance Tolerance (%)
-            </Label>
-            <Input
-              id="shotPickerDistanceTolerancePct"
-              type="number"
-              value={editingShotPickerDistanceTolerancePct}
-              onChange={(e) => setEditingShotPickerDistanceTolerancePct(parseFloat(e.target.value) || 0)}
-              disabled={!isEditing}
-              className="h-8 w-24 text-sm"
-            />
-            <span className="text-sm text-muted-foreground">
-              Defines within-range, long, and short outcomes for the nominated Shot Picker distance
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -459,10 +433,6 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      <section id="settings-shot-picker-adjustments" className="scroll-mt-6">
-        <ShotPickerAdjustmentsCard />
-      </section>
-
       <section id="settings-shot-profiles" className="scroll-mt-6">
         <ShotProfilesCard />
       </section>
@@ -475,6 +445,90 @@ export function SettingsTab() {
         <ShotCueSettingsCard />
       </section>
 
+    </div>
+  );
+}
+
+export function RetiredToolsTab() {
+  const {
+    shotPickerDistanceTolerancePct,
+    setShotPickerDistanceTolerancePct,
+  } = useGolfData();
+  const [isShotPickerOpen, setIsShotPickerOpen] = useState(false);
+  const [editingShotPickerDistanceTolerancePct, setEditingShotPickerDistanceTolerancePct] = useState(shotPickerDistanceTolerancePct);
+
+  useEffect(() => {
+    setEditingShotPickerDistanceTolerancePct(shotPickerDistanceTolerancePct);
+  }, [shotPickerDistanceTolerancePct]);
+
+  const saveShotPickerSettings = () => {
+    setShotPickerDistanceTolerancePct(editingShotPickerDistanceTolerancePct);
+    toast.success('Retired Shot Picker settings saved');
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Retired Tools
+          </CardTitle>
+          <CardDescription>
+            Older tools live here when they are no longer part of the main workflow.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-semibold">Shot Picker</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Retired from Play, but still available here for reference.
+              </p>
+            </div>
+            <Button type="button" onClick={() => setIsShotPickerOpen(current => !current)} className="shrink-0 gap-2">
+              <Crosshair className="h-4 w-4" />
+              {isShotPickerOpen ? 'Hide Shot Picker' : 'Open Shot Picker'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Shot Picker Settings</CardTitle>
+            <CardDescription>
+              Kept with the retired Shot Picker so Preferences can stay focused on current workflows.
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={saveShotPickerSettings} className="shrink-0 gap-2">
+            <Save className="h-4 w-4" />
+            Save
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <Label htmlFor="retiredShotPickerDistanceTolerancePct" className="min-w-[220px]">
+              Distance Tolerance (%)
+            </Label>
+            <Input
+              id="retiredShotPickerDistanceTolerancePct"
+              type="number"
+              value={editingShotPickerDistanceTolerancePct}
+              onChange={(event) => setEditingShotPickerDistanceTolerancePct(parseFloat(event.target.value) || 0)}
+              className="h-8 w-28 text-sm"
+            />
+            <span className="text-sm text-muted-foreground">
+              Defines within-range, long, and short outcomes for the nominated distance.
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <ShotPickerAdjustmentsCard />
+
+      {isShotPickerOpen && <ClubSelectorTab defaultView="club-selector" singleView />}
     </div>
   );
 }
