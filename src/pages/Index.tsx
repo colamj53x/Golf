@@ -103,7 +103,11 @@ const Index = () => {
               </div>
               <div className="flex min-w-0 shrink-0 items-center gap-3 lg:order-3">
                 <span className="hidden max-w-[260px] truncate text-sm text-muted-foreground sm:inline">{user?.email}</span>
-                <Button variant="outline" size="sm" onClick={signOut}><LogOut className="mr-2 h-4 w-4" />Sign Out</Button>
+                {user ? (
+                  <Button variant="outline" size="sm" onClick={signOut}><LogOut className="mr-2 h-4 w-4" />Sign Out</Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => navigate('/account')}>Connect account</Button>
+                )}
               </div>
             </div>
             <Tabs value={activeTab} onValueChange={value => isIn(mainTabs, value) && navigate(mainPath(value))} className="min-w-0 lg:flex-1">
@@ -118,6 +122,11 @@ const Index = () => {
         </div>
       </header>
       <main className="container py-6">
+        {!user && (
+          <p className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+            You can browse without a password. Connect your account to load saved golf data and save changes to the cloud.
+          </p>
+        )}
         <Suspense fallback={<TabLoader />}>
           {activeTab === 'play' && <>
             <SectionTabs value={playTab} values={playTabs} labels={{ 'short-game-matrix': 'Short Game Matrix', 'club-gapping': 'Club Gapping', cues: 'On-Course Cues' }} onChange={value => navigate(path('play', value))} />

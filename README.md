@@ -60,4 +60,6 @@ Environment variables required in Vercel:
 
 ## Supabase
 
-Supabase is used for authentication and data storage. For deployed auth flows, make sure the Vercel URL is added in Supabase under Authentication URL configuration.
+The dashboard opens without signing in. Old `/auth` links redirect to the dashboard; optional account sign-in is available at `/account` through “Connect account”. Saved cloud data and cloud writes still require an account.
+
+Supabase is used for optional authentication and data storage. For deployed auth flows, make sure the Vercel URL is added in Supabase under Authentication URL configuration.
