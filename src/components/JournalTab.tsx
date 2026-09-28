@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, CalendarDays, Check, ClipboardList, Copy, ExternalLink, FileText, History, Lightbulb, PenLine, Plus, Save, Search, Sparkles, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, ChevronDown, LayoutGrid, List, MapPin, Sun, Target, ThumbsUp, BookOpen, CalendarDays, Check, ClipboardList, Copy, ExternalLink, FileText, History, Lightbulb, PenLine, Plus, Save, Search, Sparkles, Trash2, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -50,58 +50,43 @@ function formatMetric(value: number | null, percent = false): string {
   return `${Math.round(value)}${percent ? '%' : ''}`;
 }
 
-function evidenceLabel(metric: 'shotQuality' | 'targetSuccess' | 'safeShotRate' | 'scoringZone', value: number | null): string {
-  if (value === null) return 'Not enough linked data yet';
-  if (metric === 'shotQuality') {
-    if (value >= 75) return 'Clean ball-striking';
-    if (value >= 60) return 'Solid enough, but not clean';
-    return 'Strike quality was a limiter';
-  }
-  if (metric === 'targetSuccess') {
-    if (value >= 65) return 'Targets matched the plan';
-    if (value >= 50) return 'Some control, not reliable';
-    return 'Direction/control was the issue';
-  }
-  if (metric === 'safeShotRate') {
-    if (value >= 95) return 'Good decision-making';
-    if (value >= 85) return 'Mostly avoided big damage';
-    return 'Costly misses showed up';
-  }
-  if (value >= 70) return 'Useful round inside scoring range';
-  if (value >= 50) return 'Some chances converted';
-  return 'Scoring shots need reflection';
-}
-
-function MetricEvidenceCard({ label, value, context, interpretation }: { label: string; value: string; context: string; interpretation: string }) {
+function MetricEvidenceCard({ label, value, baseline, context, percent = false }: { label: string; value: number | null; baseline: number | null; context: string; percent?: boolean }) {
+  const delta = value !== null && baseline !== null ? Math.round(value - baseline) : null;
   return (
-    <div className="flex min-h-[128px] flex-col justify-between rounded-lg border bg-background p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
-        <div className="text-xl font-bold leading-none">{value}</div>
-      </div>
-      <div>
-        <div className="mt-3 text-xs text-muted-foreground">{context}</div>
-        <div className="mt-1 text-sm font-medium leading-5">{interpretation}</div>
+    <div className="rounded-lg bg-muted/40 p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="my-2 text-3xl font-semibold tracking-tight">{formatMetric(value, percent)}</div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <span className="text-muted-foreground">{context} {formatMetric(baseline, percent)}</span>
+        {delta !== null && <span className={delta > 0 ? 'text-emerald-700' : delta < 0 ? 'text-red-600' : 'text-muted-foreground'}>{delta > 0 ? '+' : ''}{delta}{percent ? ' pp' : ''}</span>}
       </div>
     </div>
   );
 }
 
 function CategoryEvidenceStrip({ evidence }: { evidence: JournalCategoryEvidence }) {
+  const miss = evidence.metrics.find((metric) => metric.label === 'Main miss');
+  const match = miss?.value.match(/^(Left|Right|Short) (\d+)%$/);
   return (
-    <div className="rounded-lg border bg-muted/20 p-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">This round</div>
-      {evidence.metrics.length > 0 && (
-        <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
-          {evidence.metrics.map((metric) => (
-            <div key={metric.label} className="min-w-0">
-              <div className="truncate text-xs text-muted-foreground">{metric.label}</div>
-              <div className="mt-0.5 text-base font-semibold leading-tight">{metric.value}</div>
+    <div>
+      <div className="flex items-center gap-3">
+        <dl className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3">
+          {evidence.metrics.filter((metric) => !match || metric !== miss).map((metric) => (
+            <div key={metric.label} className="min-w-0 border-l pl-2">
+              <dt className="text-[11px] text-muted-foreground">{metric.label}</dt>
+              <dd className="mt-1 text-sm font-semibold">{metric.value}</dd>
             </div>
           ))}
-        </div>
-      )}
-      <p className={`${evidence.metrics.length > 0 ? 'mt-2' : 'mt-1'} text-xs leading-5 text-muted-foreground`}>{evidence.note}</p>
+        </dl>
+        {match && <div className="relative flex h-16 w-16 shrink-0 items-center justify-center" aria-label={`Main miss: ${miss.value}`}>
+          <svg viewBox="0 0 64 64" className="absolute inset-0 h-16 w-16 -rotate-90" aria-hidden="true">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-muted" />
+            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" pathLength="100" strokeDasharray={`${match[2]} 100`} strokeLinecap="round" className="text-amber-500" />
+          </svg>
+          <span className="text-center"><span className="block text-[10px] text-muted-foreground">{match[1]}</span><span className="text-sm font-semibold">{match[2]}%</span></span>
+        </div>}
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{evidence.note}</p>
     </div>
   );
 }
@@ -166,6 +151,8 @@ export function JournalTab() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { shots, clubs, distanceToTargetTolerance, playingPartners } = useGolfData();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [categoryLayout, setCategoryLayout] = useState<'grid' | 'list'>('grid');
   const [view, setView] = useState<JournalView>('home');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [generated, setGenerated] = useState<GeneratedJournalReflection[]>([]);
@@ -260,12 +247,14 @@ export function JournalTab() {
   };
 
   const startNewEntry = () => {
+    setDetailsOpen(true);
     setEditingId(undefined);
     setDraft(createEmptyJournalEntryDraft());
     setView('entry');
   };
 
   const editEntry = (entry: JournalEntry) => {
+    setDetailsOpen(false);
     setEditingId(entry.id);
     setDraft(normalizeJournalEntryDraft(entry));
     setView('entry');
@@ -366,7 +355,7 @@ export function JournalTab() {
 
   return (
     <div className="space-y-6 text-left">
-      <section className="rounded-lg border bg-card p-5 shadow-sm md:p-6">
+      {view !== 'entry' && <section className="rounded-lg border bg-card p-5 shadow-sm md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase text-primary">
@@ -389,23 +378,23 @@ export function JournalTab() {
             </Button>
           </div>
         </div>
-      </section>
+      </section>}
       <datalist id="journal-course-options">{courseNames.map((course) => <option key={course} value={course} />)}</datalist>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className={view === 'entry' ? "flex flex-wrap gap-2" : "grid gap-3 md:grid-cols-2 xl:grid-cols-4"}>
         {ACTIONS.map(({ view: actionView, title, description, icon: Icon }) => (
           <button
             key={actionView}
             type="button"
-            className={`rounded-lg border bg-card p-4 text-left shadow-sm transition hover:border-primary/50 hover:bg-muted/20 ${view === actionView ? 'border-primary' : ''}`}
+            className={`rounded-lg border bg-card text-left transition hover:border-primary/50 hover:bg-muted/20 ${view === 'entry' ? 'flex items-center gap-2 px-3 py-2 text-xs' : 'p-4 shadow-sm'} ${view === actionView ? 'border-primary' : ''}`}
             onClick={() => {
               if (actionView === 'entry' && view !== 'entry') startNewEntry();
               else setView(actionView);
             }}
           >
             <Icon className="h-5 w-5 text-primary" />
-            <div className="mt-3 font-semibold">{title}</div>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
+            <div className={view === 'entry' ? "font-medium" : "mt-3 font-semibold"}>{title}</div>
+            {view !== 'entry' && <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>}
           </button>
         ))}
       </div>
@@ -456,14 +445,26 @@ export function JournalTab() {
       )}
 
       {view === 'entry' && (
-        <div className="space-y-6">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{editingId ? 'Edit Round Journal' : 'Write Round Journal'}</CardTitle>
-                <CardDescription>Free text is the main input. The prompts are just there to help you think.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
+        <div className="space-y-4">
+          <header className="space-y-3">
+            <Button variant="ghost" size="sm" className="-ml-3 gap-1 text-muted-foreground" onClick={() => setView('history')}><ArrowLeft className="h-4 w-4" />All journal entries</Button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-3xl font-semibold tracking-tight">Round Review</h2>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => setDetailsOpen(!detailsOpen)} aria-expanded={detailsOpen} aria-controls="journal-details-editor"><PenLine className="h-4 w-4" />Edit details</Button>
+                <Button variant="outline" size="sm" className="gap-2" disabled={!draft.roundReviewId} onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}><ExternalLink className="h-4 w-4" />Open Round Review</Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{draft.date || 'Choose a date'}</span>
+              <span className="flex items-center gap-2"><MapPin className="h-4 w-4" />{draft.courseName || 'Add course'}</span>
+              <span className="flex items-center gap-2"><Users className="h-4 w-4" />{draft.roundType}</span>
+              {draft.weatherConditions && <span className="flex items-center gap-2"><Sun className="h-4 w-4" />{draft.weatherConditions}</span>}
+              <Badge variant="outline">{draft.roundReviewId ? `Linked: ${draft.roundReviewId}` : 'Standalone entry'}</Badge>
+            </div>
+          </header>
+          {detailsOpen && <section id="journal-details-editor" className="rounded-lg border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Edit round details</h3><Button variant="outline" size="sm" onClick={() => setDetailsOpen(false)}>Done</Button></div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Linked uploaded round</Label>
@@ -509,57 +510,63 @@ export function JournalTab() {
                     <Input id="journal-context" value={draft.generalContext} onChange={(event) => updateDraft({ generalContext: event.target.value })} placeholder="What sort of round was this?" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card className="border-primary/25 shadow-sm">
-              <CardHeader>
-                <CardTitle>Round Truth Snapshot</CardTitle>
-                <CardDescription>The main tile for the round: summary, feel, costs, learning, and practice priorities.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {selectedRoundReview && (
-                    <div className="space-y-5 rounded-lg border bg-muted/10 p-4 md:p-5">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold">Round Evidence</h3>
-                          <p className="mt-1 text-sm leading-6 text-muted-foreground">Stats and evidence attached to this reflection.</p>
-                        </div>
-                        <Button variant="outline" size="sm" className="w-fit gap-2" onClick={() => navigate(`/review/rounds?round=${encodeURIComponent(draft.roundReviewId ?? '')}`)}>
-                          <ExternalLink className="h-4 w-4" />
-                          Open Round Review
-                        </Button>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <MetricEvidenceCard
-                          label="Shot quality"
-                          value={formatMetric(selectedRoundReview.round.shotQualityIndex)}
-                          context={`Season avg ${formatMetric(selectedRoundReview.season.shotQualityIndex)}`}
-                          interpretation={evidenceLabel('shotQuality', selectedRoundReview.round.shotQualityIndex)}
-                        />
-                        <MetricEvidenceCard
-                          label="Target success"
-                          value={formatMetric(selectedRoundReview.round.targetSuccessPct, true)}
-                          context={`Last 5 avg ${formatMetric(selectedRoundReview.last5.targetSuccessPct, true)}`}
-                          interpretation={evidenceLabel('targetSuccess', selectedRoundReview.round.targetSuccessPct)}
-                        />
-                        <MetricEvidenceCard
-                          label="Safe shot rate"
-                          value={formatMetric(selectedRoundReview.round.safeShotRate, true)}
-                          context={`Previous 5 avg ${formatMetric(selectedRoundReview.previous5.safeShotRate, true)}`}
-                          interpretation={evidenceLabel('safeShotRate', selectedRoundReview.round.safeShotRate)}
-                        />
-                        <MetricEvidenceCard
-                          label="Scoring zone"
-                          value={formatMetric(selectedRoundReview.round.scoringZoneSuccessPct, true)}
-                          context={`Season avg ${formatMetric(selectedRoundReview.season.scoringZoneSuccessPct, true)}`}
-                          interpretation={evidenceLabel('scoringZone', selectedRoundReview.round.scoringZoneSuccessPct)}
-                        />
-                      </div>
-                    </div>
-                  )}
-
+          </section>}
+          <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,3fr)_minmax(220px,1fr)]">
+            <div>
+              <h3 className="text-xl font-semibold tracking-tight">Round Truth Snapshot</h3>
+              <p className="mb-3 mt-1 text-sm text-muted-foreground">This round compared with your recent and season averages.</p>
+              {selectedRoundReview ? <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                <MetricEvidenceCard label="Shot quality" value={selectedRoundReview.round.shotQualityIndex} baseline={selectedRoundReview.season.shotQualityIndex} context="Season avg" />
+                <MetricEvidenceCard label="Target success" value={selectedRoundReview.round.targetSuccessPct} baseline={selectedRoundReview.last5.targetSuccessPct} context="Last 5 avg" percent />
+                <MetricEvidenceCard label="Safe shot rate" value={selectedRoundReview.round.safeShotRate} baseline={selectedRoundReview.previous5.safeShotRate} context="Previous 5 avg" percent />
+                <MetricEvidenceCard label="Scoring zone" value={selectedRoundReview.round.scoringZoneSuccessPct} baseline={selectedRoundReview.season.scoringZoneSuccessPct} context="Season avg" percent />
+              </div> : <p className="rounded-lg bg-muted/30 p-4 text-sm text-muted-foreground">Link an uploaded round in Edit details to see its performance metrics.</p>}
+            </div>
+            <aside className="border-t pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+              <h3 className="mb-2 text-sm font-semibold">Round summary</h3>
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{draft.oneLineStory || draft.overallComments || 'Add your summary in “Your notes from this round” below.'}</p>
+            </aside>
+          </section>
+          <div className="grid gap-3 md:grid-cols-2">
+            <RoundHighlights title="What went well" icon={ThumbsUp} points={[draft.bestThingToday]} empty="Add the best thing today in your round notes." />
+            <RoundHighlights title="Key focus next time" icon={Target} points={[draft.mainLearning, draft.focusForNextRound]} empty="Add your main lesson and practice priorities in your round notes." />
+          </div>
+          <section className="flex flex-wrap items-center gap-4 rounded-lg border bg-card p-4" aria-label="Round details">
+            <dl className="grid min-w-0 flex-1 grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-5">
+              {[['Course', draft.courseName], ['Round type', draft.roundType], ['Playing partners', partnerNames(playingPartners, draft.playingPartnerIds).join(', ')], ['Weather / conditions', draft.weatherConditions], ['Round context', draft.generalContext]].map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-words">{value || 'Not recorded'}</dd></div>)}
+            </dl>
+            <Button variant="outline" size="sm" onClick={() => setDetailsOpen(!detailsOpen)} aria-expanded={detailsOpen} aria-controls="journal-details-editor">Edit details</Button>
+          </section>
+          <section className="rounded-lg border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div><h3 className="text-xl font-semibold tracking-tight">Category Reflections</h3><p className="mt-1 text-sm text-muted-foreground">Round evidence, your feel rating and notes for each area.</p></div>
+              <div className="flex gap-1 rounded-md border p-1" aria-label="Category layout">
+                <Button size="sm" variant={categoryLayout === 'grid' ? 'default' : 'ghost'} className="h-7 gap-2" aria-pressed={categoryLayout === 'grid'} onClick={() => setCategoryLayout('grid')}><LayoutGrid className="h-3.5 w-3.5" />Grid</Button>
+                <Button size="sm" variant={categoryLayout === 'list' ? 'default' : 'ghost'} className="h-7 gap-2" aria-pressed={categoryLayout === 'list'} onClick={() => setCategoryLayout('list')}><List className="h-3.5 w-3.5" />List</Button>
+              </div>
+            </div>
+            <div className={`grid gap-3 ${categoryLayout === 'grid' ? 'md:grid-cols-2' : ''}`}>
+              {JOURNAL_CATEGORIES.map(({ key, label }, index) => {
+                const category = draft.categories[key];
+                return <article key={key} className="min-w-0 space-y-3 rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="flex items-center gap-3 text-sm font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">{index + 1}</span>{label}</h4>
+                    <Select value={ratingValue(category.feelRating)} onValueChange={(value) => updateCategory(key, { feelRating: value === 'none' ? null : Number(value) })}>
+                      <SelectTrigger className="h-7 w-28 text-xs" aria-label={`${label} feel rating`}><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="none">No rating</SelectItem>{ratingOptions()}</SelectContent>
+                    </Select>
+                  </div>
+                  {categoryRoundEvidence[key] ? <CategoryEvidenceStrip evidence={categoryRoundEvidence[key]} /> : <p className="text-xs text-muted-foreground">No linked shot data for this category.</p>}
+                  <Label htmlFor={`journal-category-${key}`} className="sr-only">{label} summary</Label>
+                  <Textarea id={`journal-category-${key}`} value={category.generalNotes} onChange={(event) => updateCategory(key, { generalNotes: event.target.value })} className="min-h-[72px] border-transparent bg-muted/20 text-sm leading-5 focus-visible:border-input" placeholder={`Your ${label.toLowerCase()} reflection…`} />
+                </article>;
+              })}
+            </div>
+          </section>
+          <details className="group rounded-lg border bg-card p-4">
+            <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><FileText className="h-5 w-5 text-primary" /><span className="flex-1"><span className="block text-sm font-semibold">Your notes from this round</span><span className="text-xs text-muted-foreground">Summary, round feel, best thing, biggest cost and practice priorities.</span></span><ChevronDown className="h-4 w-4 group-open:rotate-180" /></summary>
+            <div className="mt-4">
                   <div className="space-y-5">
                     <div className="space-y-2">
                       <Label htmlFor="one-line-story">Summary</Label>
@@ -616,52 +623,11 @@ export function JournalTab() {
                       </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Category Reflections</CardTitle>
-                <CardDescription>Simple summaries for the main parts of the game.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {JOURNAL_CATEGORIES.map(({ key, label }) => {
-                  const category = draft.categories[key];
-                  return (
-                    <div key={key} className="rounded-lg border p-4">
-                      <div className="grid gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
-                        <div className="space-y-2">
-                          <h3 className="font-semibold">{label}</h3>
-                          <Select value={ratingValue(category.feelRating)} onValueChange={(value) => updateCategory(key, { feelRating: value === 'none' ? null : Number(value) })}>
-                            <SelectTrigger><SelectValue placeholder="Feel rating" /></SelectTrigger>
-                            <SelectContent><SelectItem value="none">No rating</SelectItem>{ratingOptions()}</SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-3">
-                          {categoryRoundEvidence[key] && (
-                            <div>
-                              <CategoryEvidenceStrip evidence={categoryRoundEvidence[key]} />
-                            </div>
-                          )}
-                          <div className="space-y-2">
-                            <Label>Summary</Label>
-                            <Textarea value={category.generalNotes} onChange={(event) => updateCategory(key, { generalNotes: event.target.value })} className="min-h-[110px]" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button className="gap-2" onClick={() => void saveEntry()} disabled={isSaving}>
-                    <Save className="h-4 w-4" />
-                    {isSaving ? 'Saving...' : 'Save Journal Entry'}
-                  </Button>
-                  <Button variant="outline" onClick={startNewEntry}>Start New</Button>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </details>
+          <div className="flex flex-wrap gap-2">
+            <Button className="gap-2" onClick={() => void saveEntry()} disabled={isSaving}><Save className="h-4 w-4" />{isSaving ? 'Saving...' : 'Save Journal Entry'}</Button>
+            <Button variant="outline" onClick={startNewEntry}>Start New</Button>
           </div>
         </div>
       )}
@@ -819,4 +785,12 @@ function EntryList({ entries, partners, onEdit, onDelete }: {
       })}
     </div>
   );
+}
+
+function RoundHighlights({ title, icon: Icon, points, empty }: { title: string; icon: typeof Target; points: string[]; empty: string }) {
+  const notes = [...new Set(points.map((point) => point.trim()).filter(Boolean))].slice(0, 3);
+  return <section className="rounded-lg border bg-card p-4">
+    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><span className="rounded-full bg-primary/10 p-2 text-primary"><Icon className="h-4 w-4" /></span>{title}</h3>
+    {notes.length ? <ul className="ml-12 list-disc space-y-1 text-sm leading-6 text-muted-foreground">{notes.map((note) => <li className="break-words" key={note}>{note}</li>)}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
+  </section>;
 }
